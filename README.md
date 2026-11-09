@@ -58,9 +58,8 @@ Ein separates FFmpeg ist nicht nötig.
   zum vorherigen/nächsten Titel in der aktuellen Sortierung und Filterung; ⏮ startet nach den ersten 3 Sekunden
   erst den Titel neu. Am Titelende geht es mit dem nächsten weiter, am Listenende hält der Player an. Ein Klick
   aufs Cover zeigt es groß.
-* **Serato-Cues:** Hot Cues erscheinen als rote Linie mit nummeriertem Fähnchen und zusätzlich als rote Pads
-  (1–8) neben den Player-Knöpfen; gespeicherte Loops als hinterlegter Bereich (🔒 = gesperrt). Ein Klick auf
-  Linie, Fähnchen oder Pad (oder Alt+1…8) setzt die Wiedergabeposition millisekundengenau auf den Cue – auch
+* **Serato-Cues:** Hot Cues erscheinen in der Wellenform als rote Linie mit nummeriertem Fähnchen, gespeicherte
+  Loops als hinterlegter Bereich (🔒 = gesperrt). Ein Klick auf Linie oder Fähnchen (oder Alt+1…8) setzt die Wiedergabeposition millisekundengenau auf den Cue – auch
   während der Wiedergabe und während der Titel noch lädt. Tooltips zeigen Name und Zeit. Gelesen wird der Tag „Serato Markers2“ (Formatbeschreibung: Holzhaus/serato-tags);
   KeyTool ändert diese Daten nie – auch nicht beim Schreiben von BPM, Tonart oder Metadaten. Werden während der Wiedergabe Tags in die
   Datei geschrieben, gibt der Player die Datei kurz frei und spielt an derselben Stelle weiter.

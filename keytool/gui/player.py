@@ -432,15 +432,6 @@ class PlayerPanel(QWidget, Translatable):
         self.stop_btn = QPushButton()
         self.stop_btn.setFixedWidth(44)
         self.stop_btn.clicked.connect(self.stop)
-        self.pads: list[QPushButton] = []
-        self.pad_box = QHBoxLayout(); self.pad_box.setSpacing(3)
-        for i in range(8):
-            b = QPushButton(str(i + 1))
-            b.setFixedSize(26, 26)
-            b.setVisible(False)
-            b.clicked.connect(lambda _=False, slot=i + 1: self.jump_to_cue(slot))
-            self.pads.append(b)
-            self.pad_box.addWidget(b)
         self.title = QLabel()
         self.title.setTextFormat(Qt.RichText)
         self.time = QLabel("0:00 / 0:00")
@@ -456,12 +447,9 @@ class PlayerPanel(QWidget, Translatable):
         self.volume.setValue(int(round(getattr(settings, "volume", 0.8) * 100)))
         self.volume.valueChanged.connect(self._volume)
         for wdg, stretch in ((self.prev_btn, 0), (self.play_btn, 0), (self.next_btn, 0), (self.stop_btn, 0),
-                             (self.pad_box, 0), (self.title, 1), (self.time, 0),
+                             (self.title, 1), (self.time, 0),
                              (self.mute_btn, 0), (self.volume, 0)):
-            if isinstance(wdg, QHBoxLayout):
-                bar.addLayout(wdg, stretch)
-            else:
-                bar.addWidget(wdg, stretch)
+            bar.addWidget(wdg, stretch)
         lay.addLayout(bar)
         self.wave = WaveformView()
         self.wave.seek_requested.connect(self.seek_fraction)
@@ -571,7 +559,6 @@ class PlayerPanel(QWidget, Translatable):
             wdg.setEnabled(enabled and self.player is not None)
         self.cover.set_image(None)
         self.markers = None
-        self._update_pads()
         if enabled:
             self.cover.loading = True
             self.pool.start(_CoverJob(row["path"], self.cover_emitter))
@@ -604,22 +591,7 @@ class PlayerPanel(QWidget, Translatable):
         if path == self.path:
             self.markers = markers
             self.wave.set_markers(markers)
-            self._update_pads()
             self._update_title()
-
-    def _update_pads(self):
-        cues = {c.index + 1: c for c in (self.markers.cues if self.markers else [])}
-        for slot, b in enumerate(self.pads, start=1):
-            cue = cues.get(slot)
-            b.setVisible(cue is not None)
-            if cue is None:
-                continue
-            col = QColor(CUE_COLOR)
-            fg = "#ffffff"
-            b.setStyleSheet(f"QPushButton {{ background: {col.name()}; color: {fg}; border: 1px solid {col.darker(130).name()};"
-                            f" border-radius: 5px; padding: 0; font-weight: 700; }}"
-                            f"QPushButton:hover {{ background: {col.lighter(120).name()}; }}")
-            b.setToolTip(f"Cue {slot}{' – ' + cue.name if cue.name else ''} · {fmt_time(cue.position_ms)} (Alt+{slot})")
 
     def seek_ms(self, ms: int):
         """Set the player to an exact position in ms (also while the track is still loading)."""
