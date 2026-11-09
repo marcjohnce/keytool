@@ -34,6 +34,7 @@ def tinted(icon, color: QColor, size: int = 20):
     return QIcon(pm)
 
 
+BTN = 40                      # diameter of all round control buttons
 from .theme import CUE_COLOR   # all cue points are shown in red (Serato style)
 
 
@@ -590,17 +591,17 @@ class PlayerPanel(QWidget, Translatable):
         info.addWidget(self.caption); info.addWidget(self.title); info.addWidget(self.artist_lbl)
         info.addSpacing(8)
         bar = QHBoxLayout(); bar.setSpacing(6)
-        self.play_btn = CircleButton("play", 48, primary=True)
+        self.play_btn = CircleButton("play", BTN, primary=True)
         self.play_btn.clicked.connect(self.toggle)
-        self.prev_btn = CircleButton("prev", 40)
+        self.prev_btn = CircleButton("prev", BTN)
         self.prev_btn.clicked.connect(self.previous)
-        self.next_btn = CircleButton("next", 40)
+        self.next_btn = CircleButton("next", BTN)
         self.next_btn.clicked.connect(lambda: self.next_requested.emit(self.is_playing()))
-        self.stop_btn = CircleButton("stop", 40)
+        self.stop_btn = CircleButton("stop", BTN)
         self.stop_btn.clicked.connect(self.stop)
         self.time = QLabel("0:00"); self.time.setObjectName("deckTime")
         self.time.setFont(styled_font(self.font(), size=10.5))
-        self.mute_btn = CircleButton("vol", 34)
+        self.mute_btn = CircleButton("vol", BTN)
         self.mute_btn.setCheckable(True)
         self.mute_btn.toggled.connect(self._mute)
         self.volume = QSlider(Qt.Horizontal)
@@ -611,8 +612,8 @@ class PlayerPanel(QWidget, Translatable):
         bar.setSpacing(10)
         for wdg in (self.prev_btn, self.play_btn, self.next_btn, self.stop_btn):
             bar.addWidget(wdg, 0, Qt.AlignVCenter)
-        bar.addSpacing(8); bar.addWidget(self.time); bar.addStretch(1)
-        bar.addWidget(self.mute_btn); bar.addWidget(self.volume)
+        bar.addSpacing(8); bar.addWidget(self.time, 0, Qt.AlignVCenter); bar.addStretch(1)
+        bar.addWidget(self.mute_btn, 0, Qt.AlignVCenter); bar.addWidget(self.volume, 0, Qt.AlignVCenter)
         info.addLayout(bar)
         info.addStretch(1)
         top.addLayout(info, 1)
