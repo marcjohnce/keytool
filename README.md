@@ -20,7 +20,7 @@ die Bibliothek zugreifen.
 | Detailansicht | Titel, Interpret, Album, Genre, Kommentar, Tonart, Energy (1–10) und Tempo bearbeiten – einzeln oder für viele Titel gleichzeitig; Dateityp, Bitrate, Dateigröße, Dauer und Pfad werden angezeigt. Änderungen werden in die Datei-Tags geschrieben (abschaltbar) |
 | Manuelle Korrektur | BPM/Tonart überschreiben; manuelle Werte bleiben bei einer erneuten Analyse erhalten |
 | Recherche | Titel bei **Karaoke-Version** (karaoke-version.de) nach Tonart(en) und BPM-Bereich suchen; Treffer direkt in KeyTool mit Tonart(en), Tempo, Dauer, Preis und Markierung, ob der Titel schon in der Bibliothek ist |
-| Player | Cover (eingebettet oder cover.jpg/folder.jpg im Ordner, sonst Platzhalter), vorheriger/nächster Titel, Play/Pause, Stopp, automatisches Weiterspielen; Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
+| Player | Blaues Player-Panel (Farbe der Listenauswahl) mit weißen Knöpfen; Cover (eingebettet oder cover.jpg/folder.jpg im Ordner, sonst Platzhalter), vorheriger/nächster Titel, Play/Pause, Stopp, automatisches Weiterspielen; Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
 | Serato-Cues | Vorhandene Serato-DJ-Hot-Cues (Farbe, Name) und gespeicherte Loops werden aus den Dateien gelesen (MP3, WAV, FLAC, M4A; OGG soweit möglich) und in der Wellenform angezeigt; Klick auf ein Cue-Fähnchen oder Alt+1…8 springt hin |
 | Wellenform | Übersicht des ausgewählten Titels über der Trackliste, gefärbt nach Frequenzbändern (Bass blau, Mitten bernstein, Höhen weiß), Klicken/Ziehen zum Spulen, Taktmarken aus der BPM |
 | Oberfläche | Deutsch / Englisch, heller und dunkler Modus (oder System), Umschalten ohne Neustart |
@@ -58,9 +58,10 @@ Ein separates FFmpeg ist nicht nötig.
   zum vorherigen/nächsten Titel in der aktuellen Sortierung und Filterung; ⏮ startet nach den ersten 3 Sekunden
   erst den Titel neu. Am Titelende geht es mit dem nächsten weiter, am Listenende hält der Player an. Ein Klick
   aufs Cover zeigt es groß.
-* **Serato-Cues:** Hot Cues erscheinen als farbige Linie mit nummeriertem Fähnchen (Farben wie in Serato DJ Pro),
-  gespeicherte Loops als hinterlegter Bereich (🔒 = gesperrt). Fähnchen anklicken oder Alt+1…8 springt zum Cue,
-  Tooltips zeigen Name und Zeit. Gelesen wird der Tag „Serato Markers2“ (Formatbeschreibung: Holzhaus/serato-tags);
+* **Serato-Cues:** Hot Cues erscheinen als rote Linie mit nummeriertem Fähnchen und zusätzlich als rote Pads
+  (1–8) neben den Player-Knöpfen; gespeicherte Loops als hinterlegter Bereich (🔒 = gesperrt). Ein Klick auf
+  Linie, Fähnchen oder Pad (oder Alt+1…8) setzt die Wiedergabeposition millisekundengenau auf den Cue – auch
+  während der Wiedergabe und während der Titel noch lädt. Tooltips zeigen Name und Zeit. Gelesen wird der Tag „Serato Markers2“ (Formatbeschreibung: Holzhaus/serato-tags);
   KeyTool ändert diese Daten nie – auch nicht beim Schreiben von BPM, Tonart oder Metadaten. Werden während der Wiedergabe Tags in die
   Datei geschrieben, gibt der Player die Datei kurz frei und spielt an derselben Stelle weiter.
 * **Recherche bei Karaoke-Version** (🔎 in der Toolbar oder Rechtsklick „Passende Titel bei Karaoke-Version

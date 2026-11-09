@@ -34,6 +34,9 @@ def tinted(icon, color: QColor, size: int = 20):
     return QIcon(pm)
 
 
+CUE_COLOR = "#c02626"     # all cue points are shown in red (Serato DJ Pro's cue red)
+
+
 def fmt_time(ms: int | float | None) -> str:
     if not ms or ms < 0:
         return "0:00"
@@ -191,6 +194,7 @@ class CoverView(QWidget):
 # =========================================================================== waveform view
 class WaveformView(QWidget):
     seek_requested = Signal(float)    # fraction 0..1
+    cue_clicked = Signal(int)         # exact cue position in ms
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -298,7 +302,7 @@ class WaveformView(QWidget):
             fm = QFontMetrics(f)
             for cue in self.cues:
                 x = 4 + cue.position_ms / dur_ms * inner
-                col = QColor(cue.display_color)
+                col = QColor(CUE_COLOR)
                 line = QColor(col); line.setAlpha(230)
                 p.setPen(QPen(line, 2))
                 p.drawLine(QPointF(x, 2), QPointF(x, h - 2))
@@ -327,17 +331,23 @@ class WaveformView(QWidget):
         return min(max((x - 4) / max(1, self.width() - 8), 0.0), 1.0)
 
     def _cue_at(self, pos):
+        """Cue under the mouse: its flag, or anywhere within 5 px of its line (nearest one wins)."""
         for rect, cue in self._flag_rects:
             if rect.adjusted(-2, -2, 2, 2).contains(pos):
                 return cue
-        return None
+        best, dist = None, 6.0
+        for rect, cue in self._flag_rects:
+            d = abs(pos.x() - rect.left())
+            if d < dist:
+                best, dist = cue, d
+        return best
 
     def mousePressEvent(self, e):
         cue = self._cue_at(e.position()) if self.peaks is not None else None
-        if cue is not None and e.button() == Qt.LeftButton and self.duration:
-            f = cue.position_ms / (self.duration * 1000.0)
-            self.set_position(f)
-            self.seek_requested.emit(f)
+        if cue is not None and e.button() == Qt.LeftButton:
+            if self.duration:
+                self.set_position(cue.position_ms / (self.duration * 1000.0))
+            self.cue_clicked.emit(cue.position_ms)
             return
         if self.peaks is not None and e.button() == Qt.LeftButton:
             self._drag = True
@@ -396,8 +406,11 @@ class PlayerPanel(QWidget, Translatable):
         self.markers = None
         self.notation = "camelot"
 
+        # coloured panel (list-selection blue, see theme.py "#playerPanel")
+        self.setObjectName("playerPanel")
+        self.setAttribute(Qt.WA_StyledBackground, True)
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setContentsMargins(8, 8, 8, 8)
         outer.setSpacing(8)
         self.cover = CoverView()
         outer.addWidget(self.cover, 0)
@@ -419,6 +432,15 @@ class PlayerPanel(QWidget, Translatable):
         self.stop_btn = QPushButton()
         self.stop_btn.setFixedWidth(44)
         self.stop_btn.clicked.connect(self.stop)
+        self.pads: list[QPushButton] = []
+        self.pad_box = QHBoxLayout(); self.pad_box.setSpacing(3)
+        for i in range(8):
+            b = QPushButton(str(i + 1))
+            b.setFixedSize(26, 26)
+            b.setVisible(False)
+            b.clicked.connect(lambda _=False, slot=i + 1: self.jump_to_cue(slot))
+            self.pads.append(b)
+            self.pad_box.addWidget(b)
         self.title = QLabel()
         self.title.setTextFormat(Qt.RichText)
         self.time = QLabel("0:00 / 0:00")
@@ -434,12 +456,16 @@ class PlayerPanel(QWidget, Translatable):
         self.volume.setValue(int(round(getattr(settings, "volume", 0.8) * 100)))
         self.volume.valueChanged.connect(self._volume)
         for wdg, stretch in ((self.prev_btn, 0), (self.play_btn, 0), (self.next_btn, 0), (self.stop_btn, 0),
-                             (self.title, 1), (self.time, 0),
+                             (self.pad_box, 0), (self.title, 1), (self.time, 0),
                              (self.mute_btn, 0), (self.volume, 0)):
-            bar.addWidget(wdg, stretch)
+            if isinstance(wdg, QHBoxLayout):
+                bar.addLayout(wdg, stretch)
+            else:
+                bar.addWidget(wdg, stretch)
         lay.addLayout(bar)
         self.wave = WaveformView()
         self.wave.seek_requested.connect(self.seek_fraction)
+        self.wave.cue_clicked.connect(self.seek_ms)
         lay.addWidget(self.wave)
 
         self.player = None
@@ -465,7 +491,8 @@ class PlayerPanel(QWidget, Translatable):
     def resizeEvent(self, e):
         super().resizeEvent(e)
         # square cover, flush with the top of the controls and the bottom of the waveform
-        self.cover.setFixedWidth(max(40, self.height()))
+        m = self.layout().contentsMargins()
+        self.cover.setFixedWidth(max(40, self.height() - m.top() - m.bottom()))
 
     # -- appearance
     def retranslate(self):
@@ -483,9 +510,9 @@ class PlayerPanel(QWidget, Translatable):
         self._update_title()
 
     def _make_icons(self):
-        st, pal = self.style(), self.palette()
-        fg = pal.color(pal.ColorRole.Text)
-        on_accent = pal.color(pal.ColorRole.HighlightedText)
+        # buttons are white on the blue panel -> black icons everywhere
+        st = self.style()
+        fg = on_accent = QColor("#000000")
         self.ic_play = tinted(st.standardIcon(QStyle.SP_MediaPlay), on_accent)
         self.ic_pause = tinted(st.standardIcon(QStyle.SP_MediaPause), on_accent)
         self.ic_vol = tinted(st.standardIcon(QStyle.SP_MediaVolume), fg)
@@ -544,6 +571,7 @@ class PlayerPanel(QWidget, Translatable):
             wdg.setEnabled(enabled and self.player is not None)
         self.cover.set_image(None)
         self.markers = None
+        self._update_pads()
         if enabled:
             self.cover.loading = True
             self.pool.start(_CoverJob(row["path"], self.cover_emitter))
@@ -576,7 +604,39 @@ class PlayerPanel(QWidget, Translatable):
         if path == self.path:
             self.markers = markers
             self.wave.set_markers(markers)
+            self._update_pads()
             self._update_title()
+
+    def _update_pads(self):
+        cues = {c.index + 1: c for c in (self.markers.cues if self.markers else [])}
+        for slot, b in enumerate(self.pads, start=1):
+            cue = cues.get(slot)
+            b.setVisible(cue is not None)
+            if cue is None:
+                continue
+            col = QColor(CUE_COLOR)
+            fg = "#ffffff"
+            b.setStyleSheet(f"QPushButton {{ background: {col.name()}; color: {fg}; border: 1px solid {col.darker(130).name()};"
+                            f" border-radius: 5px; padding: 0; font-weight: 700; }}"
+                            f"QPushButton:hover {{ background: {col.lighter(120).name()}; }}")
+            b.setToolTip(f"Cue {slot}{' – ' + cue.name if cue.name else ''} · {fmt_time(cue.position_ms)} (Alt+{slot})")
+
+    def seek_ms(self, ms: int):
+        """Set the player to an exact position in ms (also while the track is still loading)."""
+        if self.player is None or not self.path:
+            return
+        if self.player.mediaStatus() in (QMediaPlayer.LoadedMedia, QMediaPlayer.BufferedMedia,
+                                         QMediaPlayer.BufferingMedia, QMediaPlayer.EndOfMedia):
+            self.player.setPosition(int(ms))
+        else:
+            self._pending = (int(ms), self.is_playing())
+        dur = self.player.duration() or int(self.wave.duration * 1000)
+        if dur:
+            self.wave.set_position(ms / dur)
+        if self._pending is None:
+            self._tick()
+        else:
+            self.time.setText(f"{fmt_time(ms)} / {fmt_time(dur)}")
 
     def jump_to_cue(self, slot: int):
         """Jump to Serato hot cue `slot` (1-based)."""
@@ -584,8 +644,7 @@ class PlayerPanel(QWidget, Translatable):
             return
         cue = next((c for c in self.markers.cues if c.index + 1 == slot), None)
         if cue is not None:
-            self.player.setPosition(cue.position_ms)
-            self._tick()
+            self.seek_ms(cue.position_ms)
 
     def previous(self):
         """Like every player: restart the track if it is more than 3 s in, otherwise go to the previous one."""

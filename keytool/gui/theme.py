@@ -89,6 +89,21 @@ def apply_theme(app: QApplication, name: str) -> dict:
         QProgressBar {{ border: 1px solid {c['border']}; border-radius: 5px; text-align: center; max-height: 14px; }}
         QProgressBar::chunk {{ background: {c['accent']}; border-radius: 4px; }}
         QSplitter::handle {{ background: transparent; }}
+        /* player panel: same blue as the list selection, white text, white buttons with black text */
+        #playerPanel {{ background: {c['accent']}; border-radius: 10px; }}
+        #playerPanel QLabel, #playerPanel QLabel#dim {{ color: #ffffff; }}
+        #playerPanel QPushButton, #playerPanel QPushButton#primary, #playerPanel QToolButton {{
+            background: #ffffff; color: #000000; border: 1px solid #ffffff; border-radius: 6px; font-weight: 600; }}
+        #playerPanel QPushButton:hover, #playerPanel QPushButton#primary:hover, #playerPanel QToolButton:hover {{
+            background: #e9efff; border-color: #e9efff; }}
+        #playerPanel QPushButton:pressed, #playerPanel QToolButton:pressed, #playerPanel QToolButton:checked {{
+            background: #d2deff; border-color: #d2deff; }}
+        #playerPanel QPushButton:disabled, #playerPanel QPushButton#primary:disabled, #playerPanel QToolButton:disabled {{
+            background: rgba(255,255,255,0.35); color: rgba(0,0,0,0.45); border-color: transparent; }}
+        #playerPanel QSlider::groove:horizontal {{ height: 4px; background: rgba(255,255,255,0.35); border-radius: 2px; }}
+        #playerPanel QSlider::sub-page:horizontal {{ background: #ffffff; border-radius: 2px; }}
+        #playerPanel QSlider::handle:horizontal {{ width: 14px; margin: -5px 0; border-radius: 7px; background: #ffffff;
+            border: 1px solid rgba(0,0,0,0.25); }}
     """)
     return c
 
