@@ -114,7 +114,7 @@ Für Claude Desktop in `%APPDATA%\Claude\claude_desktop_config.json` eintragen
 ```
 
 Aus dem Quellcode: `"command": "C:\\Pfad\\zu\\KeyTool\\.venv\\Scripts\\python.exe", "args": ["-m", "keytool", "--mcp"]`.
-Alternativ läuft der Server per `python -m keytool --mcp-http` über Streamable HTTP.
+Alternativ läuft der Server per `python -m keytool --mcp-http` (bzw. `KeyTool-MCP.exe --mcp-http`) über Streamable HTTP unter `http://127.0.0.1:8000/mcp` – nur lokal erreichbar.
 
 GUI und MCP-Server nutzen dieselbe Datenbank (`%APPDATA%\KeyTool\library.sqlite3`) und können gleichzeitig laufen.
 

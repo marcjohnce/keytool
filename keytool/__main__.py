@@ -2,7 +2,7 @@
 
     python -m keytool              -> GUI
     python -m keytool --mcp        -> MCP server (stdio)
-    python -m keytool --mcp-http   -> MCP server (streamable HTTP on 127.0.0.1:8765)
+    python -m keytool --mcp-http   -> MCP server (streamable HTTP on http://127.0.0.1:8000/mcp)
     python -m keytool --analyze PATH [PATH ...]  -> console import/analysis
 """
 from __future__ import annotations
