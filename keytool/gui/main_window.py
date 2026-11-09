@@ -236,6 +236,8 @@ class MainWindow(QMainWindow, Translatable):
                           (QKeySequence(Qt.Key_MediaPlay), self.player.toggle),
                           (QKeySequence(Qt.Key_MediaStop), self.player.stop)):
             QShortcut(seq, self, activated=slot)
+        for i in range(1, 9):   # Alt+1..8: jump to Serato hot cue 1..8
+            QShortcut(QKeySequence(f"Alt+{i}"), self, activated=lambda i=i: self.player.jump_to_cue(i))
         QShortcut(QKeySequence(Qt.Key_Space), self.table, activated=self.player.toggle,
                   context=Qt.WidgetWithChildrenShortcut)
         QShortcut(QKeySequence(Qt.Key_Space), self.player, activated=self.player.toggle,

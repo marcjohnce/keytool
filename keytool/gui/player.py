@@ -61,6 +61,7 @@ class _WaveformJob(QRunnable):
 
 class _CoverEmitter(QObject):
     done = Signal(str, object)        # path, QImage | None
+    markers = Signal(str, object)     # path, SeratoMarkers
 
 
 class _CoverJob(QRunnable):
@@ -82,6 +83,11 @@ class _CoverJob(QRunnable):
         except Exception:
             img = None
         self.emitter.done.emit(self.path, img)
+        try:
+            from ..serato import read_serato_markers
+            self.emitter.markers.emit(self.path, read_serato_markers(self.path))
+        except Exception:
+            pass
 
 
 class CoverView(QWidget):
@@ -199,13 +205,22 @@ class WaveformView(QWidget):
         self.dark = True
         self.bpm: float | None = None
         self._drag = False
+        self.cues = []                # serato.Cue
+        self.loops = []               # serato.Loop
+        self._flag_rects: list = []   # (QRectF, cue) for click / hover
 
     def set_waveform(self, wf):
         self.peaks, self.colors, self.duration = wf.peaks, wf.colors, wf.duration
         self.message = ""
         self.update()
 
+    def set_markers(self, markers):
+        self.cues = list(markers.cues) if markers else []
+        self.loops = list(markers.loops) if markers else []
+        self.update()
+
     def clear(self, message: str = ""):
+        self.cues, self.loops = [], []
         self.peaks = self.colors = None
         self.duration = 0.0
         self.position = 0.0
@@ -233,6 +248,17 @@ class WaveformView(QWidget):
             return
         n = len(self.peaks)
         inner = w - 8
+        dur_ms = self.duration * 1000.0
+        # saved loops: translucent band behind the waveform
+        if dur_ms > 0:
+            for lp in self.loops:
+                x0 = 4 + lp.start_ms / dur_ms * inner
+                x1 = 4 + lp.end_ms / dur_ms * inner
+                c = QColor(lp.color)
+                band = QColor(c); band.setAlpha(55)
+                p.fillRect(QRectF(x0, 1, max(2.0, x1 - x0), h - 2), band)
+                c.setAlpha(200)
+                p.fillRect(QRectF(x0, h - 6, max(2.0, x1 - x0), 4), c)
         # resample bins to pixel columns (max of peaks, colour of the loudest bin)
         cols = max(1, int(inner))
         edges = np.linspace(0, n, cols + 1).astype(int)
@@ -263,6 +289,29 @@ class WaveformView(QWidget):
                     x = 4 + t / self.duration * inner
                     p.drawLine(QPointF(x, 3), QPointF(x, 8))
                     t += bar
+        # Serato hot cues: coloured line + flag with the slot number (or name)
+        self._flag_rects = []
+        if dur_ms > 0 and self.cues:
+            from PySide6.QtGui import QFont, QFontMetrics
+            f = QFont(self.font()); f.setPointSizeF(max(7.0, f.pointSizeF() * 0.85)); f.setBold(True)
+            p.setFont(f)
+            fm = QFontMetrics(f)
+            for cue in self.cues:
+                x = 4 + cue.position_ms / dur_ms * inner
+                col = QColor(cue.display_color)
+                line = QColor(col); line.setAlpha(230)
+                p.setPen(QPen(line, 2))
+                p.drawLine(QPointF(x, 2), QPointF(x, h - 2))
+                label = str(cue.index + 1)
+                fw = max(16, fm.horizontalAdvance(label) + 8)
+                rect = QRectF(x, 2, fw, fm.height() + 2)
+                p.setPen(Qt.NoPen)
+                p.setBrush(col)
+                p.drawRect(rect)
+                p.setPen(QColor("#ffffff") if col.lightness() < 150 else QColor("#111111"))
+                p.drawText(rect, Qt.AlignCenter, label)
+                self._flag_rects.append((rect, cue))
+            p.setFont(self.font())
         # hover + playhead
         if self.hover is not None:
             hc = QColor(pal.color(pal.ColorRole.Text)); hc.setAlpha(90)
@@ -277,7 +326,19 @@ class WaveformView(QWidget):
     def _frac(self, x: float) -> float:
         return min(max((x - 4) / max(1, self.width() - 8), 0.0), 1.0)
 
+    def _cue_at(self, pos):
+        for rect, cue in self._flag_rects:
+            if rect.adjusted(-2, -2, 2, 2).contains(pos):
+                return cue
+        return None
+
     def mousePressEvent(self, e):
+        cue = self._cue_at(e.position()) if self.peaks is not None else None
+        if cue is not None and e.button() == Qt.LeftButton and self.duration:
+            f = cue.position_ms / (self.duration * 1000.0)
+            self.set_position(f)
+            self.seek_requested.emit(f)
+            return
         if self.peaks is not None and e.button() == Qt.LeftButton:
             self._drag = True
             f = self._frac(e.position().x())
@@ -288,6 +349,18 @@ class WaveformView(QWidget):
         if self.peaks is None:
             return
         self.hover = self._frac(e.position().x())
+        cue = self._cue_at(e.position())
+        if cue is not None:
+            name = f" – {cue.name}" if cue.name else ""
+            self.setToolTip(f"Cue {cue.index + 1}{name} · {fmt_time(cue.position_ms)}")
+            self.setCursor(Qt.PointingHandCursor)
+        else:
+            loop = next((l for l in self.loops if self.duration and
+                         l.start_ms <= self.hover * self.duration * 1000 <= l.end_ms), None)
+            self.setToolTip(f"Loop {loop.index + 1}{' – ' + loop.name if loop.name else ''} · "
+                            f"{fmt_time(loop.start_ms)}–{fmt_time(loop.end_ms)}{' 🔒' if loop.locked else ''}"
+                            if loop else "")
+            self.unsetCursor()
         if self._drag:
             self.set_position(self.hover)
             self.seek_requested.emit(self.hover)
@@ -319,6 +392,8 @@ class PlayerPanel(QWidget, Translatable):
         self.emitter.done.connect(self._waveform_ready)
         self.cover_emitter = _CoverEmitter()
         self.cover_emitter.done.connect(self._cover_ready)
+        self.cover_emitter.markers.connect(self._markers_ready)
+        self.markers = None
         self.notation = "camelot"
 
         outer = QHBoxLayout(self)
@@ -445,6 +520,9 @@ class PlayerPanel(QWidget, Translatable):
             bits.append(k.format(self.notation))
         title = (r.get("title") or r.get("filename") or "").replace("<", "&lt;")
         artist = (r.get("artist") or "").replace("<", "&lt;")
+        mk = getattr(self, "markers", None)
+        if mk:
+            bits.append(f"{len(mk.cues)} Cues" + (f" · {len(mk.loops)} Loops" if mk.loops else ""))
         extra = " · ".join(bits)
         self.title.setText(f"<b>{title}</b>" + (f" — {artist}" if artist else "") +
                            (f"&nbsp;&nbsp;<span style='opacity:.7'>{extra}</span>" if extra else ""))
@@ -465,6 +543,7 @@ class PlayerPanel(QWidget, Translatable):
         for wdg in (self.play_btn, self.stop_btn, self.prev_btn, self.next_btn):
             wdg.setEnabled(enabled and self.player is not None)
         self.cover.set_image(None)
+        self.markers = None
         if enabled:
             self.cover.loading = True
             self.pool.start(_CoverJob(row["path"], self.cover_emitter))
@@ -493,6 +572,21 @@ class PlayerPanel(QWidget, Translatable):
         if path == self.path:
             self.cover.set_image(img)
 
+    def _markers_ready(self, path: str, markers):
+        if path == self.path:
+            self.markers = markers
+            self.wave.set_markers(markers)
+            self._update_title()
+
+    def jump_to_cue(self, slot: int):
+        """Jump to Serato hot cue `slot` (1-based)."""
+        if not self.markers or self.player is None:
+            return
+        cue = next((c for c in self.markers.cues if c.index + 1 == slot), None)
+        if cue is not None:
+            self.player.setPosition(cue.position_ms)
+            self._tick()
+
     def previous(self):
         """Like every player: restart the track if it is more than 3 s in, otherwise go to the previous one."""
         if self.player is not None and self.player.position() > 3000:
@@ -508,6 +602,8 @@ class PlayerPanel(QWidget, Translatable):
             self.wave.clear("⚠ " + error)
         else:
             self.wave.set_waveform(wf)
+            if self.markers is not None:
+                self.wave.set_markers(self.markers)
             self._tick()
 
     def release_file(self, path: str):

@@ -556,3 +556,104 @@ def test_folder_cover(tmp_path):
     _write_wav(f, make_track(120, 0, False, seconds=3))
     (tmp_path / "Folder.JPG").write_bytes(b"\xff\xd8fakejpeg")
     assert read_cover(str(f)) == b"\xff\xd8fakejpeg"
+
+
+# ------------------------------------------------------------------ Serato cue markers
+def test_serato_real_bytes():
+    """Byte layouts taken from real Serato DJ Pro tags (serato-tags write-up)."""
+    import base64
+    from keytool.serato import SeratoMarkers, dump_entries, parse_entries, parse_tag_data
+    # an analysed file: COLOR #ffffff + BPMLOCK off -> Serato's real base64 starts like this
+    real_prefix = "AQFDT0xPUgAAAAAEAP///0JQTUxPQ0"
+    assert base64.b64encode(dump_entries(SeratoMarkers(track_color="#ffffff", bpm_locked=False))).decode().startswith(real_prefix)
+    m = parse_tag_data(b"\x01\x01" + base64.b64encode(dump_entries(SeratoMarkers(track_color="#ffffff",
+                                                                                  bpm_locked=False))) + b"\x00" * 400)
+    assert m.track_color == "#ffffff" and m.bpm_locked is False and not m.cues
+    # real hot cue 2 at 218456 ms, orange (#cc8800 stored, #f8821a shown by Serato DJ Pro)
+    entry = bytes.fromhex("43 55 45 00 00 00 00 0d 00 01 00 03 55 58 00 cc 88 00 00 00 00")
+    c = parse_entries(b"\x01\x01" + entry + b"\x00").cues[0]
+    assert (c.index, c.position_ms, c.color, c.display_color, c.name) == (1, 218456, "#cc8800", "#f8821a", "")
+    named = bytes.fromhex("43 55 45 00 00 00 00 1a 00 00 00 00 00 00 00 cc 00 00 00 00") + "Hello, World".encode() + b"\x00"
+    assert parse_entries(b"\x01\x01" + named + b"\x00").cues[0].name == "Hello, World"
+
+
+def test_serato_lenient_base64_and_linefeeds():
+    import base64
+    from keytool.serato import Cue, SeratoMarkers, dump_tag_data, parse_tag_data
+    m = SeratoMarkers(cues=[Cue(i, 1000 * i, "#cc0000", f"Cue Nummer {i} äöü") for i in range(8)])
+    data = dump_tag_data(m)
+    assert b"\n" in data and len(data) >= 470                  # linefeeds every 72 chars, NUL padding
+    back = parse_tag_data(data)
+    assert [c.name for c in back.cues] == [c.name for c in m.cues]
+    # Serato quirk: base64 one character too long
+    raw = data[2:].split(b"\x00", 1)[0].replace(b"\n", b"")
+    if len(raw) % 4 != 1:
+        raw = raw.rstrip(b"=")
+        raw = raw + b"A" * ((1 - len(raw)) % 4)
+    assert parse_tag_data(b"\x01\x01" + raw + b"\x00").cues[0].name == "Cue Nummer 0 äöü"
+
+
+def _write_serato(path, m):
+    import mutagen
+    from keytool.serato import dump_tag_data, dump_vorbis_value
+    from mutagen.id3 import GEOB, ID3, ID3NoHeaderError
+    ext = os.path.splitext(str(path))[1]
+    if ext == ".mp3":
+        try:
+            t = ID3(path)
+        except ID3NoHeaderError:
+            t = ID3()
+        t.add(GEOB(encoding=0, mime="application/octet-stream", desc="Serato Markers2", data=dump_tag_data(m)))
+        t.save(path)
+    elif ext == ".wav":
+        from mutagen.wave import WAVE
+        f = WAVE(path)
+        if f.tags is None:
+            f.add_tags()
+        f.tags.add(GEOB(encoding=0, mime="application/octet-stream", desc="Serato Markers2", data=dump_tag_data(m)))
+        f.save()
+    elif ext == ".m4a":
+        from mutagen.mp4 import MP4, MP4FreeForm
+        f = MP4(path)
+        f["----:com.serato.dj:markersv2"] = [MP4FreeForm(dump_vorbis_value(m).encode())]
+        f.save()
+    else:
+        f = mutagen.File(path)
+        f["SERATO_MARKERS_V2"] = dump_vorbis_value(m)
+        f.save()
+
+
+@pytest.mark.parametrize("ext", ["mp3", "wav", "flac", "m4a"])
+def test_serato_markers_in_files(tmp_path, ext):
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg needed")
+    from keytool.serato import Cue, Loop, SeratoMarkers, read_serato_markers
+    raw = tmp_path / "raw.wav"
+    _write_wav(raw, make_track(120, 0, False, seconds=6))
+    f = tmp_path / f"t.{ext}"
+    shutil.copy(raw, f) if ext == "wav" else _encode(raw, f)
+    assert not read_serato_markers(str(f))
+    m = SeratoMarkers(cues=[Cue(0, 500, "#cc0000", "Intro"), Cue(3, 4200, "#0000cc", "Drop")],
+                      loops=[Loop(0, 1000, 3000, "#27aae1", True, "Loop A")], track_color="#99ff99", bpm_locked=True)
+    _write_serato(f, m)
+    r = read_serato_markers(str(f))
+    assert [(c.index, c.position_ms, c.color, c.name) for c in r.cues] == [(0, 500, "#cc0000", "Intro"), (3, 4200, "#0000cc", "Drop")]
+    assert [(l.start_ms, l.end_ms, l.color, l.locked, l.name) for l in r.loops] == [(1000, 3000, "#27aae1", True, "Loop A")]
+    assert r.track_color == "#99ff99" and r.bpm_locked is True
+    # our own tag writing must not destroy Serato's data
+    from keytool.tags import write_metadata
+    write_metadata(str(f), title="Neu", bpm=120, key_text="8B", energy=5, comment="x")
+    assert len(read_serato_markers(str(f)).cues) == 2
+
+
+def test_serato_garbage_is_ignored(tmp_path):
+    from mutagen.id3 import GEOB, ID3
+    from keytool.serato import read_serato_markers
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg needed")
+    raw = tmp_path / "raw.wav"
+    _write_wav(raw, make_track(120, 0, False, seconds=3))
+    f = tmp_path / "g.mp3"
+    _encode(raw, f)
+    t = ID3(f); t.add(GEOB(encoding=0, mime="application/octet-stream", desc="Serato Markers2", data=b"\x02\x05junk")); t.save(f)
+    assert not read_serato_markers(str(f))
