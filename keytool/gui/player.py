@@ -88,9 +88,13 @@ class CoverView(QWidget):
     """Square cover artwork; a vinyl-record placeholder (label in the track's key colour) if there is none.
     Click to see the cover enlarged."""
 
-    def __init__(self, size: int = 124, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(size, size)
+        # height follows the player panel (controls + waveform), width is kept equal -> always square
+        from PySide6.QtWidgets import QSizePolicy
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Ignored)
+        self.setMinimumHeight(40)
+        self.setFixedWidth(124)
         self.image = None
         self.key_code: str | None = None
         self.dark = True
@@ -321,7 +325,7 @@ class PlayerPanel(QWidget, Translatable):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(8)
         self.cover = CoverView()
-        outer.addWidget(self.cover, 0, Qt.AlignTop)
+        outer.addWidget(self.cover, 0)
         lay = QVBoxLayout()
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(4)
@@ -382,6 +386,11 @@ class PlayerPanel(QWidget, Translatable):
         self._make_icons()
         self.retranslate()
         self.set_track(None)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        # square cover, flush with the top of the controls and the bottom of the waveform
+        self.cover.setFixedWidth(max(40, self.height()))
 
     # -- appearance
     def retranslate(self):
