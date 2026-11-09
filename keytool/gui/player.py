@@ -414,6 +414,99 @@ class WaveformView(QWidget):
         self.update()
 
 
+class CircleButton(QPushButton):
+    """Round media button: outline ring with a painted glyph (play, pause, stop, prev, next, vol, mute).
+    The primary button (play) is filled with the accent colour. Glyphs are drawn, not icon files,
+    so they stay sharp at any DPI and follow light/dark mode."""
+
+    def __init__(self, glyph: str, diameter: int = 40, primary: bool = False, parent=None):
+        super().__init__(parent)
+        self.glyph = glyph
+        self.primary = primary
+        self.setFixedSize(diameter, diameter)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFocusPolicy(Qt.TabFocus)
+        self.setAttribute(Qt.WA_Hover, True)
+
+    def set_glyph(self, glyph: str):
+        if glyph != self.glyph:
+            self.glyph = glyph
+            self.update()
+
+    def paintEvent(self, _):
+        from PySide6.QtGui import QPainterPath
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        pal = self.palette()
+        ink = pal.color(pal.ColorRole.ButtonText)
+        accent = pal.color(pal.ColorRole.Link)
+        enabled = self.isEnabled()
+        hover = enabled and self.underMouse()
+        down = enabled and self.isDown()
+        d = self.width()
+        ring = 2.0
+        r = QRectF(ring / 2 + 0.5, ring / 2 + 0.5, d - ring - 1, d - ring - 1)
+        if self.primary and enabled:
+            fill = accent.lighter(112) if hover else accent
+            if down:
+                fill = accent.darker(112)
+            p.setPen(Qt.NoPen); p.setBrush(fill)
+            p.drawEllipse(r)
+            fg = QColor("#1A1206") if accent.lightness() > 140 else QColor("#FFFFFF")
+        else:
+            fg = QColor(ink)
+            if not enabled:
+                fg.setAlpha(90)
+            bg = Qt.NoBrush
+            if down:
+                bg = QColor(ink); bg.setAlpha(46)
+            elif hover:
+                bg = QColor(ink); bg.setAlpha(22)
+            p.setPen(QPen(fg, ring)); p.setBrush(bg)
+            p.drawEllipse(r)
+        if self.hasFocus():
+            p.setPen(QPen(accent, 2)); p.setBrush(Qt.NoBrush)
+            p.drawEllipse(r.adjusted(-1, -1, 1, 1))
+        # glyph, scaled to the diameter
+        c = r.center()
+        u = d / 40.0                     # 1 unit at a 40 px button
+        p.setPen(Qt.NoPen); p.setBrush(fg)
+        g = self.glyph
+
+        def tri(x0, y0, x1, y1, x2, y2):
+            path = QPainterPath(QPointF(x0, y0)); path.lineTo(x1, y1); path.lineTo(x2, y2); path.closeSubpath()
+            p.drawPath(path)
+
+        cx, cy = c.x(), c.y()
+        if g == "play":
+            tri(cx - 4.5 * u, cy - 7 * u, cx - 4.5 * u, cy + 7 * u, cx + 7.5 * u, cy)
+        elif g == "pause":
+            p.drawRoundedRect(QRectF(cx - 6 * u, cy - 7 * u, 4.2 * u, 14 * u), 1, 1)
+            p.drawRoundedRect(QRectF(cx + 1.8 * u, cy - 7 * u, 4.2 * u, 14 * u), 1, 1)
+        elif g == "stop":
+            p.drawRoundedRect(QRectF(cx - 6 * u, cy - 6 * u, 12 * u, 12 * u), 1.5, 1.5)
+        elif g == "prev":
+            p.drawRect(QRectF(cx - 7 * u, cy - 6.5 * u, 2.6 * u, 13 * u))
+            tri(cx + 6.5 * u, cy - 6.5 * u, cx + 6.5 * u, cy + 6.5 * u, cx - 4 * u, cy)
+        elif g == "next":
+            p.drawRect(QRectF(cx + 4.4 * u, cy - 6.5 * u, 2.6 * u, 13 * u))
+            tri(cx - 6.5 * u, cy - 6.5 * u, cx - 6.5 * u, cy + 6.5 * u, cx + 4 * u, cy)
+        elif g in ("vol", "mute"):
+            body = QPainterPath(QPointF(cx - 8 * u, cy - 3 * u))
+            body.lineTo(cx - 4.5 * u, cy - 3 * u); body.lineTo(cx + 0.5 * u, cy - 7.5 * u)
+            body.lineTo(cx + 0.5 * u, cy + 7.5 * u); body.lineTo(cx - 4.5 * u, cy + 3 * u)
+            body.lineTo(cx - 8 * u, cy + 3 * u); body.closeSubpath()
+            p.drawPath(body)
+            pen = QPen(fg, 1.8 * u); pen.setCapStyle(Qt.RoundCap)
+            p.setPen(pen); p.setBrush(Qt.NoBrush)
+            if g == "vol":
+                p.drawArc(QRectF(cx - 2 * u, cy - 4 * u, 8 * u, 8 * u), -55 * 16, 110 * 16)
+                p.drawArc(QRectF(cx - 3.5 * u, cy - 7.5 * u, 15 * u, 15 * u), -55 * 16, 110 * 16)
+            else:
+                p.drawLine(QPointF(cx + 3.5 * u, cy - 3.5 * u), QPointF(cx + 8.5 * u, cy + 3.5 * u))
+                p.drawLine(QPointF(cx + 8.5 * u, cy - 3.5 * u), QPointF(cx + 3.5 * u, cy + 3.5 * u))
+
+
 class KeyChip(QWidget):
     """Large key label on its Camelot colour (the deck's memorable element)."""
 
@@ -497,19 +590,17 @@ class PlayerPanel(QWidget, Translatable):
         info.addWidget(self.caption); info.addWidget(self.title); info.addWidget(self.artist_lbl)
         info.addSpacing(8)
         bar = QHBoxLayout(); bar.setSpacing(6)
-        self.play_btn = QPushButton()
-        self.play_btn.setObjectName("primary")
-        self.play_btn.setFixedSize(54, 40)
+        self.play_btn = CircleButton("play", 48, primary=True)
         self.play_btn.clicked.connect(self.toggle)
-        self.prev_btn = QPushButton(); self.prev_btn.setFixedSize(42, 40)
+        self.prev_btn = CircleButton("prev", 40)
         self.prev_btn.clicked.connect(self.previous)
-        self.next_btn = QPushButton(); self.next_btn.setFixedSize(42, 40)
+        self.next_btn = CircleButton("next", 40)
         self.next_btn.clicked.connect(lambda: self.next_requested.emit(self.is_playing()))
-        self.stop_btn = QPushButton(); self.stop_btn.setFixedSize(42, 40)
+        self.stop_btn = CircleButton("stop", 40)
         self.stop_btn.clicked.connect(self.stop)
         self.time = QLabel("0:00"); self.time.setObjectName("deckTime")
         self.time.setFont(styled_font(self.font(), size=10.5))
-        self.mute_btn = QToolButton()
+        self.mute_btn = CircleButton("vol", 34)
         self.mute_btn.setCheckable(True)
         self.mute_btn.toggled.connect(self._mute)
         self.volume = QSlider(Qt.Horizontal)
@@ -517,8 +608,9 @@ class PlayerPanel(QWidget, Translatable):
         self.volume.setFixedWidth(100)
         self.volume.setValue(int(round(getattr(settings, "volume", 0.8) * 100)))
         self.volume.valueChanged.connect(self._volume)
+        bar.setSpacing(10)
         for wdg in (self.prev_btn, self.play_btn, self.next_btn, self.stop_btn):
-            bar.addWidget(wdg)
+            bar.addWidget(wdg, 0, Qt.AlignVCenter)
         bar.addSpacing(8); bar.addWidget(self.time); bar.addStretch(1)
         bar.addWidget(self.mute_btn); bar.addWidget(self.volume)
         info.addLayout(bar)
@@ -618,18 +710,11 @@ class PlayerPanel(QWidget, Translatable):
         self._update_title()
 
     def _make_icons(self):
-        # neutral buttons use the text colour, the amber play button dark ink
-        st = self.style()
-        fg = self.palette().color(self.palette().ColorRole.ButtonText)
-        on_accent = QColor("#1A1206") if self.wave.dark else QColor("#FFFFFF")
-        self.ic_play = tinted(st.standardIcon(QStyle.SP_MediaPlay), on_accent)
-        self.ic_pause = tinted(st.standardIcon(QStyle.SP_MediaPause), on_accent)
-        self.ic_vol = tinted(st.standardIcon(QStyle.SP_MediaVolume), fg)
-        self.ic_mute = tinted(st.standardIcon(QStyle.SP_MediaVolumeMuted), fg)
-        self.stop_btn.setIcon(tinted(st.standardIcon(QStyle.SP_MediaStop), fg))
-        self.prev_btn.setIcon(tinted(st.standardIcon(QStyle.SP_MediaSkipBackward), fg))
-        self.next_btn.setIcon(tinted(st.standardIcon(QStyle.SP_MediaSkipForward), fg))
-        self.play_btn.setIcon(self.ic_pause if self.is_playing() else self.ic_play)
+        # round buttons paint their own glyphs in the palette colours
+        self.ic_vol = True
+        self.play_btn.set_glyph("pause" if self.is_playing() else "play")
+        for b in (self.play_btn, self.prev_btn, self.next_btn, self.stop_btn, self.mute_btn):
+            b.update()
         self._update_mute_icon()
 
     def set_dark(self, dark: bool):
@@ -904,7 +989,7 @@ class PlayerPanel(QWidget, Translatable):
 
     def _state_changed(self, state):
         playing = state == QMediaPlayer.PlayingState
-        self.play_btn.setIcon(self.ic_pause if playing else self.ic_play)
+        self.play_btn.set_glyph("pause" if playing else "play")
         (self.timer.start if playing else self.timer.stop)()
         self._tick()
 
@@ -943,7 +1028,7 @@ class PlayerPanel(QWidget, Translatable):
         if not hasattr(self, "ic_vol"):
             return
         v = self.volume.value()
-        self.mute_btn.setIcon(self.ic_mute if self.mute_btn.isChecked() or v == 0 else self.ic_vol)
+        self.mute_btn.set_glyph("mute" if self.mute_btn.isChecked() or v == 0 else "vol")
         self.mute_btn.setToolTip(tr("mute"))
 
     def shutdown(self):
