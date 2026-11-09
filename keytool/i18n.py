@@ -120,6 +120,38 @@ _T: dict[str, tuple[str, str]] = {
     "delete_everywhere": ("Überall entfernen", "Remove everywhere"),
     "filter_by": ("Danach filtern", "Filter by this"),
     "about": ("Über", "About"),
+    "research": ("Extern recherchieren", "External research"),
+    "research_similar": ("Ähnliche Titel extern recherchieren", "Research similar tracks externally"),
+    "research_title": ("Externe Recherche nach Tonart & BPM", "External research by key & BPM"),
+    "research_intro": ("KeyTool baut für jede Quelle die passende gefilterte Suche und öffnet sie in deinem "
+                       "Browser.", "KeyTool builds a filtered search for each source and opens it in your browser."),
+    "research_keys": ("Tonarten (Klick: an/aus · Rechtsklick: inkl. harmonischer Nachbarn)",
+                      "Keys (click: toggle · right-click: with harmonic neighbours)"),
+    "research_extend": ("Harmonisch erweitern", "Add harmonic keys"),
+    "research_clear": ("Tonarten leeren", "Clear keys"),
+    "research_sources": ("Quellen", "Sources"),
+    "research_links": ("Suchen, die geöffnet werden", "Searches that will be opened"),
+    "research_open": ("Im Browser öffnen", "Open in browser"),
+    "research_copy": ("Links kopieren", "Copy links"),
+    "research_none": ("Bitte mindestens eine Tonart oder einen BPM-Bereich und eine Quelle wählen.",
+                      "Please choose at least one key or BPM range and one source."),
+    "research_opened": ("{n} Suche(n) im Browser geöffnet.", "{n} search(es) opened in the browser."),
+    "research_copied": ("Links in die Zwischenablage kopiert.", "Links copied to the clipboard."),
+    "src_karaoke_version": ("Karaoke-Version – alle Tonarten und der BPM-Bereich in einer Suche (Tonart/BPM "
+                            "stehen dort nicht in der Trefferliste)",
+                            "Karaoke-Version – all keys and the BPM range in one search (key/BPM are not shown "
+                            "in its result list)"),
+    "src_audiokeychain": ("AudioKeychain – je Tonart eine Suche; kennt keinen BPM-Bereich, daher nach BPM sortiert "
+                          "(ohne Konto nur Vorschau)",
+                          "AudioKeychain – one search per key; has no BPM range, so results are sorted by BPM "
+                          "(preview only without account)"),
+    "src_tunebat": ("Tunebat – Suche lässt sich nicht per Link vorbelegen: Seite wird geöffnet, Kriterien "
+                    "liegen in der Zwischenablage", "Tunebat – search cannot be pre-filled by link: the page "
+                    "opens and the criteria are on the clipboard"),
+    "note_range": ("nach BPM sortiert – Bereich {lo}–{hi} selbst ansteuern", "sorted by BPM – scroll to {lo}–{hi}"),
+    "note_manual": ("Kriterien manuell eintragen (in Zwischenablage)", "enter criteria manually (on clipboard)"),
+    "note_too_many": ("nur die ersten {n} Tonarten", "only the first {n} keys"),
+    "tunebat_clip": ("Tunebat: Kriterien in der Zwischenablage – {crit}", "Tunebat: criteria on the clipboard – {crit}"),
     "play": ("Abspielen", "Play"),
     "play_pause": ("Abspielen / Pause", "Play / pause"),
     "stop": ("Stopp", "Stop"),

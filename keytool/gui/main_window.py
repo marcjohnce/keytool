@@ -107,9 +107,11 @@ class MainWindow(QMainWindow, Translatable):
         self.a_pending = self._act("analyze_pending", self.analyze_pending, "▶")
         self.a_reanalyze = self._act("reanalyze", self.reanalyze_selected, "↻")
         self.a_tags = self._act("write_tags", self.write_tags_selected, "🏷")
+        self.a_research = self._act("research", lambda: self.open_research(False), "🔎")
         self.a_settings = self._act("settings", self.open_settings, "⚙")
         self.a_files.setShortcut(QKeySequence.Open)
-        for a in (self.a_files, self.a_folder, None, self.a_pending, self.a_reanalyze, self.a_tags):
+        for a in (self.a_files, self.a_folder, None, self.a_pending, self.a_reanalyze, self.a_tags, None,
+                  self.a_research):
             tb.addSeparator() if a is None else tb.addAction(a)
         from PySide6.QtWidgets import QSizePolicy
         spacer = QWidget()
@@ -542,6 +544,7 @@ class MainWindow(QMainWindow, Translatable):
         m.addAction(tr("reanalyze"), self.reanalyze_selected)
         m.addAction(tr("write_tags"), self.write_tags_selected)
         m.addAction(tr("reset_manual"), lambda: (self.lib.reset_manual(self.selected_ids()), self.reanalyze_selected()))
+        m.addAction("🔎  " + tr("research_similar"), lambda: self.open_research(True))
         m.addSeparator()
         m.addAction(tr("add_keyword"), self._prompt_keywords)
         m.addSeparator()
@@ -566,6 +569,24 @@ class MainWindow(QMainWindow, Translatable):
             subprocess.Popen(["open", "-R", path])
         else:
             QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(path)))
+
+    # ------------------------------------------------------------------ external research
+    def open_research(self, from_track: bool = False):
+        """Pre-fill from the key wheel / BPM filter, or from the selected track (key + BPM ±tolerance)."""
+        from .research_dialog import ResearchDialog
+
+        keys = self.f_keys.selected()
+        lo, hi = self.f_bpm_from.value() or None, self.f_bpm_to.value() or None
+        rows = self.selected_rows()
+        if (from_track or not (keys or lo or hi)) and rows:
+            r = rows[0]
+            keys = [r["key"]] if r.get("key") else []
+            if r.get("bpm"):
+                tol = self.s.research_bpm_tolerance / 100
+                lo, hi = round(r["bpm"] * (1 - tol), 1), round(r["bpm"] * (1 + tol), 1)
+        dlg = ResearchDialog(self.s, keys, lo, hi, dark=resolve_theme(self.s.theme) == "dark",
+                             notation=self.s.notation, parent=self)
+        dlg.exec()
 
     # ------------------------------------------------------------------ settings
     def open_settings(self):

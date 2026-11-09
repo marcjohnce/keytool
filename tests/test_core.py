@@ -357,3 +357,28 @@ def test_waveform_band_colours(tmp_path, monkeypatch):
     high = compute_waveform(str(tmp_path / "high.wav")).colors.mean(axis=0)
     assert low[2] > low[0]                # blue dominates for bass
     assert high[0] > low[0] + 100         # treble is much brighter in red/green
+
+
+# ------------------------------------------------------------------ external research links
+def test_research_links():
+    from urllib.parse import parse_qs, urlparse
+    from keytool.research import build_links, karaoke_version_url, audiokeychain_key_value
+    am, c, fsharp, ebm = Key.parse("Am"), Key.parse("C"), Key.parse("F#"), Key.parse("Ebm")
+    # Karaoke-Version: all keys + BPM range in one URL (verified scheme: chordkey=22,13&tempo=122,128)
+    q = parse_qs(urlparse(karaoke_version_url([am, c, fsharp, ebm], 122.4, 127.6)).query)
+    assert q["chordkey"] == ["22,1,7,107,116,16"] and q["tempo"] == ["122,128"]
+    assert "chordkey" not in karaoke_version_url([], 80, 100) and "tempo=80%2C100" in karaoke_version_url([], 80, 100)
+    # AudioKeychain uses flats in lower case for all 24 keys
+    from keytool.keys import all_keys
+    vals = {audiokeychain_key_value(k) for k in all_keys()}
+    assert vals == {"abm", "b", "ebm", "gb", "bbm", "db", "fm", "ab", "cm", "eb", "gm", "bb", "dm", "f", "am", "c",
+                    "em", "g", "bm", "d", "gbm", "a", "dbm", "e"}
+    links = build_links([am, c], 122, 128)
+    assert [l.source for l in links] == ["karaoke_version", "audiokeychain", "audiokeychain", "tunebat"]
+    akc = parse_qs(urlparse(links[1].url).query)
+    assert akc["key"] == ["am"] and "bpm" not in akc and akc["s"] == ["bpm"] and links[1].note == "range"
+    exact = parse_qs(urlparse(build_links([am], 124, 125, ["audiokeychain"])[0].url).query)
+    assert exact["bpm"] == ["124"] or exact["bpm"] == ["125"]
+    many = build_links(all_keys(), None, None, ["audiokeychain"])
+    assert len(many) == 6 and "too_many_keys" in many[-1].note
+    assert build_links([am], sources=["tunebat"])[0].url == "https://tunebat.com/Advanced"

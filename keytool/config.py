@@ -41,6 +41,8 @@ class Settings:
     workers: int = 0                # 0 = auto (CPU count - 1)
     reanalyze_existing: bool = False
     volume: float = 0.8             # player volume 0..1
+    research_sources: list = None   # external research sources last used (None = all)
+    research_bpm_tolerance: float = 3.0  # +-% around the selected track's BPM
 
     @classmethod
     def load(cls) -> "Settings":

@@ -172,6 +172,24 @@ def list_all_keys() -> list[dict]:
     return [{n: k.format(n) for n in NOTATIONS} | {"name": k.long_name()} for k in all_keys()]
 
 
+@mcp.tool()
+def external_research_links(keys: list[str] | None = None, bpm_min: float | None = None,
+                            bpm_max: float | None = None, sources: list[str] | None = None) -> dict:
+    """Build filtered search links for external song databases (Karaoke-Version, AudioKeychain, Tunebat)
+    by key(s) in any notation and a BPM range. The links are meant to be opened by the user in a browser;
+    KeyTool does not fetch the pages. Notes: AudioKeychain supports one key per search and no BPM range
+    (results sorted by BPM); Tunebat cannot be pre-filled by URL (criteria must be entered manually)."""
+    from .research import SOURCES, build_links, describe_criteria
+    ks = [Key.from_code(c) for c in _parse_keys(keys)]
+    srcs = sources or list(SOURCES)
+    bad = [x for x in srcs if x not in SOURCES]
+    if bad:
+        raise ValueError(f"Unknown sources {bad}; use {SOURCES}")
+    links = build_links(ks, bpm_min, bpm_max, srcs)
+    return {"criteria": describe_criteria(ks, bpm_min, bpm_max),
+            "links": [{"source": l.source, "label": l.label, "url": l.url, "note": l.note or None} for l in links]}
+
+
 # ============================================================================ keywords
 @mcp.tool()
 def list_keywords() -> list[dict]:
