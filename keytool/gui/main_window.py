@@ -248,6 +248,10 @@ class MainWindow(QMainWindow, Translatable):
                           (44, 210, 140, 140, 62, 60, 78, 80, 56, 52, 150, 100, 160, 56, 64, 90, 120, 300)):
             self.table.setColumnWidth(col, w)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        # right click only selects for the context menu, it never loads the title into the deck
+        self._deck_hold = False
+        self.table.viewport().installEventFilter(self)
+        self.table.installEventFilter(self)
         self.table.customContextMenuRequested.connect(self.table_menu)
         self.table.selectionModel().selectionChanged.connect(self.selection_changed)
         self.drop_hint = QLabel(); self.drop_hint.setObjectName("dropHint"); self.drop_hint.setAlignment(Qt.AlignCenter)
@@ -468,12 +472,40 @@ class MainWindow(QMainWindow, Translatable):
                 self._apply_detail_changes(old_ids, ch)
                 rows = self.selected_rows()
         self.details.set_rows(rows, keep_edits=True)
-        if not hasattr(self, "player"):
+        if not hasattr(self, "player") or self._deck_hold:
             return
         cur = self.table.currentIndex()
         cur_id = cur.data(ID_ROLE) if cur.isValid() else None
         row = next((r for r in rows if r["id"] == cur_id), rows[0] if rows else None)
         self.player.set_track(row)
+
+    def eventFilter(self, obj, e):
+        from PySide6.QtCore import QEvent, QItemSelectionModel
+        table = getattr(self, "table", None)
+        if table is not None and obj is table.viewport() and e.type() == QEvent.MouseButtonPress:
+            if e.button() == Qt.RightButton:
+                # select the clicked row (keeps an existing multi-selection) without touching the deck
+                self._deck_hold = True
+                idx = table.indexAt(e.position().toPoint())
+                sm = table.selectionModel()
+                if idx.isValid() and not sm.isRowSelected(idx.row(), idx.parent()):
+                    sm.setCurrentIndex(idx, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
+                return True          # Qt's own handling would change the selection again
+            self._deck_hold = False  # left/middle click: normal behaviour, selection loads the deck
+        elif table is not None and obj is table and e.type() == QEvent.KeyPress:
+            if e.key() not in (Qt.Key_Menu, Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta):
+                self._deck_hold = False
+        return super().eventFilter(obj, e)
+
+    def load_into_deck(self, autoplay: bool = False):
+        """Load the current (right-clicked) title into the deck, optionally playing it."""
+        self._deck_hold = False
+        rows = self.selected_rows()
+        cur = self.table.currentIndex()
+        cur_id = cur.data(ID_ROLE) if cur.isValid() else None
+        row = next((r for r in rows if r["id"] == cur_id), rows[0] if rows else None)
+        if row:
+            self.player.set_track(row, autoplay=autoplay)
 
     def update_deck(self):
         """The loaded track is the reference for the 'fits' and 'vs. deck' columns."""
@@ -723,7 +755,8 @@ class MainWindow(QMainWindow, Translatable):
         if not rows:
             return
         m = QMenu(self)
-        m.addAction("▶  " + tr("play"), self.player.play)
+        m.addAction("▶  " + tr("play"), lambda: self.load_into_deck(autoplay=True))
+        m.addAction(tr("load_deck"), self.load_into_deck)
         m.addSeparator()
         m.addAction("⚡  " + tr("analyze_now"), self.analyze_now_selected)
         m.addAction(tr("reanalyze"), self.reanalyze_selected)

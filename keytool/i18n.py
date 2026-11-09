@@ -7,6 +7,7 @@ _T: dict[str, tuple[str, str]] = {
     # key: (de, en)
     # redesign: deck + fit columns
     "deck": ("Deck", "Deck"),
+    "load_deck": ("Ins Deck laden", "Load into deck"),
     "analysis_menu": ("Analysieren", "Analyze"),
     "deck_caption": ("Im Deck", "In the deck"),
     "tempo_short": ("Tempo", "Tempo"),
