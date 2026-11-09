@@ -62,6 +62,13 @@ class SettingsDialog(QDialog):
         row.addWidget(self.bmin); row.addWidget(QLabel("–")); row.addWidget(self.bmax)
         lbl = QLabel(tr("s_bpm_range")); lbl.setToolTip(tr("s_bpm_range_tip"))
         f.addRow(lbl, row)
+        self.key_method = QComboBox()
+        self.key_method.addItem(tr("key_method_classic"), "classic")
+        self.key_method.addItem(tr("key_method_fast"), "fast")
+        self.key_method.setCurrentIndex(max(0, self.key_method.findData(settings.key_method)))
+        km_lbl = QLabel(tr("s_key_method")); km_lbl.setToolTip(tr("s_key_method_tip"))
+        self.key_method.setToolTip(tr("s_key_method_tip"))
+        f.addRow(km_lbl, self.key_method)
         self.workers = QSpinBox(); self.workers.setRange(0, 64); self.workers.setValue(settings.workers)
         f.addRow(tr("s_workers"), self.workers)
         self.write_edits = QCheckBox(tr("s_write_edits")); self.write_edits.setChecked(settings.write_edits)
@@ -106,6 +113,7 @@ class SettingsDialog(QDialog):
         if s.bpm_max < s.bpm_min * 2:  # range must span one octave for folding to work
             s.bpm_max = s.bpm_min * 2
         s.workers = self.workers.value()
+        s.key_method = self.key_method.currentData()
         s.write_tags = self.write_tags.isChecked()
         s.use_existing_tags = self.use_tags.isChecked()
         s.write_edits = self.write_edits.isChecked()

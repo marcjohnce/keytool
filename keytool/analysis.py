@@ -194,7 +194,69 @@ def key_scores(chroma_profile: np.ndarray) -> np.ndarray:
     return scores / len(_PROFILES)
 
 
-def detect_key(y: np.ndarray, sr: int = SR, chunk_seconds: float = 45.0) -> tuple[str | None, float]:
+KEY_METHODS = ("fast", "classic")
+
+
+def detect_key(y: np.ndarray, sr: int = SR, method: str = "classic", chunk_seconds: float = 45.0) -> tuple[str | None, float]:
+    """Key detection. method="classic": harmonic/percussive separation on the full STFT (slow);
+    method="fast": the same separation on the constant-Q spectrogram (about 4x faster)."""
+    if method == "fast":
+        return _detect_key_fast(y, sr)
+    return _detect_key_classic(y, sr, chunk_seconds)
+
+
+def _score_key(profile: np.ndarray) -> tuple[str, float]:
+    scores = key_scores(profile)
+    order = np.argsort(scores)[::-1]
+    best, second = int(order[0]), int(order[1])
+    key = Key(best % 12, best >= 12)
+    margin = float(scores[best] - scores[second])
+    conf = float(np.clip(scores[best] * 0.6 + margin * 4.0, 0, 1))
+    return key.code, round(conf, 3)
+
+
+def _detect_key_fast(y: np.ndarray, sr: int = SR, chunk_seconds: float = 90.0) -> tuple[str | None, float]:
+    """HPSS in the constant-Q domain: a median along time keeps sustained (harmonic) energy, a median
+    along frequency keeps transients (drums); a soft mask with margin 2 suppresses the drums.
+    216 CQT bins instead of 1025 STFT bins make the median filters ~10x cheaper."""
+    import librosa
+    import scipy.ndimage as ndi
+
+    if y.size < sr * 5 or float(np.max(np.abs(y))) < 1e-4:
+        return None, 0.0
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        mid, half = y.size // 2, int(45 * sr)
+        tuning = float(librosa.estimate_tuning(y=y[max(0, mid - half): mid + half], sr=sr, bins_per_octave=12))
+        acc = np.zeros(12)
+        frames = []
+        step = int(chunk_seconds * sr)
+        for start in range(0, y.size, step):
+            seg = y[start:start + step]
+            if seg.size < sr * 2:
+                continue
+            C = np.abs(librosa.cqt(seg, sr=sr, hop_length=HOP, fmin=librosa.note_to_hz("C2"), n_bins=36 * 6,
+                                   bins_per_octave=36, tuning=tuning * 3))
+            H = ndi.median_filter(C, size=(1, 31), mode="reflect")
+            P = ndi.median_filter(C, size=(31, 1), mode="reflect")
+            Ch = C * (H ** 2 / (H ** 2 + (2.0 * P) ** 2 + 1e-12))
+            chroma = librosa.feature.chroma_cqt(C=Ch, sr=sr, hop_length=HOP, bins_per_octave=36, n_octaves=6)
+            rms = np.sqrt((Ch ** 2).mean(axis=0))
+            n = min(chroma.shape[1], rms.size)
+            frames.append((chroma[:, :n], rms[:n]))
+    peak = max((float(r.max()) for _, r in frames), default=0.0)
+    if peak <= 0:
+        return None, 0.0
+    for chroma, rms in frames:
+        w = rms / peak
+        w[w < 0.05] = 0
+        acc += (chroma * w).sum(axis=1)
+    if acc.sum() == 0:
+        return None, 0.0
+    return _score_key(np.sqrt(acc))
+
+
+def _detect_key_classic(y: np.ndarray, sr: int = SR, chunk_seconds: float = 45.0) -> tuple[str | None, float]:
     import librosa
 
     if y.size < sr * 5 or float(np.max(np.abs(y))) < 1e-4:
@@ -231,22 +293,15 @@ def detect_key(y: np.ndarray, sr: int = SR, chunk_seconds: float = 45.0) -> tupl
         acc += (chroma * w).sum(axis=1)
     if acc.sum() == 0:
         return None, 0.0
-    profile = np.sqrt(acc)
-    scores = key_scores(profile)
-    order = np.argsort(scores)[::-1]
-    best, second = int(order[0]), int(order[1])
-    key = Key(best % 12, best >= 12)
-    margin = float(scores[best] - scores[second])
-    conf = float(np.clip(scores[best] * 0.6 + margin * 4.0, 0, 1))
-    return key.code, round(conf, 3)
+    return _score_key(np.sqrt(acc))
 
 
 # ----------------------------------------------------------------- entry point
 def analyze_file(path: str, bpm_min: float = 70, bpm_max: float = 180,
-                 do_bpm: bool = True, do_key: bool = True) -> AnalysisResult:
+                 do_bpm: bool = True, do_key: bool = True, key_method: str = "classic") -> AnalysisResult:
     """Analyse tempo and/or key. A part that is switched off is skipped entirely (the key detection
     is the expensive part, so a BPM-only analysis is several times faster) and returned as None."""
     y, duration = load_audio(path)
     bpm, bconf = detect_bpm(y, SR, bpm_min, bpm_max) if do_bpm else (None, 0.0)
-    key, kconf = detect_key(y, SR) if do_key else (None, 0.0)
+    key, kconf = detect_key(y, SR, key_method) if do_key else (None, 0.0)
     return AnalysisResult(bpm=bpm, bpm_confidence=bconf, key=key, key_confidence=kconf, duration=round(duration, 2))

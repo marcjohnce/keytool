@@ -100,6 +100,13 @@ _T: dict[str, tuple[str, str]] = {
     "s_write_tags": ("BPM & Tonart nach der Analyse automatisch in die Dateien schreiben",
                      "Automatically write BPM & key into files after analysis"),
     "s_tag_notation": ("Notation für Tonart-Tag", "Notation for key tag"),
+    "s_key_method": ("Tonart-Verfahren", "Key detection method"),
+    "key_method_fast": ("Schnell (ca. 4× schneller)", "Fast (about 4x faster)"),
+    "key_method_classic": ("Klassisch", "Classic"),
+    "s_key_method_tip": ("Mit 'python -m keytool --compare-key ORDNER' bzw. 'KeyTool-MCP.exe --compare-key ORDNER' "
+                         "beide Verfahren an deinen eigenen Titeln vergleichen.",
+                         "Compare both methods on your own tracks with 'python -m keytool --compare-key FOLDER' "
+                         "or 'KeyTool-MCP.exe --compare-key FOLDER'."),
     "s_workers": ("Parallele Analysen (0 = automatisch)", "Parallel analyses (0 = auto)"),
     "s_reanalyze": ("Bereits analysierte Dateien beim Einlesen erneut analysieren",
                     "Re-analyze already analyzed files on import"),

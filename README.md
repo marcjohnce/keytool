@@ -87,6 +87,24 @@ Ein separates FFmpeg ist nicht nötig.
 * **Einstellungen:** Sprache, Darstellung, Notation, BPM-Bereich, automatisches Tag-Schreiben und welche Notation in
   den Tonart-Tag geschrieben wird (Standard: Kreuze, z. B. „F#m“ – kompatibel mit Rekordbox/Serato/Traktor).
 
+### Analyse beschleunigen
+
+* **Schnelles Tonart-Verfahren** (Einstellungen → Analyse → Tonart-Verfahren: *Schnell*): Die Trennung von
+  Schlagzeug und harmonischem Anteil – rund 90 % der Rechenzeit – läuft auf dem Constant-Q-Spektrum statt auf dem
+  vollen Spektrum. Etwa 4–5× schneller; in den Tests identische Ergebnisse. Vorher an eigenen Titeln prüfen:
+
+  ```
+  python -m keytool --compare-key D:\Musik --limit 25      (aus dem Quellcode)
+  KeyTool-MCP.exe --compare-key D:\Musik --limit 25        (.exe-Version)
+  ```
+
+  Der Befehl analysiert eine über die Ordner verteilte Stichprobe mit beiden Verfahren, zeigt Abweichungen
+  (Paralleltonart, Quinte, …), vergleicht beide mit vorhandenen Tonart-Tags (z. B. aus Mixed In Key) und gibt eine
+  Empfehlung. Umschalten auch per `--set-key-method fast` bzw. `classic`.
+* **Parallele Analysen:** automatisch bis zu 16 (ein Kern bleibt frei, ca. 1 GB RAM je Analyse); manuell in den
+  Einstellungen.
+* Titel mit BPM und Tonart in den Tags werden nicht analysiert, fehlt nur ein Wert, wird nur dieser berechnet.
+
 ### Hinweise zur Genauigkeit
 
 * **BPM:** Onset-Analyse, Beat-Tracking und eine robuste Regression über alle Beats; bei Musik mit klarem Puls sehr
@@ -141,6 +159,8 @@ Beispiele für Anfragen an Claude: „Lies `D:\Musik\Neu` ein“, „Welche Trac
 python -m keytool                     # Oberfläche
 python -m keytool --analyze D:\Musik  # einlesen & analysieren ohne Oberfläche
 python -m keytool --mcp               # MCP-Server (stdio)
+python -m keytool --compare-key D:\Musik [--limit 25]   # Tonart-Verfahren vergleichen
+python -m keytool --set-key-method fast|classic        # Tonart-Verfahren wählen
 ```
 
 Umgebungsvariablen: `KEYTOOL_DATA_DIR` (Ordner für Einstellungen + Datenbank), `KEYTOOL_DB` (Datenbankdatei).
@@ -149,7 +169,8 @@ Umgebungsvariablen: `KEYTOOL_DATA_DIR` (Ordner für Einstellungen + Datenbank), 
 
 ```
 keytool/
-  analysis.py       BPM- und Tonart-Erkennung
+  analysis.py       BPM- und Tonart-Erkennung (klassisch / schnell)
+  compare.py        Vergleich der Tonart-Verfahren an eigenen Titeln
   keys.py           Tonart-Modell, Notationen, Camelot-Rad
   tags.py           Metadaten lesen, BPM/Tonart in Tags schreiben
   db.py             SQLite-Bibliothek & Suche

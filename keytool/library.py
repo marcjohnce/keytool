@@ -34,11 +34,12 @@ def _worker_init() -> None:
         os.environ[var] = "1"
 
 
-def _analyze_worker(path: str, bpm_min: float, bpm_max: float, do_bpm: bool = True, do_key: bool = True) -> dict:
+def _analyze_worker(path: str, bpm_min: float, bpm_max: float, do_bpm: bool = True, do_key: bool = True,
+                    key_method: str = "classic") -> dict:
     # Imported lazily so the GUI process starts fast and workers are self-contained
     from .analysis import analyze_file
 
-    res = analyze_file(path, bpm_min, bpm_max, do_bpm, do_key).to_dict()
+    res = analyze_file(path, bpm_min, bpm_max, do_bpm, do_key, key_method).to_dict()
     # only report what was actually analysed, so nothing else gets overwritten
     if not do_bpm:
         res.pop("bpm"); res.pop("bpm_confidence")
@@ -196,7 +197,8 @@ class Library:
             try:
                 for tid in remaining:
                     do_bpm, do_key = jobs[tid]
-                    futs[pool.submit(self.worker_fn, tracks[tid]["path"], s.bpm_min, s.bpm_max, do_bpm, do_key)] = tid
+                    futs[pool.submit(self.worker_fn, tracks[tid]["path"], s.bpm_min, s.bpm_max, do_bpm, do_key,
+                                     s.key_method)] = tid
                 pending = set(futs)
                 while pending:
                     if cancel and cancel.is_set():

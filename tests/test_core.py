@@ -722,3 +722,58 @@ def test_transpose_render(tmp_path, monkeypatch, st, expected):
     write_metadata(str(src), title="Neu", bpm=124, key_text="8A")
     assert cached(str(src), st) == out
     assert cached(str(src), -st) is None
+
+
+# ------------------------------------------------------------------ fast key detection + comparison tool
+@pytest.mark.parametrize("pc,minor,a4,drums", [
+    (9, True, 440, True), (2, True, 432, True), (7, False, 446, False), (0, False, 440, False),
+    (4, True, 446, True), (10, False, 432, True), (1, True, 440, False), (6, True, 432, False),
+])
+def test_fast_key_method(pc, minor, a4, drums):
+    from keytool.analysis import detect_key
+    y = make_track(118, pc, minor, seconds=30, a4=a4, drums=drums, seed=pc)
+    assert detect_key(y, method="fast")[0] == Key(pc, minor).code
+
+
+def test_fast_key_method_long_and_silent():
+    from keytool.analysis import detect_key
+    y = np.tile(make_track(124, 5, False, seconds=60), 4)          # 4 min -> several 90 s chunks
+    code, conf = detect_key(y, method="fast")
+    assert code == Key(5, False).code and 0 < conf <= 1
+    assert detect_key(np.zeros(SR * 10, dtype=np.float32), method="fast") == (None, 0.0)
+
+
+def test_key_method_setting_reaches_the_worker(tmp_path, monkeypatch):
+    log = tmp_path / "jobs.log"
+    monkeypatch.setenv("KEYTOOL_TEST_LOG", str(log))
+    from crashy import recording_worker
+    f = tmp_path / "x.wav"
+    _write_wav(f, make_track(120, 9, True, seconds=12))
+    lib = Library(Database(tmp_path / "lib.sqlite3"), Settings(write_tags=False, workers=1, key_method="fast"))
+    lib.worker_fn = recording_worker
+    lib.import_paths([str(tmp_path)])
+    r = lib.search(Query())[0]
+    assert r["key"] == Key(9, True).code and r["status"] == "ok"
+
+
+def test_compare_tool(tmp_path):
+    from keytool.compare import relation, run
+    assert relation(Key.parse("8A").code, Key.parse("8B").code).startswith("Parallel")
+    assert relation(Key.parse("8A").code, Key.parse("9A").code).startswith("Quinte")
+    assert relation(Key.parse("Am").code, Key.parse("A").code).startswith("gleicher Grundton")
+    for i, (pc, mn) in enumerate(((9, True), (0, False), (7, True))):
+        _write_wav(tmp_path / f"t{i}.wav", make_track(120, pc, mn, seconds=20, seed=i))
+    lines = []
+    res = run([str(tmp_path)], limit=2, workers=2, out=lines.append)
+    assert res["n"] == 2 and res["same"] == 2 and res["recommend_fast"]
+    assert any("schneller" in l for l in lines)
+
+
+def test_set_key_method_cli(tmp_path, monkeypatch):
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path))
+    r = subprocess.run([sys.executable, "-m", "keytool", "--set-key-method", "fast"], capture_output=True, text=True,
+                       cwd=os.path.dirname(os.path.dirname(__file__)), env={**os.environ, "KEYTOOL_DATA_DIR": str(tmp_path)})
+    assert r.returncode == 0 and Settings.load().key_method == "fast"
+    r = subprocess.run([sys.executable, "-m", "keytool", "--set-key-method", "turbo"], capture_output=True, text=True,
+                       cwd=os.path.dirname(os.path.dirname(__file__)), env={**os.environ, "KEYTOOL_DATA_DIR": str(tmp_path)})
+    assert r.returncode == 2

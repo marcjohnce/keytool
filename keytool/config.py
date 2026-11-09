@@ -39,7 +39,8 @@ class Settings:
     write_edits: bool = True        # write edited title/artist/album/genre/comment/energy into the files
     write_tags: bool = True         # write BPM/key into files after analysis
     tag_key_notation: str = "sharps"  # notation used when writing the key tag
-    workers: int = 0                # 0 = auto (CPU count - 1)
+    workers: int = 0                # 0 = auto (CPU count - 1, max 16, ~1 GB RAM per analysis)
+    key_method: str = "classic"     # "classic" | "fast" (CQT-domain HPSS, ~4x faster) - see --compare-key
     reanalyze_existing: bool = False
     volume: float = 0.8             # player volume 0..1
     research_auto_details: bool = True   # load tempo/keys/duration from the song pages
@@ -67,8 +68,8 @@ class Settings:
     def worker_count(self) -> int:
         if self.workers and self.workers > 0:
             return int(self.workers)
-        # Auto: one core left for the UI, at most 8, and ~1 GB RAM per analysis process
-        n = min(8, max(1, (os.cpu_count() or 2) - 1))
+        # Auto: one core left for the UI, at most 16, and ~1 GB RAM per analysis process
+        n = min(16, max(1, (os.cpu_count() or 2) - 1))
         ram = total_ram_bytes()
         if ram:
             n = min(n, max(1, int(ram * 0.6 / 1_000_000_000)))
