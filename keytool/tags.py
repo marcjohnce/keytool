@@ -286,3 +286,69 @@ def write_metadata(path: str, title: str | None = None, artist: str | None = Non
         if val != "":
             f.tags[name] = val
     f.save()
+
+
+# ------------------------------------------------------------------ cover artwork
+_FOLDER_IMAGES = ("cover", "folder", "front", "album", "albumart", "albumartsmall")
+
+
+def read_cover(path: str) -> bytes | None:
+    """Embedded front cover (ID3 APIC, FLAC/Vorbis picture, MP4 covr) or an image in the same folder
+    (cover.jpg, folder.jpg, front.png ...). Returns the raw image bytes or None."""
+    data = _embedded_cover(path)
+    if data:
+        return data
+    folder = os.path.dirname(path)
+    try:
+        files = {f.lower(): f for f in os.listdir(folder)}
+    except OSError:
+        return None
+    for name in _FOLDER_IMAGES:
+        for ext in (".jpg", ".jpeg", ".png", ".webp"):
+            f = files.get(name + ext)
+            if f:
+                try:
+                    with open(os.path.join(folder, f), "rb") as fh:
+                        return fh.read()
+                except OSError:
+                    pass
+    return None
+
+
+def _embedded_cover(path: str) -> bytes | None:
+    import base64
+    import mutagen
+
+    try:
+        f = mutagen.File(path)
+    except Exception:
+        return None
+    if f is None:
+        return None
+    # FLAC pictures
+    pics = getattr(f, "pictures", None)
+    if pics:
+        front = [p for p in pics if p.type == 3] or list(pics)
+        return front[0].data
+    tags = f.tags
+    if tags is None:
+        return None
+    if hasattr(tags, "getall"):                     # ID3 (MP3, WAV)
+        apics = tags.getall("APIC")
+        if apics:
+            front = [a for a in apics if a.type == 3] or apics
+            return front[0].data
+        return None
+    if type(tags).__name__ == "MP4Tags":
+        covr = tags.get("covr")
+        return bytes(covr[0]) if covr else None
+    try:                                            # Vorbis comments (OGG/Opus)
+        from mutagen.flac import Picture
+
+        for b64 in tags.get("metadata_block_picture", []) or tags.get("METADATA_BLOCK_PICTURE", []) or []:
+            pic = Picture(base64.b64decode(b64))
+            if pic.data:
+                return pic.data
+    except Exception:
+        pass
+    return None

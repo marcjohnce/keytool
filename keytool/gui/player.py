@@ -59,6 +59,125 @@ class _WaveformJob(QRunnable):
             self.emitter.done.emit(self.path, None, f"{type(e).__name__}: {e}")
 
 
+class _CoverEmitter(QObject):
+    done = Signal(str, object)        # path, QImage | None
+
+
+class _CoverJob(QRunnable):
+    def __init__(self, path: str, emitter: _CoverEmitter):
+        super().__init__()
+        self.path, self.emitter = path, emitter
+
+    def run(self):
+        from PySide6.QtGui import QImage
+        img = None
+        try:
+            from ..tags import read_cover
+            data = read_cover(self.path)
+            if data:
+                q = QImage.fromData(data)
+                if not q.isNull():
+                    # pre-scale in the worker thread; enough for the player and the enlarged view
+                    img = q.scaled(600, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation) if q.width() > 600 else q
+        except Exception:
+            img = None
+        self.emitter.done.emit(self.path, img)
+
+
+class CoverView(QWidget):
+    """Square cover artwork; a vinyl-record placeholder (label in the track's key colour) if there is none.
+    Click to see the cover enlarged."""
+
+    def __init__(self, size: int = 124, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(size, size)
+        self.image = None
+        self.key_code: str | None = None
+        self.dark = True
+        self.loading = False
+
+    def set_image(self, img):
+        self.image = img
+        self.loading = False
+        self.setCursor(Qt.PointingHandCursor if img is not None else Qt.ArrowCursor)
+        self.setToolTip("" if img is not None else tr("no_cover"))
+        self.update()
+
+    def set_key(self, code: str | None):
+        self.key_code = code
+        self.update()
+
+    def paintEvent(self, _):
+        from PySide6.QtGui import QPainterPath, QRadialGradient
+        from .theme import camelot_color
+
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        clip = QPainterPath()
+        clip.addRoundedRect(r, 10, 10)
+        p.setClipPath(clip)
+        pal = self.palette()
+        if self.image is not None:
+            from PySide6.QtGui import QPixmap
+            pm = QPixmap.fromImage(self.image).scaled(self.size() * self.devicePixelRatioF(),
+                                                      Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+            pm.setDevicePixelRatio(self.devicePixelRatioF())
+            x = (self.width() - pm.width() / pm.devicePixelRatio()) / 2
+            y = (self.height() - pm.height() / pm.devicePixelRatio()) / 2
+            p.drawPixmap(QPointF(x, y), pm)
+        else:
+            # placeholder: vinyl record on a soft background
+            p.fillRect(r, pal.color(pal.ColorRole.Base))
+            c = r.center()
+            rad = r.width() * 0.42
+            g = QRadialGradient(c, rad)
+            g.setColorAt(0.0, QColor("#2a2a2e"))
+            g.setColorAt(1.0, QColor("#0d0d10"))
+            p.setPen(Qt.NoPen)
+            p.setBrush(g)
+            p.drawEllipse(c, rad, rad)
+            groove = QColor(255, 255, 255, 22)
+            p.setPen(QPen(groove, 1))
+            p.setBrush(Qt.NoBrush)
+            for f in (0.92, 0.82, 0.72, 0.62, 0.52):
+                p.drawEllipse(c, rad * f, rad * f)
+            label = camelot_color(self.key_code, self.dark) if self.key_code else pal.color(pal.ColorRole.Highlight)
+            p.setPen(Qt.NoPen)
+            p.setBrush(label)
+            p.drawEllipse(c, rad * 0.36, rad * 0.36)
+            p.setBrush(QColor("#0d0d10"))
+            p.drawEllipse(c, rad * 0.05, rad * 0.05)
+            # light reflection
+            shine = QColor(255, 255, 255, 30)
+            p.setPen(QPen(shine, 2))
+            p.drawArc(QRectF(c.x() - rad * 0.8, c.y() - rad * 0.8, rad * 1.6, rad * 1.6), 100 * 16, 50 * 16)
+            if self.loading:
+                p.setPen(pal.color(pal.ColorRole.PlaceholderText))
+                p.drawText(r.adjusted(0, 0, 0, -4), Qt.AlignHCenter | Qt.AlignBottom, "…")
+        p.setClipping(False)
+        p.setPen(QPen(pal.color(pal.ColorRole.Mid), 1))
+        p.setBrush(Qt.NoBrush)
+        p.drawRoundedRect(r, 10, 10)
+
+    def mousePressEvent(self, e):
+        if self.image is None or e.button() != Qt.LeftButton:
+            return
+        from PySide6.QtGui import QPixmap
+        from PySide6.QtWidgets import QDialog
+        dlg = QDialog(self.window())
+        dlg.setWindowTitle(tr("cover"))
+        lay = QVBoxLayout(dlg)
+        lbl = QLabel()
+        pm = QPixmap.fromImage(self.image)
+        if pm.width() > 600:
+            pm = pm.scaled(600, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        lbl.setPixmap(pm)
+        lay.addWidget(lbl)
+        dlg.exec()
+
+
 # =========================================================================== waveform view
 class WaveformView(QWidget):
     seek_requested = Signal(float)    # fraction 0..1
@@ -180,7 +299,9 @@ class WaveformView(QWidget):
 
 # =========================================================================== player panel
 class PlayerPanel(QWidget, Translatable):
-    """Transport controls + waveform. Plays through the system's default audio output."""
+    """Cover + transport controls + waveform. Plays through the system's default audio output."""
+    prev_requested = Signal(bool)     # keep playing?
+    next_requested = Signal(bool)
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
@@ -192,16 +313,30 @@ class PlayerPanel(QWidget, Translatable):
         self.pool.setMaxThreadCount(2)
         self.emitter = _Emitter()
         self.emitter.done.connect(self._waveform_ready)
+        self.cover_emitter = _CoverEmitter()
+        self.cover_emitter.done.connect(self._cover_ready)
         self.notation = "camelot"
 
-        lay = QVBoxLayout(self)
+        outer = QHBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(8)
+        self.cover = CoverView()
+        outer.addWidget(self.cover, 0, Qt.AlignTop)
+        lay = QVBoxLayout()
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(4)
+        outer.addLayout(lay, 1)
         bar = QHBoxLayout()
         self.play_btn = QPushButton()
         self.play_btn.setObjectName("primary")
         self.play_btn.setFixedWidth(44)
         self.play_btn.clicked.connect(self.toggle)
+        self.prev_btn = QPushButton()
+        self.prev_btn.setFixedWidth(40)
+        self.prev_btn.clicked.connect(self.previous)
+        self.next_btn = QPushButton()
+        self.next_btn.setFixedWidth(40)
+        self.next_btn.clicked.connect(lambda: self.next_requested.emit(self.is_playing()))
         self.stop_btn = QPushButton()
         self.stop_btn.setFixedWidth(44)
         self.stop_btn.clicked.connect(self.stop)
@@ -219,7 +354,8 @@ class PlayerPanel(QWidget, Translatable):
         self.volume.setFixedWidth(110)
         self.volume.setValue(int(round(getattr(settings, "volume", 0.8) * 100)))
         self.volume.valueChanged.connect(self._volume)
-        for wdg, stretch in ((self.play_btn, 0), (self.stop_btn, 0), (self.title, 1), (self.time, 0),
+        for wdg, stretch in ((self.prev_btn, 0), (self.play_btn, 0), (self.next_btn, 0), (self.stop_btn, 0),
+                             (self.title, 1), (self.time, 0),
                              (self.mute_btn, 0), (self.volume, 0)):
             bar.addWidget(wdg, stretch)
         lay.addLayout(bar)
@@ -252,6 +388,8 @@ class PlayerPanel(QWidget, Translatable):
         super().retranslate()
         self.play_btn.setToolTip(tr("play_pause") + " (Space)")
         self.stop_btn.setToolTip(tr("stop"))
+        self.prev_btn.setToolTip(tr("prev_track") + " (Ctrl+←)")
+        self.next_btn.setToolTip(tr("next_track") + " (Ctrl+→)")
         self.volume.setToolTip(tr("volume"))
         self._update_mute_icon()
         if self.row is None:
@@ -269,11 +407,15 @@ class PlayerPanel(QWidget, Translatable):
         self.ic_vol = tinted(st.standardIcon(QStyle.SP_MediaVolume), fg)
         self.ic_mute = tinted(st.standardIcon(QStyle.SP_MediaVolumeMuted), fg)
         self.stop_btn.setIcon(tinted(st.standardIcon(QStyle.SP_MediaStop), fg))
+        self.prev_btn.setIcon(tinted(st.standardIcon(QStyle.SP_MediaSkipBackward), fg))
+        self.next_btn.setIcon(tinted(st.standardIcon(QStyle.SP_MediaSkipForward), fg))
         self.play_btn.setIcon(self.ic_pause if self.is_playing() else self.ic_play)
         self._update_mute_icon()
 
     def set_dark(self, dark: bool):
         self.wave.dark = dark
+        self.cover.dark = dark
+        self.cover.update()
         self._make_icons()
         self.wave.update()
 
@@ -299,17 +441,24 @@ class PlayerPanel(QWidget, Translatable):
                            (f"&nbsp;&nbsp;<span style='opacity:.7'>{extra}</span>" if extra else ""))
 
     # -- track handling
-    def set_track(self, row: dict | None):
-        """Load the selected track (paused). Called on every selection change."""
+    def set_track(self, row: dict | None, autoplay: bool = False):
+        """Load the selected track (paused unless autoplay). Called on every selection change."""
         same = row is not None and self.row is not None and row.get("path") == self.row.get("path")
         self.row = row
         self._update_title()
+        self.cover.set_key(row.get("key") if row else None)
         if same:
             self.wave.bpm = row.get("bpm")
+            if autoplay:
+                self.play()
             return
         enabled = row is not None and os.path.exists(row.get("path", ""))
-        for wdg in (self.play_btn, self.stop_btn):
+        for wdg in (self.play_btn, self.stop_btn, self.prev_btn, self.next_btn):
             wdg.setEnabled(enabled and self.player is not None)
+        self.cover.set_image(None)
+        if enabled:
+            self.cover.loading = True
+            self.pool.start(_CoverJob(row["path"], self.cover_emitter))
         if self.player is not None:
             self._pending = None
             self.player.stop()
@@ -327,7 +476,21 @@ class PlayerPanel(QWidget, Translatable):
         self.pool.start(_WaveformJob(self.path, self.emitter))
         if self.player is not None:
             self.player.setSource(QUrl.fromLocalFile(self.path))
+            if autoplay:
+                self.player.play()
         self._tick()
+
+    def _cover_ready(self, path: str, img):
+        if path == self.path:
+            self.cover.set_image(img)
+
+    def previous(self):
+        """Like every player: restart the track if it is more than 3 s in, otherwise go to the previous one."""
+        if self.player is not None and self.player.position() > 3000:
+            self.player.setPosition(0)
+            self._tick()
+        else:
+            self.prev_requested.emit(self.is_playing())
 
     def _waveform_ready(self, path: str, wf, error: str):
         if path != self.path:
@@ -402,6 +565,8 @@ class PlayerPanel(QWidget, Translatable):
         self._tick()
 
     def _media_status(self, status):
+        if status == QMediaPlayer.EndOfMedia and self.path:
+            QTimer.singleShot(0, lambda: self.next_requested.emit(True))   # continue with the next track
         if status in (QMediaPlayer.LoadedMedia, QMediaPlayer.BufferedMedia) and self._pending:
             pos, playing = self._pending
             self._pending = None

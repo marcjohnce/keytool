@@ -492,3 +492,67 @@ def test_energy_from_mixed_in_key_comment(tmp_path):
     _encode(raw, f)
     t = ID3(f); t.add(COMM(encoding=3, lang="eng", desc="", text="8A - Energy 6")); t.save(f)
     assert read_metadata(str(f)).energy == 6
+
+
+# ------------------------------------------------------------------ cover artwork
+def _png_bytes(color=(200, 80, 40)):
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (64, 64), color).save(buf, "PNG")
+    return buf.getvalue()
+
+
+def _embed_cover(path, data):
+    import base64
+    import mutagen
+    from mutagen.flac import Picture
+    from mutagen.id3 import APIC, ID3, ID3NoHeaderError
+    ext = os.path.splitext(str(path))[1]
+    if ext in (".mp3", ".wav"):
+        if ext == ".mp3":
+            try:
+                t = ID3(path)
+            except ID3NoHeaderError:
+                t = ID3()
+            t.add(APIC(encoding=3, mime="image/png", type=3, desc="Cover", data=data)); t.save(path)
+        else:
+            from mutagen.wave import WAVE
+            f = WAVE(path)
+            if f.tags is None:
+                f.add_tags()
+            f.tags.add(APIC(encoding=3, mime="image/png", type=3, desc="Cover", data=data)); f.save()
+    elif ext == ".m4a":
+        from mutagen.mp4 import MP4, MP4Cover
+        f = MP4(path); f["covr"] = [MP4Cover(data, MP4Cover.FORMAT_PNG)]; f.save()
+    else:
+        pic = Picture(); pic.type = 3; pic.mime = "image/png"; pic.data = data
+        f = mutagen.File(path)
+        if ext == ".flac":
+            f.add_picture(pic)
+        else:
+            f["METADATA_BLOCK_PICTURE"] = [base64.b64encode(pic.write()).decode("ascii")]
+        f.save()
+
+
+@pytest.mark.parametrize("ext", ["mp3", "wav", "flac", "ogg", "m4a"])
+def test_embedded_cover(tmp_path, ext):
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg needed")
+    from keytool.tags import read_cover
+    raw = tmp_path / "raw.wav"
+    _write_wav(raw, make_track(120, 0, False, seconds=4))
+    f = tmp_path / f"t.{ext}"
+    shutil.copy(raw, f) if ext == "wav" else _encode(raw, f)
+    assert read_cover(str(f)) is None
+    data = _png_bytes()
+    _embed_cover(f, data)
+    assert read_cover(str(f)) == data
+
+
+def test_folder_cover(tmp_path):
+    from keytool.tags import read_cover
+    f = tmp_path / "song.wav"
+    _write_wav(f, make_track(120, 0, False, seconds=3))
+    (tmp_path / "Folder.JPG").write_bytes(b"\xff\xd8fakejpeg")
+    assert read_cover(str(f)) == b"\xff\xd8fakejpeg"

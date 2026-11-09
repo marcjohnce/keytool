@@ -20,7 +20,7 @@ die Bibliothek zugreifen.
 | Detailansicht | Titel, Interpret, Album, Genre, Kommentar, Tonart, Energy (1–10) und Tempo bearbeiten – einzeln oder für viele Titel gleichzeitig; Dateityp, Bitrate, Dateigröße, Dauer und Pfad werden angezeigt. Änderungen werden in die Datei-Tags geschrieben (abschaltbar) |
 | Manuelle Korrektur | BPM/Tonart überschreiben; manuelle Werte bleiben bei einer erneuten Analyse erhalten |
 | Recherche | Titel bei **Karaoke-Version** (karaoke-version.de) nach Tonart(en) und BPM-Bereich suchen; Treffer direkt in KeyTool mit Tonart(en), Tempo, Dauer, Preis und Markierung, ob der Titel schon in der Bibliothek ist |
-| Player | Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
+| Player | Cover (eingebettet oder cover.jpg/folder.jpg im Ordner, sonst Platzhalter), vorheriger/nächster Titel, Play/Pause, Stopp, automatisches Weiterspielen; Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
 | Wellenform | Übersicht des ausgewählten Titels über der Trackliste, gefärbt nach Frequenzbändern (Bass blau, Mitten bernstein, Höhen weiß), Klicken/Ziehen zum Spulen, Taktmarken aus der BPM |
 | Oberfläche | Deutsch / Englisch, heller und dunkler Modus (oder System), Umschalten ohne Neustart |
 | MCP-Server | Vollzugriff: suchen, Details, Schlüsselwörter, Werte setzen, Tags schreiben, Ordner einlesen & analysieren |
@@ -52,8 +52,11 @@ Ein separates FFmpeg ist nicht nötig.
   die du änderst. Wechselst du mit ungespeicherten Änderungen den Titel, fragt KeyTool nach. Energy wird als
   `TXXX:EnergyLevel` (MP3/WAV), `ENERGYLEVEL` (FLAC/OGG) bzw. `EnergyLevel` (M4A) gespeichert; Mixed-In-Key-
   Kommentare wie „8A - Energy 6“ werden beim Einlesen erkannt.
-* **Abspielen:** Titel auswählen → Wellenform und Player oben laden den Titel. Leertaste oder Doppelklick
-  startet/pausiert, Klicken oder Ziehen in der Wellenform spult. Werden während der Wiedergabe Tags in die
+* **Abspielen:** Titel auswählen → Cover, Wellenform und Player oben laden den Titel. Leertaste oder Doppelklick
+  startet/pausiert, Klicken oder Ziehen in der Wellenform spult. ⏮/⏭ (Strg+←/→ oder Medientasten) springen
+  zum vorherigen/nächsten Titel in der aktuellen Sortierung und Filterung; ⏮ startet nach den ersten 3 Sekunden
+  erst den Titel neu. Am Titelende geht es mit dem nächsten weiter, am Listenende hält der Player an. Ein Klick
+  aufs Cover zeigt es groß. Werden während der Wiedergabe Tags in die
   Datei geschrieben, gibt der Player die Datei kurz frei und spielt an derselben Stelle weiter.
 * **Recherche bei Karaoke-Version** (🔎 in der Toolbar oder Rechtsklick „Passende Titel bei Karaoke-Version
   suchen“): Tonarten im Camelot-Rad wählen („Harmonisch erweitern“ fügt die Nachbarn hinzu), BPM-Bereich setzen,

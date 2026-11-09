@@ -226,6 +226,16 @@ class MainWindow(QMainWindow, Translatable):
         self.center.addWidget(hint_wrap)
         self.player = PlayerPanel(self.s)
         self.table.doubleClicked.connect(lambda _: self.player.play())
+        self.player.prev_requested.connect(lambda playing: self.play_adjacent(-1, playing))
+        self.player.next_requested.connect(lambda playing: self.play_adjacent(1, playing))
+        for seq, slot in ((QKeySequence("Ctrl+Right"), lambda: self.play_adjacent(1, self.player.is_playing())),
+                          (QKeySequence("Ctrl+Left"), self.player.previous),
+                          (QKeySequence(Qt.Key_MediaNext), lambda: self.play_adjacent(1, self.player.is_playing())),
+                          (QKeySequence(Qt.Key_MediaPrevious), self.player.previous),
+                          (QKeySequence(Qt.Key_MediaTogglePlayPause), self.player.toggle),
+                          (QKeySequence(Qt.Key_MediaPlay), self.player.toggle),
+                          (QKeySequence(Qt.Key_MediaStop), self.player.stop)):
+            QShortcut(seq, self, activated=slot)
         QShortcut(QKeySequence(Qt.Key_Space), self.table, activated=self.player.toggle,
                   context=Qt.WidgetWithChildrenShortcut)
         QShortcut(QKeySequence(Qt.Key_Space), self.player, activated=self.player.toggle,
@@ -400,6 +410,24 @@ class MainWindow(QMainWindow, Translatable):
         cur_id = cur.data(ID_ROLE) if cur.isValid() else None
         row = next((r for r in rows if r["id"] == cur_id), rows[0] if rows else None)
         self.player.set_track(row)
+
+    def play_adjacent(self, delta: int, keep_playing: bool):
+        """Select the previous/next track in the list's current order (filter + sorting) and load it;
+        keeps playing if the player was playing. Stops at the end of the list."""
+        n = self.proxy.rowCount()
+        if not n:
+            return
+        cur = self.table.currentIndex()
+        row = cur.row() if cur.isValid() else -1
+        target = row + delta
+        if target < 0 or target >= n:
+            if delta > 0 and keep_playing:
+                self.player.stop()      # end of the list
+            return
+        self.table.selectRow(target)
+        self.table.scrollTo(self.proxy.index(target, 0))
+        if keep_playing:
+            self.player.play()
 
     def _released(self, ids, fn):
         """Run fn while the player has released the affected file (Windows file locking)."""
