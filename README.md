@@ -1,0 +1,123 @@
+# KeyTool – Tonart- & BPM-Analyse mit Musikbibliothek und MCP-Server
+
+KeyTool analysiert Audiodateien (MP3, WAV, FLAC, OGG, M4A), erkennt **Tempo (BPM)** und **Tonart** und legt alles
+in einer durchsuchbaren Bibliothek ab. Du kannst nach Titel, Interpret, Album, Jahr, BPM, Tonart und eigenen
+**Schlüsselwörtern** suchen und filtern. Über den eingebauten **MCP-Server** kann z. B. Claude Desktop direkt auf
+die Bibliothek zugreifen.
+
+## Funktionen
+
+| Bereich | Umfang |
+|---|---|
+| Formate | MP3, WAV, FLAC, OGG (Vorbis/Opus), M4A/AAC/ALAC – Dekodierung über FFmpeg (in PyAV enthalten) |
+| Einlesen | Einzelne Dateien, ganze Ordnerstrukturen (rekursiv), **Drag & Drop aus dem Windows Explorer** |
+| Analyse | BPM mit Nachkommastelle und Oktavkorrektur, Tonart (24 Dur/Moll), Sicherheitswert je Ergebnis |
+| Notationen | **Camelot** (8A), **Kreuze** (F#m), **Bs** (Gbm), zusätzlich Open Key (1m) |
+| Suche | Freitext + Titel, Interpret, Album, Jahr von/bis, BPM von/bis, Tonarten (Mehrfachauswahl), Schlüsselwörter (alle/mindestens eins) |
+| Schlüsselwörter | Pro Titel oder für viele Titel gleichzeitig; umbenennen und überall entfernen |
+| DJ-Extras | „Harmonisch passend“: Titel, die nach dem Camelot-Rad zur Auswahl passen (±6 % BPM); BPM halbieren/verdoppeln |
+| Tags | BPM & Tonart werden nach der Analyse **automatisch in die Datei geschrieben** (ID3 TBPM/TKEY, Vorbis BPM/INITIALKEY, MP4 tmpo/initialkey) – abschaltbar |
+| Manuelle Korrektur | BPM/Tonart überschreiben; manuelle Werte bleiben bei einer erneuten Analyse erhalten |
+| Oberfläche | Deutsch / Englisch, heller und dunkler Modus (oder System), Umschalten ohne Neustart |
+| MCP-Server | Vollzugriff: suchen, Details, Schlüsselwörter, Werte setzen, Tags schreiben, Ordner einlesen & analysieren |
+
+## Installation & Start (Windows)
+
+**Variante A – aus dem Quellcode:**
+1. Python 3.10–3.13 (64 Bit) von python.org installieren (Haken bei „Add to PATH“).
+2. `start.bat` doppelklicken. Beim ersten Start wird eine virtuelle Umgebung eingerichtet (dauert ein paar Minuten).
+
+**Variante B – eigene .exe bauen:**
+1. `build_exe.bat` doppelklicken.
+2. Ergebnis: `dist\KeyTool\KeyTool.exe` (Oberfläche) und `dist\KeyTool\KeyTool-MCP.exe` (MCP-Server).
+   Den ganzen Ordner `dist\KeyTool` kannst du an einen beliebigen Ort kopieren.
+
+Ein separates FFmpeg ist nicht nötig.
+
+## Bedienung
+
+* **Dateien/Ordner einlesen:** Toolbar oder einfach aus dem Explorer ins Fenster ziehen. Bereits analysierte,
+  unveränderte Dateien werden übersprungen. Die Analyse läuft parallel auf mehreren CPU-Kernen.
+* **Suchen:** Das Feld „Alles durchsuchen“ (Strg+F) sucht in Titel, Interpret, Album, Dateiname, Genre, Jahr und
+  Schlüsselwörtern. Alle Filter links lassen sich kombinieren.
+* **Tonart-Filter:** Die farbigen Felder entsprechen dem Camelot-Rad; die Beschriftung folgt der gewählten Notation.
+* **Schlüsselwörter:** Titel auswählen (Mehrfachauswahl möglich), rechts eingeben, mehrere mit Komma trennen.
+  Ein Doppelklick auf ein Schlüsselwort filtert danach. Rechtsklick in der Filterliste: umbenennen/entfernen.
+* **Kontextmenü der Tabelle:** erneut analysieren, Tags schreiben, im Explorer anzeigen, aus der Bibliothek entfernen
+  (die Dateien selbst werden nie gelöscht).
+* **Einstellungen:** Sprache, Darstellung, Notation, BPM-Bereich, automatisches Tag-Schreiben und welche Notation in
+  den Tonart-Tag geschrieben wird (Standard: Kreuze, z. B. „F#m“ – kompatibel mit Rekordbox/Serato/Traktor).
+
+### Hinweise zur Genauigkeit
+
+* **BPM:** Onset-Analyse, Beat-Tracking und eine robuste Regression über alle Beats; bei Musik mit klarem Puls sehr
+  zuverlässig. Halbe/doppelte Tempi werden in den eingestellten **BPM-Bereich** (Standard 70–180) gefaltet. Für
+  Drum'n'Bass z. B. 85–175 oder 87–180 einstellen, für HipHop 60–120.
+* **Tonart:** Harmonische Trennung (Schlagzeug wird ausgeblendet), Stimmungs-Korrektur (z. B. 432 Hz),
+  Constant-Q-Chromagramm und ein Ensemble aus drei Tonart-Profilen (Krumhansl, Temperley, Shaath/KeyFinder).
+  Wie bei allen Tools dieser Art (Mixed In Key, Rekordbox, KeyFinder) kommt es bei modaler oder atonaler Musik
+  gelegentlich zu Verwechslungen mit der Paralleltonart oder der Quinte. Ein niedriger Sicherheitswert ist ein
+  Hinweis zum Nachprüfen; Werte lassen sich manuell korrigieren.
+
+## MCP-Server
+
+Für Claude Desktop in `%APPDATA%\Claude\claude_desktop_config.json` eintragen
+(den passenden Eintrag zeigt dir auch **Einstellungen → MCP-Server** zum Kopieren an):
+
+```json
+{
+  "mcpServers": {
+    "keytool": {
+      "command": "C:\\Programme\\KeyTool\\KeyTool-MCP.exe"
+    }
+  }
+}
+```
+
+Aus dem Quellcode: `"command": "C:\\Pfad\\zu\\KeyTool\\.venv\\Scripts\\python.exe", "args": ["-m", "keytool", "--mcp"]`.
+Alternativ läuft der Server per `python -m keytool --mcp-http` über Streamable HTTP.
+
+GUI und MCP-Server nutzen dieselbe Datenbank (`%APPDATA%\KeyTool\library.sqlite3`) und können gleichzeitig laufen.
+
+| Tool | Zweck |
+|---|---|
+| `search_tracks` | Suche mit allen Filtern, Sortierung, Paging, Notation wählbar |
+| `get_track` | Alle Details eines Titels (per ID oder Pfad) |
+| `compatible_tracks` | Harmonisch passende Titel (Camelot-Nachbarn, BPM-Toleranz) |
+| `library_stats` | Anzahl, Status, BPM-Spanne, Tonart-Verteilung |
+| `convert_key`, `list_all_keys` | Notationen umrechnen |
+| `list_keywords`, `add_keywords`, `remove_keywords`, `set_keywords`, `rename_keyword` | Schlüsselwörter |
+| `set_bpm`, `set_key`, `write_tags` | Manuelle Korrektur und Tags schreiben |
+| `analyze_paths`, `reanalyze_tracks`, `get_job_status`, `cancel_job` | Dateien/Ordner einlesen und analysieren (Hintergrund-Job) |
+| `remove_tracks`, `remove_missing_files` | Einträge aus der Bibliothek entfernen (Dateien bleiben erhalten) |
+
+Beispiele für Anfragen an Claude: „Lies `D:\Musik\Neu` ein“, „Welche Tracks in 8A zwischen 120 und 126 BPM habe ich?“,
+„Gib allen Titeln von Interpret X das Schlüsselwort Warmup“, „Was passt harmonisch zu Track 42?“
+
+## Kommandozeile
+
+```
+python -m keytool                     # Oberfläche
+python -m keytool --analyze D:\Musik  # einlesen & analysieren ohne Oberfläche
+python -m keytool --mcp               # MCP-Server (stdio)
+```
+
+Umgebungsvariablen: `KEYTOOL_DATA_DIR` (Ordner für Einstellungen + Datenbank), `KEYTOOL_DB` (Datenbankdatei).
+
+## Projektstruktur
+
+```
+keytool/
+  analysis.py       BPM- und Tonart-Erkennung
+  keys.py           Tonart-Modell, Notationen, Camelot-Rad
+  tags.py           Metadaten lesen, BPM/Tonart in Tags schreiben
+  db.py             SQLite-Bibliothek & Suche
+  library.py        Einlesen, parallele Analyse, Tag-Schreiben
+  mcp_server.py     MCP-Server
+  i18n.py           Deutsch/Englisch
+  gui/              Qt-Oberfläche (Hauptfenster, Filter, Details, Themes)
+packaging/          PyInstaller-Spezifikation, Starter, Icon
+tests/              Tests mit synthetisch erzeugten Audiodateien in allen Formaten
+```
+
+Tests: `pip install pytest` und `python -m pytest tests`.

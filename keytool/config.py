@@ -1,0 +1,92 @@
+"""Paths and persistent settings (shared by GUI and MCP server)."""
+from __future__ import annotations
+
+import json
+import os
+import sys
+from dataclasses import dataclass, asdict, fields
+from pathlib import Path
+
+APP_NAME = "KeyTool"
+
+
+def data_dir() -> Path:
+    override = os.environ.get("KEYTOOL_DATA_DIR")
+    if override:
+        p = Path(override)
+    elif sys.platform == "win32":
+        p = Path(os.environ.get("APPDATA", Path.home())) / APP_NAME
+    elif sys.platform == "darwin":
+        p = Path.home() / "Library" / "Application Support" / APP_NAME
+    else:
+        p = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "keytool"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def db_path() -> Path:
+    return Path(os.environ.get("KEYTOOL_DB", data_dir() / "library.sqlite3"))
+
+
+@dataclass
+class Settings:
+    language: str = "de"            # de | en
+    theme: str = "dark"             # dark | light | system
+    notation: str = "camelot"       # camelot | sharps | flats | openkey
+    bpm_min: float = 70.0
+    bpm_max: float = 180.0
+    write_tags: bool = True         # write BPM/key into files after analysis
+    tag_key_notation: str = "sharps"  # notation used when writing the key tag
+    workers: int = 0                # 0 = auto (CPU count - 1)
+    reanalyze_existing: bool = False
+
+    @classmethod
+    def load(cls) -> "Settings":
+        p = data_dir() / "settings.json"
+        s = cls()
+        if p.exists():
+            try:
+                raw = json.loads(p.read_text(encoding="utf-8"))
+                names = {f.name for f in fields(cls)}
+                for k, v in raw.items():
+                    if k in names:
+                        setattr(s, k, v)
+            except Exception:
+                pass
+        return s
+
+    def save(self) -> None:
+        p = data_dir() / "settings.json"
+        p.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
+
+    def worker_count(self) -> int:
+        if self.workers and self.workers > 0:
+            return int(self.workers)
+        # Auto: one core left for the UI, at most 8, and ~1 GB RAM per analysis process
+        n = min(8, max(1, (os.cpu_count() or 2) - 1))
+        ram = total_ram_bytes()
+        if ram:
+            n = min(n, max(1, int(ram * 0.6 / 1_000_000_000)))
+        return n
+
+
+def total_ram_bytes() -> int | None:
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                            ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                            ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                            ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                            ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+            st = MEMORYSTATUSEX()
+            st.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(st)):
+                return int(st.ullTotalPhys)
+            return None
+        return int(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES"))
+    except Exception:
+        return None
