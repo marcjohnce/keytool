@@ -6,8 +6,9 @@ import os
 from typing import Callable
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal, QStringListModel
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import (
+    QApplication, QStyle, QStyledItemDelegate, QStyleOptionViewItem,
     QComboBox, QCompleter, QDoubleSpinBox, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
     QListWidget, QListWidgetItem, QPushButton, QSizePolicy, QToolButton, QVBoxLayout, QWidget, QButtonGroup,
 )
@@ -18,6 +19,23 @@ from .theme import camelot_color
 
 SORT_ROLE = Qt.UserRole + 1
 ID_ROLE = Qt.UserRole + 2
+DECK_ROLE = Qt.UserRole + 3      # True for the row that is loaded in the deck
+FIT_ROLE = Qt.UserRole + 4       # 2 same key, 1 harmonic neighbour, 0 no match, None unknown
+
+
+def harmonic_fit(code: str | None, deck_code: str | None) -> int | None:
+    """How well a key mixes with the deck's key on the Camelot wheel."""
+    k, d = Key.from_code(code), Key.from_code(deck_code)
+    if not k or not d:
+        return None
+    if k.code == d.code:
+        return 2
+    kn, dn = k.camelot_number, d.camelot_number
+    if kn == dn:                                    # relative major / minor
+        return 1
+    if k.minor == d.minor and (kn - dn) % 12 in (1, 11):
+        return 1
+    return 0
 
 
 def source_text(r: dict, field: str) -> str:
@@ -61,15 +79,32 @@ class Translatable:
 
 # =========================================================================== table model
 class TrackModel(QAbstractTableModel):
-    COLUMNS = ["title", "artist", "album", "year", "bpm", "key", "energy", "duration", "keywords", "genre", "comment",
-               "ext", "bitrate", "status", "analyzed_ok_at", "path"]
-    HEADER_KEYS = {"ext": "format"}
+    COLUMNS = ["fit", "title", "artist", "album", "key", "bpm", "delta", "energy", "duration", "year", "keywords",
+               "genre", "comment", "ext", "bitrate", "status", "analyzed_ok_at", "path"]
+    HEADER_KEYS = {"ext": "format", "delta": "delta_deck"}
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.rows: list[dict] = []
         self.notation = "camelot"
         self.dark = True
+        self.deck_id: int | None = None
+        self.deck_key: str | None = None      # key the deck currently sounds in (incl. transposition)
+        self.deck_bpm: float | None = None
+
+    def set_deck(self, track_id: int | None, key_code: str | None, bpm: float | None):
+        if (track_id, key_code, bpm) == (self.deck_id, self.deck_key, self.deck_bpm):
+            return
+        self.deck_id, self.deck_key, self.deck_bpm = track_id, key_code, bpm
+        if self.rows:
+            for col in ("fit", "delta", "title"):
+                c = self.COLUMNS.index(col)
+                self.dataChanged.emit(self.index(0, c), self.index(len(self.rows) - 1, c))
+
+    def _delta(self, r: dict) -> float | None:
+        if not self.deck_bpm or not r.get("bpm"):
+            return None
+        return (r["bpm"] - self.deck_bpm) / self.deck_bpm * 100.0
 
     # -- data
     def set_rows(self, rows: list[dict]):
@@ -129,9 +164,46 @@ class TrackModel(QAbstractTableModel):
         r = self.rows[index.row()]
         col = self.COLUMNS[index.column()]
         v = r.get(col)
+        is_deck = self.deck_id is not None and r["id"] == self.deck_id
+        if role == ID_ROLE:
+            return r["id"]
+        if role == DECK_ROLE:
+            return is_deck
+        if role == FIT_ROLE:
+            return harmonic_fit(r.get("key"), self.deck_key)
+        if col == "fit":
+            fit = harmonic_fit(r.get("key"), self.deck_key)
+            if role == SORT_ROLE:
+                return -1 if is_deck else (3 if fit is None else 2 - fit)
+            if role == Qt.ToolTipRole and fit is not None:
+                return tr("in_deck") if is_deck else tr(("fit_none", "fit_near", "fit_same")[fit])
+            if role == Qt.AccessibleTextRole and fit is not None:
+                return tr(("fit_none", "fit_near", "fit_same")[fit])
+            return None
+        if col == "delta":
+            d = self._delta(r)
+            if role == Qt.DisplayRole:
+                if is_deck:
+                    return tr("in_deck")
+                if d is None:
+                    return ""
+                txt = f"{'+' if d >= 0 else '−'}{abs(d):.1f} %"
+                return txt.replace(".", ",") if tr.lang == "de" else txt
+            if role == SORT_ROLE:
+                return -1.0 if is_deck else (abs(d) if d is not None else 1e9)
+            if role == Qt.ForegroundRole:
+                if is_deck:
+                    return QColor("#F0A53A" if self.dark else "#B4650A")
+                if d is not None and abs(d) > 6:
+                    return QColor("#8D93A4" if self.dark else "#6B7385")
+            if role == Qt.TextAlignmentRole:
+                return int(Qt.AlignRight | Qt.AlignVCenter)
+            if role == Qt.ToolTipRole and self.deck_bpm:
+                return tr("delta_tip", bpm=f"{self.deck_bpm:.1f}")
+            return None
         if role == Qt.DisplayRole:
             if col == "bpm":
-                return f"{v:.1f}" if v else ""
+                return (f"{v:.1f}".replace(".", ",") if tr.lang == "de" else f"{v:.1f}") if v else ""
             if col == "key":
                 k = Key.from_code(v)
                 return k.format(self.notation) if k else ""
@@ -161,14 +233,18 @@ class TrackModel(QAbstractTableModel):
             return str(v or "").lower()
         if role == ID_ROLE:
             return r["id"]
-        if role == Qt.BackgroundRole and col == "key":
-            return camelot_color(v, self.dark)
         if role == Qt.ForegroundRole:
-            if col == "key" and v:
-                return QColor("#111111")
+            if col in ("artist", "album", "duration", "year", "ext", "bitrate", "analyzed_ok_at", "path", "genre"):
+                return QColor("#9CA2B3" if self.dark else "#535B6E")
             if col == "status" and v == "error":
-                return QColor("#ff6b6b")
-        if role == Qt.TextAlignmentRole and col in ("bpm", "key", "year", "duration", "ext", "energy", "bitrate"):
+                return QColor("#FF6B6B" if self.dark else "#C62828")
+        if role == Qt.FontRole and col in ("title", "bpm"):
+            from PySide6.QtGui import QFont
+            f = QFont(); f.setWeight(QFont.DemiBold)
+            return f
+        if role == Qt.TextAlignmentRole and col in ("bpm", "duration", "bitrate"):
+            return int(Qt.AlignRight | Qt.AlignVCenter)
+        if role == Qt.TextAlignmentRole and col in ("key", "year", "ext", "energy"):
             return int(Qt.AlignCenter)
         if role == Qt.ToolTipRole:
             if col == "bpm" and r.get("bpm"):
@@ -181,6 +257,82 @@ class TrackModel(QAbstractTableModel):
             if col in ("path", "comment"):
                 return v
         return None
+
+
+# =========================================================================== table delegate
+class TrackDelegate(QStyledItemDelegate):
+    """Paints the redesigned cells: fit glyph, key chip, energy meter and the deck marker."""
+
+    def __init__(self, model: TrackModel, parent=None):
+        super().__init__(parent)
+        self.m = model
+
+    def paint(self, painter, option, index):
+        from PySide6.QtCore import QRectF
+        from PySide6.QtGui import QPen
+        from .theme import CHIP_TEXT
+        col = self.m.COLUMNS[index.column()]
+        if col not in ("fit", "key", "energy"):
+            super().paint(painter, option, index)
+        else:
+            # background (selection) only, content painted below
+            opt = QStyleOptionViewItem(option)
+            self.initStyleOption(opt, index)
+            opt.text = ""
+            w = opt.widget
+            (w.style() if w else QApplication.style()).drawControl(QStyle.CE_ItemViewItem, opt, painter, w)
+        pal = option.palette
+        text_col = pal.color(QPalette.Text)
+        line_col = QColor("#34405A" if self.m.dark else "#CDD2DD")
+        r = QRectF(option.rect)
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        if col == "fit":
+            fit = index.data(FIT_ROLE)
+            c = r.center()
+            rad = 6.5
+            if fit == 2:
+                painter.setPen(Qt.NoPen); painter.setBrush(text_col)
+                painter.drawEllipse(c, rad, rad)
+            elif fit == 1:
+                painter.setPen(QPen(text_col, 1.6)); painter.setBrush(Qt.NoBrush)
+                painter.drawEllipse(c, rad - 0.8, rad - 0.8)
+                painter.setPen(Qt.NoPen); painter.setBrush(text_col)
+                painter.drawPie(QRectF(c.x() - rad, c.y() - rad, 2 * rad, 2 * rad), 90 * 16, 180 * 16)
+            elif fit == 0:
+                painter.setPen(QPen(QColor("#8D93A4" if self.m.dark else "#6B7385"), 1.3)); painter.setBrush(Qt.NoBrush)
+                painter.drawEllipse(c, rad - 0.7, rad - 0.7)
+        elif col == "key":
+            src = index.model().mapToSource(index) if hasattr(index.model(), "mapToSource") else index
+            code = self.m.rows[src.row()].get("key")
+            txt = index.data(Qt.DisplayRole) or ""
+            bg = camelot_color(code, self.m.dark)
+            if bg is not None and txt:
+                f = painter.font(); f.setBold(True); painter.setFont(f)
+                fm = painter.fontMetrics()
+                wch = max(40, fm.horizontalAdvance(txt) + 14)
+                chip = QRectF(r.center().x() - wch / 2, r.center().y() - 11, wch, 22)
+                painter.setPen(Qt.NoPen); painter.setBrush(bg)
+                painter.drawRoundedRect(chip, 6, 6)
+                painter.setPen(CHIP_TEXT)
+                painter.drawText(chip, Qt.AlignCenter, txt)
+        elif col == "energy":
+            src = index.model().mapToSource(index) if hasattr(index.model(), "mapToSource") else index
+            e = self.m.rows[src.row()].get("energy")
+            if e:
+                bw, gap, bh = 4.0, 2.0, 13.0
+                total = 10 * bw + 9 * gap
+                x0 = r.center().x() - total / 2
+                y0 = r.center().y() - bh / 2
+                painter.setPen(Qt.NoPen)
+                for i in range(10):
+                    painter.setBrush(text_col if i < int(e) else line_col)
+                    painter.drawRoundedRect(QRectF(x0 + i * (bw + gap), y0, bw, bh), 1, 1)
+        if index.column() == 0 and index.data(DECK_ROLE):
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor("#F0A53A" if self.m.dark else "#B4650A"))
+            painter.drawRect(QRectF(r.left(), r.top(), 3, r.height()))
+        painter.restore()
 
 
 # =========================================================================== key filter

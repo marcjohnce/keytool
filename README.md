@@ -21,11 +21,12 @@ die Bibliothek zugreifen.
 | Detailansicht | Titel, Interpret, Album, Genre, Kommentar, Tonart, Energy (1–10) und Tempo bearbeiten – einzeln oder für viele Titel gleichzeitig; Dateityp, Bitrate, Dateigröße, Dauer und Pfad werden angezeigt. Änderungen werden in die Datei-Tags geschrieben (abschaltbar) |
 | Manuelle Korrektur | BPM/Tonart überschreiben; manuelle Werte bleiben bei einer erneuten Analyse erhalten |
 | Recherche | Titel bei **Karaoke-Version** (karaoke-version.de) nach Tonart(en) und BPM-Bereich suchen; Treffer direkt in KeyTool mit Tonart(en), Tempo, Dauer, Preis und Markierung, ob der Titel schon in der Bibliothek ist |
-| Player | Blaues Player-Panel (Farbe der Listenauswahl) mit weißen Knöpfen; Cover (eingebettet oder cover.jpg/folder.jpg im Ordner, sonst Platzhalter), vorheriger/nächster Titel, Play/Pause, Stopp, automatisches Weiterspielen; Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
+| Player (Deck) | Deck über die volle Breite: großer Titel, Tonart-Chip in Camelot-Farbe, Tempo in großer Schrift, Transponier-Knöpfe mit Zieltonart (z. B. „+1 3A“); Cover (eingebettet oder cover.jpg/folder.jpg im Ordner, sonst Platzhalter), vorheriger/nächster Titel, Play/Pause, Stopp, automatisches Weiterspielen; Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
 | Transponieren | Wiedergabe um einen Halbton höher (+1) oder tiefer (−1) bei unverändertem Tempo (Rubber Band über pedalboard); Positionen und Cue-Punkte bleiben gültig |
 | Serato-Cues | Vorhandene Serato-DJ-Hot-Cues (Farbe, Name) und gespeicherte Loops werden aus den Dateien gelesen (MP3, WAV, FLAC, M4A; OGG soweit möglich) und in der Wellenform angezeigt; Klick auf ein Cue-Fähnchen oder Alt+1…8 springt hin |
 | Wellenform | Übersicht des ausgewählten Titels über der Trackliste, gefärbt nach Frequenzbändern (Bass blau, Mitten bernstein, Höhen weiß), Klicken/Ziehen zum Spulen, Taktmarken aus der BPM |
-| Oberfläche | Deutsch / Englisch, heller und dunkler Modus (oder System), Umschalten ohne Neustart |
+| Passt zum Deck | Spalte „Passt“ (● gleiche Tonart, ◐ harmonischer Nachbar ±1 oder Dur/Moll, ○ passt nicht, inkl. Transposition) und „zum Deck“ (Tempo-Abweichung in %, über ±6 % gedämpft); beide sortierbar |
+| Oberfläche | Deutsch / Englisch, heller und dunkler Modus (oder System), Umschalten ohne Neustart; Schrift Archivo (SIL OFL, mitgeliefert), Farbe nur für Tonarten, Bernstein für Wiedergabe |
 | MCP-Server | Vollzugriff: suchen, Details, Schlüsselwörter, Werte setzen, Tags schreiben, Ordner einlesen & analysieren |
 
 ## Installation & Start (Windows)

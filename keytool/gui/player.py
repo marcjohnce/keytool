@@ -34,7 +34,7 @@ def tinted(icon, color: QColor, size: int = 20):
     return QIcon(pm)
 
 
-CUE_COLOR = "#c02626"     # all cue points are shown in red (Serato DJ Pro's cue red)
+from .theme import CUE_COLOR   # all cue points are shown in red (Serato style)
 
 
 def fmt_time(ms: int | float | None) -> str:
@@ -110,10 +110,7 @@ class CoverView(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         # height follows the player panel (controls + waveform), width is kept equal -> always square
-        from PySide6.QtWidgets import QSizePolicy
-        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Ignored)
-        self.setMinimumHeight(40)
-        self.setFixedWidth(124)
+        self.setFixedSize(116, 116)
         self.image = None
         self.key_code: str | None = None
         self.dark = True
@@ -139,7 +136,7 @@ class CoverView(QWidget):
         p.setRenderHint(QPainter.SmoothPixmapTransform)
         r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         clip = QPainterPath()
-        clip.addRoundedRect(r, 10, 10)
+        clip.addRoundedRect(r, 6, 6)
         p.setClipPath(clip)
         pal = self.palette()
         if self.image is not None:
@@ -166,7 +163,7 @@ class CoverView(QWidget):
             p.setBrush(Qt.NoBrush)
             for f in (0.92, 0.82, 0.72, 0.62, 0.52):
                 p.drawEllipse(c, rad * f, rad * f)
-            label = camelot_color(self.key_code, self.dark) if self.key_code else pal.color(pal.ColorRole.Highlight)
+            label = camelot_color(self.key_code, self.dark) if self.key_code else pal.color(pal.ColorRole.Link)
             p.setPen(Qt.NoPen)
             p.setBrush(label)
             p.drawEllipse(c, rad * 0.36, rad * 0.36)
@@ -182,7 +179,7 @@ class CoverView(QWidget):
         p.setClipping(False)
         p.setPen(QPen(pal.color(pal.ColorRole.Mid), 1))
         p.setBrush(Qt.NoBrush)
-        p.drawRoundedRect(r, 10, 10)
+        p.drawRoundedRect(r, 6, 6)
 
     def mousePressEvent(self, e):
         if self.image is None or e.button() != Qt.LeftButton:
@@ -272,9 +269,9 @@ class WaveformView(QWidget):
         p.setRenderHint(QPainter.Antialiasing, False)
         pal = self.palette()
         r = self.rect().adjusted(0, 0, -1, -1)
-        p.setPen(QPen(pal.color(pal.ColorRole.Mid), 1))
-        p.setBrush(pal.color(pal.ColorRole.Base))
-        p.drawRoundedRect(QRectF(r), 8, 8)
+        p.setPen(Qt.NoPen)
+        p.setBrush(pal.color(pal.ColorRole.Window).darker(108) if self.dark else pal.color(pal.ColorRole.Base))
+        p.drawRoundedRect(QRectF(r), 6, 6)
         w, h = self.width(), self.height()
         mid = h / 2
         if self.peaks is None or not len(self.peaks):
@@ -309,7 +306,7 @@ class WaveformView(QWidget):
                 c = c.darker(150)
             px = 4 + x
             if px > played_x:
-                c.setAlpha(140)
+                c.setAlpha(105 if self.dark else 150)
             p.setPen(c)
             hh = max(1.0, level * amp)
             p.drawLine(QPointF(px, mid - hh), QPointF(px, mid + hh))
@@ -339,10 +336,12 @@ class WaveformView(QWidget):
                 p.drawLine(QPointF(x, 2), QPointF(x, h - 2))
                 label = str(cue.index + 1)
                 fw = max(16, fm.horizontalAdvance(label) + 8)
-                rect = QRectF(x, 2, fw, fm.height() + 2)
+                rect = QRectF(x - 1, 2, fw, fm.height() + 2)
                 p.setPen(Qt.NoPen)
                 p.setBrush(col)
-                p.drawRect(rect)
+                p.setRenderHint(QPainter.Antialiasing, True)
+                p.drawRoundedRect(rect, 3, 3)
+                p.setRenderHint(QPainter.Antialiasing, False)
                 p.setPen(QColor("#ffffff") if col.lightness() < 150 else QColor("#111111"))
                 p.drawText(rect, Qt.AlignCenter, label)
                 self._flag_rects.append((rect, cue))
@@ -354,7 +353,7 @@ class WaveformView(QWidget):
             hx = 4 + self.hover * inner
             p.drawLine(QPointF(hx, 2), QPointF(hx, h - 2))
             p.drawText(QRectF(hx + 4, 2, 70, 16), Qt.AlignLeft, fmt_time(self.hover * self.duration * 1000))
-        p.setPen(QPen(pal.color(pal.ColorRole.Highlight), 2))
+        p.setPen(QPen(pal.color(pal.ColorRole.Link), 2))     # amber playhead
         p.drawLine(QPointF(played_x, 1), QPointF(played_x, h - 1))
 
     # -- interaction
@@ -415,11 +414,46 @@ class WaveformView(QWidget):
         self.update()
 
 
+class KeyChip(QWidget):
+    """Large key label on its Camelot colour (the deck's memorable element)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        from .theme import styled_font
+        self.code: str | None = None
+        self.text = "–"
+        self.dark = True
+        self.big = styled_font(self.font(), size=27, weight=800, width=125)   # painted, not styled by the QSS
+        self.setFixedHeight(56)
+
+    def set_key(self, code: str | None, text: str):
+        self.code, self.text = code, text or "–"
+        from PySide6.QtGui import QFontMetrics
+        self.setFixedWidth(max(70, QFontMetrics(self.big).horizontalAdvance(self.text) + 30))
+        self.update()
+
+    def paintEvent(self, _):
+        from .theme import CHIP_TEXT, camelot_color
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        col = camelot_color(self.code, self.dark) if self.code else None
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        if col is not None:
+            p.setPen(Qt.NoPen); p.setBrush(col)
+        else:
+            p.setPen(QPen(self.palette().color(self.palette().ColorRole.Mid), 1)); p.setBrush(Qt.NoBrush)
+        p.drawRoundedRect(r, 10, 10)
+        p.setFont(self.big)
+        p.setPen(CHIP_TEXT if col is not None else self.palette().color(self.palette().ColorRole.PlaceholderText))
+        p.drawText(r, Qt.AlignCenter, self.text)
+
+
 # =========================================================================== player panel
 class PlayerPanel(QWidget, Translatable):
     """Cover + transport controls + waveform. Plays through the system's default audio output."""
     prev_requested = Signal(bool)     # keep playing?
     next_requested = Signal(bool)
+    deck_changed = Signal()           # loaded track, its key/bpm or the transposition changed
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
@@ -437,35 +471,61 @@ class PlayerPanel(QWidget, Translatable):
         self.markers = None
         self.notation = "camelot"
 
-        # coloured panel (list-selection blue, see theme.py "#playerPanel")
+        # the deck: the loaded track is the reference the library list is compared to
         self.setObjectName("playerPanel")
         self.setAttribute(Qt.WA_StyledBackground, True)
-        outer = QHBoxLayout(self)
-        outer.setContentsMargins(8, 8, 8, 8)
-        outer.setSpacing(8)
+        from PySide6.QtWidgets import QButtonGroup, QGridLayout, QSizePolicy
+        from .. import transpose as _tp
+        from .theme import styled_font
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 16, 20, 14)
+        root.setSpacing(12)
+        top = QHBoxLayout()
+        top.setSpacing(18)
+        root.addLayout(top)
         self.cover = CoverView()
-        outer.addWidget(self.cover, 0)
-        lay = QVBoxLayout()
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(4)
-        outer.addLayout(lay, 1)
-        bar = QHBoxLayout()
+        top.addWidget(self.cover, 0, Qt.AlignTop)
+
+        # title block + transport
+        info = QVBoxLayout(); info.setSpacing(2); info.setContentsMargins(0, 0, 0, 0)
+        self.caption = QLabel(); self.caption.setObjectName("deckCaption")
+        self.title = QLabel(); self.title.setObjectName("deckTitle")
+        self.title.setFont(styled_font(self.font(), size=21, weight=800, width=125))
+        self.title.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.artist_lbl = QLabel(); self.artist_lbl.setObjectName("deckArtist")
+        self.artist_lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        info.addWidget(self.caption); info.addWidget(self.title); info.addWidget(self.artist_lbl)
+        info.addSpacing(8)
+        bar = QHBoxLayout(); bar.setSpacing(6)
         self.play_btn = QPushButton()
         self.play_btn.setObjectName("primary")
-        self.play_btn.setFixedWidth(44)
+        self.play_btn.setFixedSize(54, 40)
         self.play_btn.clicked.connect(self.toggle)
-        self.prev_btn = QPushButton()
-        self.prev_btn.setFixedWidth(40)
+        self.prev_btn = QPushButton(); self.prev_btn.setFixedSize(42, 40)
         self.prev_btn.clicked.connect(self.previous)
-        self.next_btn = QPushButton()
-        self.next_btn.setFixedWidth(40)
+        self.next_btn = QPushButton(); self.next_btn.setFixedSize(42, 40)
         self.next_btn.clicked.connect(lambda: self.next_requested.emit(self.is_playing()))
-        self.stop_btn = QPushButton()
-        self.stop_btn.setFixedWidth(44)
+        self.stop_btn = QPushButton(); self.stop_btn.setFixedSize(42, 40)
         self.stop_btn.clicked.connect(self.stop)
-        # transposition: -1 / 0 / +1 semitone at the original tempo
-        from PySide6.QtWidgets import QButtonGroup
-        from .. import transpose as _tp
+        self.time = QLabel("0:00"); self.time.setObjectName("deckTime")
+        self.time.setFont(styled_font(self.font(), size=10.5))
+        self.mute_btn = QToolButton()
+        self.mute_btn.setCheckable(True)
+        self.mute_btn.toggled.connect(self._mute)
+        self.volume = QSlider(Qt.Horizontal)
+        self.volume.setRange(0, 100)
+        self.volume.setFixedWidth(100)
+        self.volume.setValue(int(round(getattr(settings, "volume", 0.8) * 100)))
+        self.volume.valueChanged.connect(self._volume)
+        for wdg in (self.prev_btn, self.play_btn, self.next_btn, self.stop_btn):
+            bar.addWidget(wdg)
+        bar.addSpacing(8); bar.addWidget(self.time); bar.addStretch(1)
+        bar.addWidget(self.mute_btn); bar.addWidget(self.volume)
+        info.addLayout(bar)
+        info.addStretch(1)
+        top.addLayout(info, 1)
+
+        # key block: big key chip + transposition with target keys
         self.semitones = 0
         self.source_file: str | None = None       # file currently loaded in the player (original or transposed)
         self._rendering: set[tuple[str, int]] = set()
@@ -474,44 +534,45 @@ class PlayerPanel(QWidget, Translatable):
         self.tp_emitter = _TransposeEmitter()
         self.tp_emitter.progress.connect(self._transpose_progress)
         self.tp_emitter.done.connect(self._transpose_done)
+        keyb = QGridLayout(); keyb.setHorizontalSpacing(4); keyb.setVerticalSpacing(6)
+        self.key_caption = QLabel(); self.key_caption.setObjectName("deckCaption")
+        self.key_chip = KeyChip()
+        self.key_name = QLabel(); self.key_name.setObjectName("deckArtist")
+        chip_row = QHBoxLayout(); chip_row.setSpacing(10)
+        chip_row.addWidget(self.key_chip); chip_row.addWidget(self.key_name, 0, Qt.AlignBottom); chip_row.addStretch(1)
+        keyb.addWidget(self.key_caption, 0, 0, 1, 3)
+        keyb.addLayout(chip_row, 1, 0, 1, 3)
         self.tp_group = QButtonGroup(self)
         self.tp_group.setExclusive(True)
         self.tp_buttons: dict[int, QPushButton] = {}
-        for st, label in ((-1, "−1"), (0, "0"), (1, "+1")):
-            b = QPushButton(label)
+        for i, st in enumerate((-1, 0, 1)):
+            b = QPushButton()
             b.setCheckable(True)
-            b.setFixedSize(38, 30)
             b.setChecked(st == 0)
             b.setObjectName("transpose")
             b.clicked.connect(lambda _=False, st=st: self.set_semitones(st))
             self.tp_group.addButton(b)
             self.tp_buttons[st] = b
-        self.title = QLabel()
-        self.title.setTextFormat(Qt.RichText)
-        self.time = QLabel("0:00 / 0:00")
-        self.time.setObjectName("dim")
-        self.time.setMinimumWidth(110)
-        self.time.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.mute_btn = QToolButton()
-        self.mute_btn.setCheckable(True)
-        self.mute_btn.toggled.connect(self._mute)
-        self.volume = QSlider(Qt.Horizontal)
-        self.volume.setRange(0, 100)
-        self.volume.setFixedWidth(110)
-        self.volume.setValue(int(round(getattr(settings, "volume", 0.8) * 100)))
-        self.volume.valueChanged.connect(self._volume)
-        tp_lbl = QLabel("♯♭"); tp_lbl.setObjectName("tpLabel")
-        self._tp_label = tp_lbl
-        for wdg, stretch in ((self.prev_btn, 0), (self.play_btn, 0), (self.next_btn, 0), (self.stop_btn, 0),
-                             (tp_lbl, 0), (self.tp_buttons[-1], 0), (self.tp_buttons[0], 0), (self.tp_buttons[1], 0),
-                             (self.title, 1), (self.time, 0),
-                             (self.mute_btn, 0), (self.volume, 0)):
-            bar.addWidget(wdg, stretch)
-        lay.addLayout(bar)
+            keyb.addWidget(b, 2, i)
+        self._tp_label = self.key_caption
+        top.addLayout(keyb, 0)
+        top.addSpacing(10)
+
+        # tempo block
+        tempo = QVBoxLayout(); tempo.setSpacing(2)
+        self.tempo_caption = QLabel(); self.tempo_caption.setObjectName("deckCaption")
+        self.bpm_lbl = QLabel("–"); self.bpm_lbl.setObjectName("deckBpm")
+        self.bpm_lbl.setFont(styled_font(self.font(), size=38, weight=300, width=125))
+        self.bpm_sub = QLabel(); self.bpm_sub.setObjectName("deckSmall")
+        tempo.addWidget(self.tempo_caption); tempo.addWidget(self.bpm_lbl); tempo.addWidget(self.bpm_sub)
+        tempo.addStretch(1)
+        top.addLayout(tempo, 0)
+
         self.wave = WaveformView()
+        self.wave.setFixedHeight(84)
         self.wave.seek_requested.connect(self.seek_fraction)
         self.wave.cue_clicked.connect(self.seek_ms)
-        lay.addWidget(self.wave)
+        root.addWidget(self.wave)
 
         self.player = None
         self._pending: tuple[int, bool] | None = None   # (position ms, play) applied once media is loaded
@@ -533,12 +594,6 @@ class PlayerPanel(QWidget, Translatable):
         self.retranslate()
         self.set_track(None)
 
-    def resizeEvent(self, e):
-        super().resizeEvent(e)
-        # square cover, flush with the top of the controls and the bottom of the waveform
-        m = self.layout().contentsMargins()
-        self.cover.setFixedWidth(max(40, self.height() - m.top() - m.bottom()))
-
     # -- appearance
     def retranslate(self):
         super().retranslate()
@@ -548,7 +603,10 @@ class PlayerPanel(QWidget, Translatable):
             b.setToolTip(tr("transpose_tip", st=f"{st:+d}" if st else "0") if self._tp_available
                          else tr("transpose_unavailable"))
             b.setEnabled(self._tp_available or st == 0)
-        self._tp_label.setToolTip(tr("transpose"))
+        self.key_caption.setText(tr("key"))
+        self.key_caption.setToolTip(tr("transpose"))
+        self.tempo_caption.setText(tr("tempo_short"))
+        self.caption.setText(tr("deck_caption"))
         self.prev_btn.setToolTip(tr("prev_track") + " (Ctrl+←)")
         self.next_btn.setToolTip(tr("next_track") + " (Ctrl+→)")
         self.volume.setToolTip(tr("volume"))
@@ -560,9 +618,10 @@ class PlayerPanel(QWidget, Translatable):
         self._update_title()
 
     def _make_icons(self):
-        # buttons are white on the blue panel -> black icons everywhere
+        # neutral buttons use the text colour, the amber play button dark ink
         st = self.style()
-        fg = on_accent = QColor("#000000")
+        fg = self.palette().color(self.palette().ColorRole.ButtonText)
+        on_accent = QColor("#1A1206") if self.wave.dark else QColor("#FFFFFF")
         self.ic_play = tinted(st.standardIcon(QStyle.SP_MediaPlay), on_accent)
         self.ic_pause = tinted(st.standardIcon(QStyle.SP_MediaPause), on_accent)
         self.ic_vol = tinted(st.standardIcon(QStyle.SP_MediaVolume), fg)
@@ -576,6 +635,8 @@ class PlayerPanel(QWidget, Translatable):
     def set_dark(self, dark: bool):
         self.wave.dark = dark
         self.cover.dark = dark
+        self.key_chip.dark = dark
+        self.key_chip.update()
         self.cover.update()
         self._make_icons()
         self.wave.update()
@@ -586,28 +647,39 @@ class PlayerPanel(QWidget, Translatable):
 
     def _update_title(self):
         r = self.row
-        if not r:
-            self.title.setText("")
-            return
-        bits = []
-        if r.get("bpm"):
-            bits.append(f"{r['bpm']:.1f} BPM")
-        k = Key.from_code(r.get("key"))
         st = getattr(self, "semitones", 0)
-        if k and st:
-            bits.append(f"{k.format(self.notation)} → <b>{k.transpose(st).format(self.notation)}</b> ({st:+d})")
-        elif k:
-            bits.append(k.format(self.notation))
-        elif st:
-            bits.append(f"{st:+d} HT" if tr.lang == "de" else f"{st:+d} st")
-        title = (r.get("title") or r.get("filename") or "").replace("<", "&lt;")
-        artist = (r.get("artist") or "").replace("<", "&lt;")
+        k = Key.from_code(r.get("key")) if r else None
+        for s_, b in self.tp_buttons.items():
+            sign = "0" if s_ == 0 else ("+1" if s_ > 0 else "−1")
+            b.setText(f"{sign}  {k.transpose(s_).format(self.notation)}" if k else sign)
+        if not r:
+            self.title.setText(tr("no_selection"))
+            self.artist_lbl.setText("")
+            self.key_chip.set_key(None, "")
+            self.key_name.setText("")
+            self.bpm_lbl.setText("–")
+            self.bpm_sub.setText("")
+            return
+        self.title.setText(r.get("title") or r.get("filename") or "")
+        bits = [x for x in (r.get("artist"), r.get("album"), str(r["year"]) if r.get("year") else "") if x]
         mk = getattr(self, "markers", None)
-        if mk:
-            bits.append(f"{len(mk.cues)} Cues" + (f" · {len(mk.loops)} Loops" if mk.loops else ""))
-        extra = " · ".join(bits)
-        self.title.setText(f"<b>{title}</b>" + (f" — {artist}" if artist else "") +
-                           (f"&nbsp;&nbsp;<span style='opacity:.7'>{extra}</span>" if extra else ""))
+        if mk and mk.cues:
+            bits.append(f"{len(mk.cues)} Cues" + (f", {len(mk.loops)} Loops" if mk.loops else ""))
+        self.artist_lbl.setText(", ".join(bits))
+        self.title.setToolTip(self.title.text())
+        self.artist_lbl.setToolTip(self.artist_lbl.text())
+        playing_key = k.transpose(st) if (k and st) else k
+        if playing_key:
+            self.key_chip.set_key(playing_key.code, playing_key.format(self.notation))
+            name = playing_key.long_name(tr.lang)
+            self.key_name.setText(name if not st else f"{name}, {st:+d}")
+        else:
+            self.key_chip.set_key(None, "–")
+            self.key_name.setText("")
+        bpm = r.get("bpm")
+        self.bpm_lbl.setText((f"{bpm:.1f}".replace(".", ",") if tr.lang == "de" else f"{bpm:.1f}") if bpm else "–")
+        e = r.get("energy")
+        self.bpm_sub.setText(tr("bpm_energy", e=e) if e else "BPM")
 
     # -- track handling
     def set_track(self, row: dict | None, autoplay: bool = False):
@@ -615,6 +687,7 @@ class PlayerPanel(QWidget, Translatable):
         same = row is not None and self.row is not None and row.get("path") == self.row.get("path")
         self.row = row
         self._update_title()
+        self.deck_changed.emit()
         self.cover.set_key(row.get("key") if row else None)
         if same:
             self.wave.bpm = row.get("bpm")
@@ -657,6 +730,7 @@ class PlayerPanel(QWidget, Translatable):
         self.semitones = st
         self.tp_buttons[st].setChecked(True)
         self._update_title()
+        self.deck_changed.emit()
         if self.path and self.player is not None:
             self._load_version(keep_position=True)
 
@@ -826,8 +900,7 @@ class PlayerPanel(QWidget, Translatable):
         if dur and not self.wave._drag:
             self.wave.set_position(pos / dur)
         status = getattr(self, "_status_text", "")
-        self.time.setText((status + "   ") if status else "")
-        self.time.setText(self.time.text() + f"{fmt_time(pos)} / {fmt_time(dur)}")
+        self.time.setText((status + "   " if status else "") + tr("time_of", a=fmt_time(pos), b=fmt_time(dur)))
 
     def _state_changed(self, state):
         playing = state == QMediaPlayer.PlayingState

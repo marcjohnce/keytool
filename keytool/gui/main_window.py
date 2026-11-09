@@ -24,7 +24,7 @@ from .player import PlayerPanel
 from .queue_panel import QueueBridge, QueuePanel
 from .settings_dialog import SettingsDialog
 from .theme import apply_theme, resolve_theme
-from .widgets import DetailPanel, ID_ROLE, KeyFilter, KeywordFilter, SORT_ROLE, TrackModel, Translatable
+from .widgets import TrackDelegate, DetailPanel, ID_ROLE, KeyFilter, KeywordFilter, SORT_ROLE, TrackModel, Translatable
 
 
 # =========================================================================== worker
@@ -101,32 +101,56 @@ class MainWindow(QMainWindow, Translatable):
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self.addToolBar(tb)
-        self.a_files = self._act("add_files", self.add_files, "＋")
-        self.a_folder = self._act("add_folder", self.add_folder, "📁")
-        self.a_pending = self._act("analyze_pending", self.analyze_pending, "▶")
-        self.a_reanalyze = self._act("reanalyze", self.reanalyze_selected, "↻")
-        self.a_tags = self._act("write_tags", self.write_tags_selected, "🏷")
-        self.a_research = self._act("research", lambda: self.open_research(False), "🔎")
+        brand = QLabel("KeyTool"); brand.setObjectName("brand")
+        from .theme import styled_font
+        brand.setFont(styled_font(brand.font(), size=14, weight=800, width=125))
+        tb.addWidget(brand)
+        self.a_files = self._act("add_files", self.add_files)
+        self.a_folder = self._act("add_folder", self.add_folder)
+        self.a_pending = self._act("analyze_pending", self.analyze_pending)
+        self.a_reanalyze = self._act("reanalyze", self.reanalyze_selected)
+        self.a_tags = self._act("write_tags", self.write_tags_selected)
+        self.a_research = self._act("research", lambda: self.open_research(False))
         self.a_queue = QAction(self)
         self.a_queue.setCheckable(True)
         self.a_queue.toggled.connect(lambda on: self.queue_dock.setVisible(on))
-        self.a_settings = self._act("settings", self.open_settings, "⚙")
+        self.a_settings = self._act("settings", self.open_settings)
         self.a_files.setShortcut(QKeySequence.Open)
-        for a in (self.a_files, self.a_folder, None, self.a_pending, self.a_reanalyze, self.a_tags, self.a_queue, None,
-                  self.a_research):
-            tb.addSeparator() if a is None else tb.addAction(a)
+        def gap(w=12):
+            sp = QWidget(); sp.setFixedWidth(w); tb.addWidget(sp)
+        from PySide6.QtWidgets import QMenu, QToolButton as _TB
+        for a in (self.a_files, self.a_folder):
+            tb.addAction(a)
+        gap()
+        # analysis actions grouped in one menu button
+        self.analyze_btn = _TB(); self.analyze_btn.setPopupMode(_TB.InstantPopup)
+        am = QMenu(self.analyze_btn)
+        for a in (self.a_pending, self.a_reanalyze, self.a_tags):
+            am.addAction(a)
+        self.analyze_btn.setMenu(am)
+        self.t(lambda s: self.analyze_btn.setText(s + "  ▾"), "analysis_menu")
+        tb.addWidget(self.analyze_btn)
+        tb.addAction(self.a_research)
+        for a in (self.a_files, self.a_folder):
+            tb.widgetForAction(a).setObjectName("tbPrimary")
         from PySide6.QtWidgets import QSizePolicy
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         tb.addWidget(spacer)
-        self.notation_lbl = QLabel()
-        self.t(lambda s: self.notation_lbl.setText(s + ": "), "notation")
-        tb.addWidget(self.notation_lbl)
-        self.notation_box = QComboBox()
-        for n in NOTATIONS:
-            self.notation_box.addItem("", n)
-        self.notation_box.currentIndexChanged.connect(lambda _: self.set_notation(self.notation_box.currentData()))
-        tb.addWidget(self.notation_box)
+        # notation as a segmented control
+        from PySide6.QtWidgets import QButtonGroup, QToolButton
+        seg = QWidget(); sl = QHBoxLayout(seg); sl.setContentsMargins(0, 0, 0, 0); sl.setSpacing(0)
+        self.notation_group = QButtonGroup(self); self.notation_group.setExclusive(True)
+        self.notation_buttons: dict[str, QToolButton] = {}
+        for i, n in enumerate(NOTATIONS):
+            b = QToolButton(); b.setCheckable(True)
+            b.setObjectName("segFirst" if i == 0 else "segLast" if i == len(NOTATIONS) - 1 else "seg")
+            b.clicked.connect(lambda _=False, n=n: self.set_notation(n))
+            self.notation_group.addButton(b); self.notation_buttons[n] = b
+            sl.addWidget(b)
+        self.t(seg.setToolTip, "notation")
+        tb.addWidget(seg)
+        gap(8)
         self.lang_box = QComboBox()
         self.lang_box.addItem("DE", "de")
         self.lang_box.addItem("EN", "en")
@@ -146,7 +170,8 @@ class MainWindow(QMainWindow, Translatable):
         # ---------------- left: filters
         left = QWidget()
         lv = QVBoxLayout(left)
-        lv.setContentsMargins(8, 8, 4, 8)
+        lv.setContentsMargins(20, 16, 16, 16)
+        lv.setSpacing(10)
         h = QLabel(); h.setObjectName("heading"); self.t(h.setText, "filters"); lv.addWidget(h)
         self.f_text = QLineEdit(); self.f_text.setClearButtonEnabled(True)
         self.t(self.f_text.setPlaceholderText, "search_all")
@@ -191,9 +216,9 @@ class MainWindow(QMainWindow, Translatable):
             w.valueChanged.connect(self.schedule_refresh)
         self.f_keys.changed.connect(self.schedule_refresh)
         self.f_keywords.changed.connect(self.schedule_refresh)
-        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(left)
+        scroll = QScrollArea(); scroll.setObjectName("rail"); scroll.setWidgetResizable(True); scroll.setWidget(left)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll.setMinimumWidth(320)
+        scroll.setMinimumWidth(290)
         split.addWidget(scroll)
 
         # ---------------- center: table (or drop hint when library is empty)
@@ -203,7 +228,8 @@ class MainWindow(QMainWindow, Translatable):
         self.table.setModel(self.proxy)
         self.table.setSortingEnabled(True)
         self.table.sortByColumn(1, Qt.AscendingOrder)
-        self.table.setAlternatingRowColors(True)
+        self.table.setAlternatingRowColors(False)
+        self.table.setItemDelegate(TrackDelegate(self.model, self.table))
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -212,14 +238,14 @@ class MainWindow(QMainWindow, Translatable):
         self.table.setDragDropMode(QAbstractItemView.DragOnly)
         self.table.setDefaultDropAction(Qt.CopyAction)
         self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(28)
+        self.table.verticalHeader().setDefaultSectionSize(40)
         self.table.setWordWrap(False)
         self.table.setShowGrid(False)
         hh = self.table.horizontalHeader()
         hh.setSectionResizeMode(QHeaderView.Interactive)
         hh.setStretchLastSection(True)
         for col, w in zip(range(len(TrackModel.COLUMNS)),
-                          (240, 170, 170, 56, 64, 64, 56, 60, 150, 100, 160, 56, 64, 90, 120, 300)):
+                          (44, 210, 140, 140, 62, 60, 78, 80, 56, 52, 150, 100, 160, 56, 64, 90, 120, 300)):
             self.table.setColumnWidth(col, w)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.table_menu)
@@ -231,6 +257,7 @@ class MainWindow(QMainWindow, Translatable):
         hint_wrap = QWidget(); hv = QVBoxLayout(hint_wrap); hv.addStretch(); hv.addWidget(self.drop_hint); hv.addStretch()
         self.center.addWidget(hint_wrap)
         self.player = PlayerPanel(self.s)
+        self.player.deck_changed.connect(self.update_deck)
         self.table.doubleClicked.connect(lambda _: self.player.play())
         self.player.prev_requested.connect(lambda playing: self.play_adjacent(-1, playing))
         self.player.next_requested.connect(lambda playing: self.play_adjacent(1, playing))
@@ -248,14 +275,8 @@ class MainWindow(QMainWindow, Translatable):
                   context=Qt.WidgetWithChildrenShortcut)
         QShortcut(QKeySequence(Qt.Key_Space), self.player, activated=self.player.toggle,
                   context=Qt.WidgetWithChildrenShortcut)
-        cw = QWidget(); cv = QVBoxLayout(cw); cv.setContentsMargins(4, 8, 4, 8)
-        vsplit = QSplitter(Qt.Vertical)
-        vsplit.setChildrenCollapsible(False)
-        vsplit.addWidget(self.player)
-        vsplit.addWidget(self.center)
-        vsplit.setStretchFactor(0, 0); vsplit.setStretchFactor(1, 1)
-        vsplit.setSizes([150, 700])
-        cv.addWidget(vsplit)
+        cw = QWidget(); cv = QVBoxLayout(cw); cv.setContentsMargins(12, 8, 12, 0)
+        cv.addWidget(self.center)
         split.addWidget(cw)
 
         # ---------------- right: details
@@ -265,13 +286,20 @@ class MainWindow(QMainWindow, Translatable):
         self.details.keywords_added.connect(self.add_keywords)
         self.details.keyword_removed.connect(self.remove_keyword)
         self.details.keyword_clicked.connect(lambda kw: self.f_keywords.set_selected([kw]))
-        dscroll = QScrollArea(); dscroll.setWidgetResizable(True); dscroll.setWidget(self.details)
+        self.details.setObjectName("inspectorBody")
+        self.details.setAttribute(Qt.WA_StyledBackground, True)
+        dscroll = QScrollArea(); dscroll.setObjectName("inspector"); dscroll.setWidgetResizable(True)
+        dscroll.setWidget(self.details)
         dscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        dscroll.setMinimumWidth(360)
+        dscroll.setMinimumWidth(330)
         split.addWidget(dscroll)
         split.setStretchFactor(0, 0); split.setStretchFactor(1, 1); split.setStretchFactor(2, 0)
-        split.setSizes([330, 800, 370])
-        self.setCentralWidget(split)
+        split.setSizes([300, 840, 340])
+        # the deck spans the full width above filter rail, list and inspector
+        root = QWidget(); rv = QVBoxLayout(root); rv.setContentsMargins(0, 0, 0, 0); rv.setSpacing(0)
+        rv.addWidget(self.player, 0)
+        rv.addWidget(split, 1)
+        self.setCentralWidget(root)
 
     def _build_queue_dock(self):
         from PySide6.QtWidgets import QDockWidget
@@ -297,6 +325,10 @@ class MainWindow(QMainWindow, Translatable):
         sb.addPermanentWidget(self.msg_lbl, 1)
         sb.addPermanentWidget(self.progress)
         sb.addPermanentWidget(self.cancel_btn)
+        from PySide6.QtWidgets import QToolButton
+        self.queue_btn = QToolButton(); self.queue_btn.setDefaultAction(self.a_queue)
+        self.queue_btn.setObjectName("tbPrimary")
+        sb.addPermanentWidget(self.queue_btn)
 
     # ------------------------------------------------------------------ appearance & language
     def apply_theme(self):
@@ -318,9 +350,8 @@ class MainWindow(QMainWindow, Translatable):
     def set_notation(self, notation: str):
         self.s.notation = notation
         self.s.save()
-        self.notation_box.blockSignals(True)
-        self.notation_box.setCurrentIndex(self.notation_box.findData(notation))
-        self.notation_box.blockSignals(False)
+        if notation in self.notation_buttons:
+            self.notation_buttons[notation].setChecked(True)
         self.model.notation = notation
         self.f_keys.set_notation(notation)
         self.details.set_notation(notation)
@@ -336,8 +367,9 @@ class MainWindow(QMainWindow, Translatable):
     def retranslate(self):
         super().retranslate()
         self.setWindowTitle(tr("app_title"))
-        for i in range(self.notation_box.count()):
-            self.notation_box.setItemText(i, tr(f"n_{self.notation_box.itemData(i)}"))
+        for n, b in self.notation_buttons.items():
+            b.setText(tr(f"n_{n}").split(" (")[0])
+            b.setToolTip(tr(f"n_{n}"))
         self.lang_box.blockSignals(True)
         self.lang_box.setCurrentIndex(self.lang_box.findData(tr.lang))
         self.lang_box.blockSignals(False)
@@ -442,6 +474,17 @@ class MainWindow(QMainWindow, Translatable):
         cur_id = cur.data(ID_ROLE) if cur.isValid() else None
         row = next((r for r in rows if r["id"] == cur_id), rows[0] if rows else None)
         self.player.set_track(row)
+
+    def update_deck(self):
+        """The loaded track is the reference for the 'fits' and 'vs. deck' columns."""
+        row = self.player.row
+        if not row:
+            self.model.set_deck(None, None, None)
+            return
+        k = Key.from_code(row.get("key"))
+        if k and self.player.semitones:
+            k = k.transpose(self.player.semitones)
+        self.model.set_deck(row["id"], k.code if k else None, row.get("bpm"))
 
     def play_adjacent(self, delta: int, keep_playing: bool):
         """Select the previous/next track in the list's current order (filter + sorting) and load it;
@@ -571,7 +614,7 @@ class MainWindow(QMainWindow, Translatable):
     def update_progress(self):
         c = self.queue.counts()
         busy = c[WAITING] + c[RUNNING]
-        self.a_queue.setText(f"☰  {tr('queue')}" + (f" ({busy})" if busy else ""))
+        self.a_queue.setText(tr('queue') + (f" ({busy})" if busy else ""))
         if self.thread is not None:                     # scanning shows its own (indeterminate) progress
             return
         if busy:

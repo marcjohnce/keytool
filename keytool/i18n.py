@@ -5,6 +5,21 @@ LANGUAGES = {"de": "Deutsch", "en": "English"}
 
 _T: dict[str, tuple[str, str]] = {
     # key: (de, en)
+    # redesign: deck + fit columns
+    "deck": ("Deck", "Deck"),
+    "analysis_menu": ("Analysieren", "Analyze"),
+    "deck_caption": ("Im Deck", "In the deck"),
+    "tempo_short": ("Tempo", "Tempo"),
+    "bpm_energy": ("BPM, Energy {e}", "BPM, energy {e}"),
+    "time_of": ("{a} von {b}", "{a} of {b}"),
+    "fit": ("Passt", "Fits"),
+    "delta_deck": ("zum Deck", "vs. deck"),
+    "fit_same": ("Gleiche Tonart wie im Deck", "Same key as the deck"),
+    "fit_near": ("Harmonischer Nachbar zum Deck (±1 oder Dur/Moll)", "Harmonic neighbour of the deck (±1 or relative)"),
+    "fit_none": ("Passt harmonisch nicht zum Deck", "Does not mix harmonically with the deck"),
+    "in_deck": ("im Deck", "in deck"),
+    "delta_tip": ("Tempo-Abweichung zum Deck ({bpm} BPM)", "Tempo difference to the deck ({bpm} BPM)"),
+    "sounds_as": ("klingt als {k}", "sounds as {k}"),
     "app_title": ("KeyTool – Tonart & BPM", "KeyTool – Key & BPM"),
     "add_files": ("Dateien hinzufügen", "Add files"),
     "add_folder": ("Ordner hinzufügen", "Add folder"),

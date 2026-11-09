@@ -23,4 +23,4 @@ keytool = "keytool.__main__:main"
 include = ["keytool*"]
 
 [tool.setuptools.package-data]
-keytool = ["resources/*"]
+keytool = ["resources/*", "resources/fonts/*"]
