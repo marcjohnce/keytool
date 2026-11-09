@@ -190,6 +190,7 @@ def apply_theme(app: QApplication, name: str) -> dict:
         #playerPanel QLabel#deckTime {{ color: {c['dim']}; font-size: 10.5pt; }}
         #playerPanel QLabel#deckSmall {{ color: {c['dim']}; font-size: 9pt; }}
         #playerPanel QPushButton {{ min-height: 34px; }}
+        #playerPanel QPushButton#circle {{ min-height: 0px; min-width: 0px; padding: 0px; border: none; background: transparent; }}
         #playerPanel QPushButton#transpose {{ min-width: 58px; padding: 6px 8px; }}
         #playerPanel QToolButton {{ border: none; background: transparent; padding: 4px; }}
         #playerPanel QSlider::groove:horizontal {{ height: 4px; background: {c['border']}; border-radius: 2px; }}

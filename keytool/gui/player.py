@@ -424,7 +424,26 @@ class CircleButton(QPushButton):
         super().__init__(parent)
         self.glyph = glyph
         self.primary = primary
+        self.setObjectName("circle")          # exempt from the panel's QPushButton min-height/padding
+        self.diameter = diameter
+        from PySide6.QtWidgets import QSizePolicy
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.setFixedSize(diameter, diameter)
+
+    # style sheets may reset min/max sizes on polish; the size hint keeps the button a true circle
+    def sizeHint(self):
+        from PySide6.QtCore import QSize
+        return QSize(self.diameter, self.diameter)
+
+    def minimumSizeHint(self):
+        return self.sizeHint()
+
+    def event(self, e):
+        from PySide6.QtCore import QEvent
+        r = super().event(e)
+        if e.type() == QEvent.Polish:
+            self.setFixedSize(self.diameter, self.diameter)
+        return r
         self.setCursor(Qt.PointingHandCursor)
         self.setFocusPolicy(Qt.TabFocus)
         self.setAttribute(Qt.WA_Hover, True)
@@ -444,9 +463,10 @@ class CircleButton(QPushButton):
         enabled = self.isEnabled()
         hover = enabled and self.underMouse()
         down = enabled and self.isDown()
-        d = self.width()
+        d = min(self.width(), self.height())
         ring = 2.0
-        r = QRectF(ring / 2 + 0.5, ring / 2 + 0.5, d - ring - 1, d - ring - 1)
+        ox, oy = (self.width() - d) / 2, (self.height() - d) / 2
+        r = QRectF(ox + ring / 2 + 0.5, oy + ring / 2 + 0.5, d - ring - 1, d - ring - 1)
         if self.primary and enabled:
             fill = accent.lighter(112) if hover else accent
             if down:
@@ -717,6 +737,29 @@ class PlayerPanel(QWidget, Translatable):
         for b in (self.play_btn, self.prev_btn, self.next_btn, self.stop_btn, self.mute_btn):
             b.update()
         self._update_mute_icon()
+
+    # -- cover flush with the bottom of the control row
+    def _fit_cover(self):
+        """Square cover whose bottom edge lines up with the bottom of the round control buttons."""
+        top = self.cover.mapTo(self, self.cover.rect().topLeft()).y()
+        bottom = self.play_btn.mapTo(self, self.play_btn.rect().bottomLeft()).y()
+        size = max(60, bottom - top + 1)
+        if size != self.cover.height():
+            self.cover.setFixedSize(size, size)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        QTimer.singleShot(0, self._fit_cover)
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        QTimer.singleShot(0, self._fit_cover)
+
+    def changeEvent(self, e):
+        super().changeEvent(e)
+        from PySide6.QtCore import QEvent
+        if e.type() in (QEvent.FontChange, QEvent.StyleChange):
+            QTimer.singleShot(0, self._fit_cover)
 
     def set_dark(self, dark: bool):
         self.wave.dark = dark
