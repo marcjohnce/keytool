@@ -90,6 +90,26 @@ class TrackModel(QAbstractTableModel):
     def columnCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self.COLUMNS)
 
+    # -- drag & drop to other applications (browser upload, audio player, Explorer, DJ software)
+    def flags(self, index):
+        f = super().flags(index)
+        return (f | Qt.ItemIsDragEnabled) if index.isValid() else f
+
+    def mimeTypes(self):
+        return ["text/uri-list", "text/plain"]
+
+    def supportedDragActions(self):
+        return Qt.CopyAction
+
+    def mimeData(self, indexes):
+        from PySide6.QtCore import QMimeData, QUrl
+        rows = sorted({i.row() for i in indexes if i.isValid()})
+        paths = [self.rows[r]["path"] for r in rows if os.path.exists(self.rows[r]["path"])]
+        md = QMimeData()
+        md.setUrls([QUrl.fromLocalFile(p) for p in paths])     # file list (CF_HDROP on Windows)
+        md.setText("\n".join(paths))                          # plain paths for text fields / terminals
+        return md
+
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
             col = self.COLUMNS[section]

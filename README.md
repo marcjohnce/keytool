@@ -82,6 +82,9 @@ Ein separates FFmpeg ist nicht nötig.
   * Doppelklick öffnet die Song-Seite, „Suche im Browser öffnen“ die gleiche Suche auf der Website.
   * Die AGB von Karaoke-Version untersagen Crawling nur für KI-Training, die robots.txt erlaubt die Suchseiten.
     KeyTool ruft nur ab, was du anforderst, identifiziert sich als „KeyTool“ und hält Pausen zwischen Anfragen ein.
+* **Titel in andere Programme ziehen:** Ausgewählte Titel (auch mehrere) aus der Liste per Drag & Drop in einen
+  Browser (z. B. Upload-Feld), einen Audioplayer, den Explorer oder DJ-Software ziehen – übergeben werden die
+  Originaldateien. Zurück ins KeyTool-Fenster gezogen passiert nichts.
 * **Kontextmenü der Tabelle:** erneut analysieren, Tags schreiben, im Explorer anzeigen, aus der Bibliothek entfernen
   (die Dateien selbst werden nie gelöscht).
 * **Einstellungen:** Sprache, Darstellung, Notation, BPM-Bereich, automatisches Tag-Schreiben und welche Notation in

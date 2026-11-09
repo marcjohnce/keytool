@@ -205,6 +205,10 @@ class MainWindow(QMainWindow, Translatable):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        # drag selected tracks as files into other applications
+        self.table.setDragEnabled(True)
+        self.table.setDragDropMode(QAbstractItemView.DragOnly)
+        self.table.setDefaultDropAction(Qt.CopyAction)
         self.table.verticalHeader().hide()
         self.table.verticalHeader().setDefaultSectionSize(28)
         self.table.setWordWrap(False)
@@ -674,14 +678,17 @@ class MainWindow(QMainWindow, Translatable):
 
     # ------------------------------------------------------------------ drag & drop
     def dragEnterEvent(self, e):
-        if e.mimeData().hasUrls():
+        # e.source() is set for drags started inside KeyTool (the track list) -> not an import
+        if e.mimeData().hasUrls() and e.source() is None:
             e.acceptProposedAction()
 
     def dragMoveEvent(self, e):
-        if e.mimeData().hasUrls():
+        if e.mimeData().hasUrls() and e.source() is None:
             e.acceptProposedAction()
 
     def dropEvent(self, e):
+        if e.source() is not None:
+            return
         paths = [u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()]
         if paths:
             e.acceptProposedAction()

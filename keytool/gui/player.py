@@ -45,6 +45,13 @@ def fmt_time(ms: int | float | None) -> str:
 
 
 # =========================================================================== background loading
+def _safe_emit(signal, *args) -> None:
+    """Emit from a worker thread; the receiver may already be gone if KeyTool was closed meanwhile."""
+    try:
+        signal.emit(*args)
+    except RuntimeError:
+        pass
+
 class _Emitter(QObject):
     done = Signal(str, object, str)   # path, Waveform | None, error
 
@@ -57,9 +64,11 @@ class _WaveformJob(QRunnable):
     def run(self):
         try:
             from ..waveform import get_waveform
-            self.emitter.done.emit(self.path, get_waveform(self.path), "")
+            wf = get_waveform(self.path)
         except Exception as e:
-            self.emitter.done.emit(self.path, None, f"{type(e).__name__}: {e}")
+            _safe_emit(self.emitter.done, self.path, None, f"{type(e).__name__}: {e}")
+            return
+        _safe_emit(self.emitter.done, self.path, wf, "")
 
 
 class _CoverEmitter(QObject):
@@ -85,12 +94,13 @@ class _CoverJob(QRunnable):
                     img = q.scaled(600, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation) if q.width() > 600 else q
         except Exception:
             img = None
-        self.emitter.done.emit(self.path, img)
+        _safe_emit(self.emitter.done, self.path, img)
         try:
             from ..serato import read_serato_markers
-            self.emitter.markers.emit(self.path, read_serato_markers(self.path))
+            markers = read_serato_markers(self.path)
         except Exception:
-            pass
+            return
+        _safe_emit(self.emitter.markers, self.path, markers)
 
 
 class CoverView(QWidget):
@@ -205,10 +215,11 @@ class _TransposeJob(QRunnable):
         try:
             from ..transpose import render
             out = render(self.path, self.semitones,
-                         progress=lambda f: self.emitter.progress.emit(self.path, self.semitones, f))
-            self.emitter.done.emit(self.path, self.semitones, out, "")
+                         progress=lambda f: _safe_emit(self.emitter.progress, self.path, self.semitones, f))
         except Exception as e:
-            self.emitter.done.emit(self.path, self.semitones, "", f"{type(e).__name__}: {e}")
+            _safe_emit(self.emitter.done, self.path, self.semitones, "", f"{type(e).__name__}: {e}")
+            return
+        _safe_emit(self.emitter.done, self.path, self.semitones, out, "")
 
 
 # =========================================================================== waveform view

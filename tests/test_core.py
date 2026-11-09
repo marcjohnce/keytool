@@ -777,3 +777,24 @@ def test_set_key_method_cli(tmp_path, monkeypatch):
     r = subprocess.run([sys.executable, "-m", "keytool", "--set-key-method", "turbo"], capture_output=True, text=True,
                        cwd=os.path.dirname(os.path.dirname(__file__)), env={**os.environ, "KEYTOOL_DATA_DIR": str(tmp_path)})
     assert r.returncode == 2
+
+
+# ------------------------------------------------------------------ drag tracks to other applications
+def test_track_list_drag_mime(tmp_path, monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import Qt
+    from keytool.gui.widgets import TrackModel
+    app = QApplication.instance() or QApplication([])
+    files = []
+    for n in ("a b.wav", "c.wav"):
+        f = tmp_path / n
+        _write_wav(f, make_track(120, 0, False, seconds=1))
+        files.append(str(f))
+    m = TrackModel()
+    m.set_rows([{"id": i, "path": p} for i, p in enumerate(files)] + [{"id": 9, "path": str(tmp_path / "gone.mp3")}])
+    assert m.flags(m.index(0, 0)) & Qt.ItemIsDragEnabled
+    md = m.mimeData([m.index(r, c) for r in range(3) for c in (0, 1)])   # several columns per row
+    assert [u.toLocalFile() for u in md.urls()] == files                  # one entry per row, missing file skipped
+    assert md.text().splitlines() == files
+    assert m.supportedDragActions() == Qt.CopyAction
