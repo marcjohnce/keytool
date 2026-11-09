@@ -584,7 +584,7 @@ class MainWindow(QMainWindow, Translatable):
             if r.get("bpm"):
                 tol = self.s.research_bpm_tolerance / 100
                 lo, hi = round(r["bpm"] * (1 - tol), 1), round(r["bpm"] * (1 + tol), 1)
-        dlg = ResearchDialog(self.s, keys, lo, hi, dark=resolve_theme(self.s.theme) == "dark",
+        dlg = ResearchDialog(self.s, self.lib, keys, lo, hi, dark=resolve_theme(self.s.theme) == "dark",
                              notation=self.s.notation, parent=self)
         dlg.exec()
 

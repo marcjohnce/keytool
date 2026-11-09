@@ -18,7 +18,7 @@ die Bibliothek zugreifen.
 | DJ-Extras | „Harmonisch passend“: Titel, die nach dem Camelot-Rad zur Auswahl passen (±6 % BPM); BPM halbieren/verdoppeln |
 | Tags | BPM & Tonart werden nach der Analyse **automatisch in die Datei geschrieben** (ID3 TBPM/TKEY, Vorbis BPM/INITIALKEY, MP4 tmpo/initialkey) – abschaltbar |
 | Manuelle Korrektur | BPM/Tonart überschreiben; manuelle Werte bleiben bei einer erneuten Analyse erhalten |
-| Externe Recherche | Titel in **Karaoke-Version**, **AudioKeychain** und **Tunebat** nach Tonart(en) und BPM-Bereich suchen: KeyTool baut die gefilterten Suchen und öffnet sie im Browser |
+| Recherche | Titel bei **Karaoke-Version** (karaoke-version.de) nach Tonart(en) und BPM-Bereich suchen; Treffer direkt in KeyTool mit Tonart(en), Tempo, Dauer, Preis und Markierung, ob der Titel schon in der Bibliothek ist |
 | Player | Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
 | Wellenform | Übersicht des ausgewählten Titels über der Trackliste, gefärbt nach Frequenzbändern (Bass blau, Mitten bernstein, Höhen weiß), Klicken/Ziehen zum Spulen, Taktmarken aus der BPM |
 | Oberfläche | Deutsch / Englisch, heller und dunkler Modus (oder System), Umschalten ohne Neustart |
@@ -49,16 +49,17 @@ Ein separates FFmpeg ist nicht nötig.
 * **Abspielen:** Titel auswählen → Wellenform und Player oben laden den Titel. Leertaste oder Doppelklick
   startet/pausiert, Klicken oder Ziehen in der Wellenform spult. Werden während der Wiedergabe Tags in die
   Datei geschrieben, gibt der Player die Datei kurz frei und spielt an derselben Stelle weiter.
-* **Externe Recherche** (🔎 in der Toolbar oder Rechtsklick „Ähnliche Titel extern recherchieren“):
-  Tonarten im Camelot-Rad wählen („Harmonisch erweitern“ fügt die Nachbarn hinzu), BPM-Bereich setzen,
-  Quellen ankreuzen, „Im Browser öffnen“. Vorbelegt wird mit dem aktuellen Tonart-/BPM-Filter oder mit
-  Tonart und BPM (±3 %) des ausgewählten Titels.
-  * Karaoke-Version: alle Tonarten und der BPM-Bereich in einer Suche.
-  * AudioKeychain: eine Suche je Tonart (max. 6); die Seite kennt keinen BPM-Bereich, daher wird nach BPM
-    sortiert (bei genauem Tempo wird direkt danach gefiltert). Ohne Konto zeigt AudioKeychain nur eine Vorschau.
-  * Tunebat: lässt sich nicht per Link vorbelegen und untersagt automatisierte Zugriffe. KeyTool öffnet die
-    Seite und legt die Kriterien in die Zwischenablage.
-  KeyTool selbst ruft diese Seiten nie automatisiert ab.
+* **Recherche bei Karaoke-Version** (🔎 in der Toolbar oder Rechtsklick „Passende Titel bei Karaoke-Version
+  suchen“): Tonarten im Camelot-Rad wählen („Harmonisch erweitern“ fügt die Nachbarn hinzu), BPM-Bereich setzen,
+  suchen. Vorbelegt wird mit dem aktuellen Tonart-/BPM-Filter oder mit Tonart und BPM (±3 %) des ausgewählten Titels.
+  * Gesucht wird einmal je Tonart (20 Treffer pro Seite, „Weitere Treffer laden“), damit jeder Treffer seine
+    Tonart hat. Die Trefferliste der Seite enthält kein Tempo; KeyTool liest Tempo („~“ = variabel), alle Tonarten
+    (Songs mit Tonartwechsel haben mehrere) und Dauer von den Song-Seiten nach – gedrosselt, und für zwei Wochen
+    zwischengespeichert. Abschaltbar im Dialog.
+  * ✓ markiert Titel, die (gleicher Titel und Interpret) schon in deiner Bibliothek sind.
+  * Doppelklick öffnet die Song-Seite, „Suche im Browser öffnen“ die gleiche Suche auf der Website.
+  * Die AGB von Karaoke-Version untersagen Crawling nur für KI-Training, die robots.txt erlaubt die Suchseiten.
+    KeyTool ruft nur ab, was du anforderst, identifiziert sich als „KeyTool“ und hält Pausen zwischen Anfragen ein.
 * **Kontextmenü der Tabelle:** erneut analysieren, Tags schreiben, im Explorer anzeigen, aus der Bibliothek entfernen
   (die Dateien selbst werden nie gelöscht).
 * **Einstellungen:** Sprache, Darstellung, Notation, BPM-Bereich, automatisches Tag-Schreiben und welche Notation in
@@ -105,7 +106,7 @@ GUI und MCP-Server nutzen dieselbe Datenbank (`%APPDATA%\KeyTool\library.sqlite3
 | `list_keywords`, `add_keywords`, `remove_keywords`, `set_keywords`, `rename_keyword` | Schlüsselwörter |
 | `set_bpm`, `set_key`, `write_tags` | Manuelle Korrektur und Tags schreiben |
 | `analyze_paths`, `reanalyze_tracks`, `get_job_status`, `cancel_job` | Dateien/Ordner einlesen und analysieren (Hintergrund-Job) |
-| `external_research_links` | Gefilterte Such-Links für Karaoke-Version, AudioKeychain, Tunebat |
+| `search_karaoke_version` | Karaoke-Version nach Tonart(en)/BPM durchsuchen, optional mit Tempo/Tonarten/Dauer je Treffer |
 | `remove_tracks`, `remove_missing_files` | Einträge aus der Bibliothek entfernen (Dateien bleiben erhalten) |
 
 Beispiele für Anfragen an Claude: „Lies `D:\Musik\Neu` ein“, „Welche Tracks in 8A zwischen 120 und 126 BPM habe ich?“,
@@ -131,7 +132,7 @@ keytool/
   db.py             SQLite-Bibliothek & Suche
   library.py        Einlesen, parallele Analyse, Tag-Schreiben
   mcp_server.py     MCP-Server
-  research.py       Such-Links für externe Datenbanken
+  research.py       Suche & Parser für Karaoke-Version
   waveform.py       Wellenform-Berechnung (3 Frequenzbänder) mit Cache
   i18n.py           Deutsch/Englisch
   gui/              Qt-Oberfläche (Hauptfenster, Camelot-Rad, Player, Details, Themes)

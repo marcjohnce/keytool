@@ -172,22 +172,34 @@ def list_all_keys() -> list[dict]:
     return [{n: k.format(n) for n in NOTATIONS} | {"name": k.long_name()} for k in all_keys()]
 
 
+_kv_client = None
+
+
 @mcp.tool()
-def external_research_links(keys: list[str] | None = None, bpm_min: float | None = None,
-                            bpm_max: float | None = None, sources: list[str] | None = None) -> dict:
-    """Build filtered search links for external song databases (Karaoke-Version, AudioKeychain, Tunebat)
-    by key(s) in any notation and a BPM range. The links are meant to be opened by the user in a browser;
-    KeyTool does not fetch the pages. Notes: AudioKeychain supports one key per search and no BPM range
-    (results sorted by BPM); Tunebat cannot be pre-filled by URL (criteria must be entered manually)."""
-    from .research import SOURCES, build_links, describe_criteria
+def search_karaoke_version(keys: list[str] | None = None, bpm_min: float | None = None,
+                           bpm_max: float | None = None, page: int = 1, with_details: bool = False,
+                           notation: str = "camelot") -> dict:
+    """Search karaoke-version.de (custom backing tracks) by key(s) in any notation and/or a BPM range.
+
+    One request per key is made so every hit carries the key it was found for. 20 hits per key and page.
+    with_details=true additionally reads each hit's song page for exact tempo (or 'variable ~x'), all keys
+    (songs with key changes list several) and duration - slower (requests are throttled, results cached).
+    Each hit includes 'in_library' if a track with the same title and artist is already in the library."""
+    from .research import KaraokeVersionClient, in_library, library_index
+    global _kv_client
+    _check_notation(notation)
+    if _kv_client is None:
+        _kv_client = KaraokeVersionClient()
     ks = [Key.from_code(c) for c in _parse_keys(keys)]
-    srcs = sources or list(SOURCES)
-    bad = [x for x in srcs if x not in SOURCES]
-    if bad:
-        raise ValueError(f"Unknown sources {bad}; use {SOURCES}")
-    links = build_links(ks, bpm_min, bpm_max, srcs)
-    return {"criteria": describe_criteria(ks, bpm_min, bpm_max),
-            "links": [{"source": l.source, "label": l.label, "url": l.url, "note": l.note or None} for l in links]}
+    if not ks and not bpm_min and not bpm_max:
+        raise ValueError("Give at least one key or a BPM range")
+    res = _kv_client.search(ks, bpm_min, bpm_max, max(1, int(page)))
+    if with_details:
+        for s in res.songs:
+            _kv_client.load_details(s)
+    idx = library_index(lib().db.search(Query()))
+    return {"total": res.total, "page": res.page, "has_more": res.has_more, "search_url": res.url,
+            "hits": [s.to_dict(notation) | {"in_library": in_library(s, idx)} for s in res.songs]}
 
 
 # ============================================================================ keywords

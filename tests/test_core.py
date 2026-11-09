@@ -359,26 +359,81 @@ def test_waveform_band_colours(tmp_path, monkeypatch):
     assert high[0] > low[0] + 100         # treble is much brighter in red/green
 
 
-# ------------------------------------------------------------------ external research links
-def test_research_links():
+# ------------------------------------------------------------------ Karaoke-Version research
+FIX = os.path.join(os.path.dirname(__file__), "fixtures")
+
+
+def _fix(name):
+    return open(os.path.join(FIX, name), encoding="utf-8").read()
+
+
+def test_kv_search_url():
     from urllib.parse import parse_qs, urlparse
-    from keytool.research import build_links, karaoke_version_url, audiokeychain_key_value
+    from keytool.research import search_url
     am, c, fsharp, ebm = Key.parse("Am"), Key.parse("C"), Key.parse("F#"), Key.parse("Ebm")
-    # Karaoke-Version: all keys + BPM range in one URL (verified scheme: chordkey=22,13&tempo=122,128)
-    q = parse_qs(urlparse(karaoke_version_url([am, c, fsharp, ebm], 122.4, 127.6)).query)
-    assert q["chordkey"] == ["22,1,7,107,116,16"] and q["tempo"] == ["122,128"]
-    assert "chordkey" not in karaoke_version_url([], 80, 100) and "tempo=80%2C100" in karaoke_version_url([], 80, 100)
-    # AudioKeychain uses flats in lower case for all 24 keys
-    from keytool.keys import all_keys
-    vals = {audiokeychain_key_value(k) for k in all_keys()}
-    assert vals == {"abm", "b", "ebm", "gb", "bbm", "db", "fm", "ab", "cm", "eb", "gm", "bb", "dm", "f", "am", "c",
-                    "em", "g", "bm", "d", "gbm", "a", "dbm", "e"}
-    links = build_links([am, c], 122, 128)
-    assert [l.source for l in links] == ["karaoke_version", "audiokeychain", "audiokeychain", "tunebat"]
-    akc = parse_qs(urlparse(links[1].url).query)
-    assert akc["key"] == ["am"] and "bpm" not in akc and akc["s"] == ["bpm"] and links[1].note == "range"
-    exact = parse_qs(urlparse(build_links([am], 124, 125, ["audiokeychain"])[0].url).query)
-    assert exact["bpm"] == ["124"] or exact["bpm"] == ["125"]
-    many = build_links(all_keys(), None, None, ["audiokeychain"])
-    assert len(many) == 6 and "too_many_keys" in many[-1].note
-    assert build_links([am], sources=["tunebat"])[0].url == "https://tunebat.com/Advanced"
+    q = parse_qs(urlparse(search_url([am, c, fsharp, ebm], 122.4, 127.6, page=3)).query)
+    assert q["chordkey"] == ["22,1,7,107,116,16"] and q["tempo"] == ["122,128"] and q["page"] == ["3"]
+    assert search_url([], 80, 100).endswith("karaoke.html?tempo=80%2C100")
+    assert "page" not in search_url([am])
+
+
+def test_kv_parse_list():
+    from keytool.research import parse_list
+    total, songs = parse_list(_fix("kv_list.html"))
+    assert total == 450 and len(songs) == 3
+    s = songs[0]
+    assert (s.title, s.artist, s.year, s.price) == ("Losing My Religion", "R.E.M.", 1991, "2,99 €")
+    assert s.url == "https://www.karaoke-version.de/custombackingtrack/r-e-m/losing-my-religion.html"
+    assert s.song_id == "10592-1" and s.image.startswith("https://")
+    assert [x.artist for x in songs[1:]] == ["Andreas Gabalier", "Roland Kaiser"]
+
+
+@pytest.mark.parametrize("name,bpm,variable,camelot", [
+    ("fixed", 126, False, ["8A"]),
+    ("variable", 130, True, ["8B", "3A"]),            # 'C, Bm' - German Bm = b-Moll (Bb minor)
+    ("notempo", None, False, ["2B", "9B"]),           # 'Fis, G'
+    ("many", 119, True, ["5A", "12A", "7A", "2A", "10B", "1A", "3A", "10A", "9A"]),  # Esm and Dism = same key
+])
+def test_kv_parse_detail(name, bpm, variable, camelot):
+    from keytool.research import parse_detail
+    d = parse_detail(_fix(f"kv_detail_{name}.html"))
+    assert d.bpm == bpm and d.bpm_variable == variable and d.duration == 267
+    assert [Key.from_code(c).camelot() for c in d.keys] == camelot
+
+
+@pytest.mark.parametrize("tok,camelot", [("H", "1B"), ("B", "6B"), ("Hm", "10A"), ("Bm", "3A"), ("Fis", "2B"),
+                                         ("Esm", "2A"), ("As", "4B"), ("Cism", "12A"), ("Des", "3B"), ("C#m", "12A")])
+def test_german_key_names(tok, camelot):
+    from keytool.research import parse_german_key
+    assert parse_german_key(tok).camelot() == camelot
+
+
+def test_kv_client_search_and_details(tmp_path):
+    """Per-key searches are merged, keys attached, details parsed and cached, requests counted."""
+    from keytool.research import KaraokeVersionClient
+    import keytool.research as r
+    r.MIN_INTERVAL = 0
+    calls = []
+
+    def fetch(url):
+        calls.append(url)
+        return _fix("kv_detail_variable.html") if "/r-e-m/" in url else _fix("kv_list.html")
+
+    cl = KaraokeVersionClient(cache_file=tmp_path / "c.json", fetcher=fetch)
+    page = cl.search([Key.parse("Am"), Key.parse("C")], 122, 128)
+    assert len(calls) == 2 and "chordkey=22" in calls[0] and "chordkey=1&" in calls[1]
+    assert page.total == 900 and page.has_more and len(page.songs) == 3   # same songs merged
+    assert sorted(Key.from_code(k).camelot() for k in page.songs[0].keys) == ["8A", "8B"]
+    cl.load_details(page.songs[0])
+    assert page.songs[0].bpm == 130 and page.songs[0].bpm_variable and "3A" in [Key.from_code(k).camelot() for k in page.songs[0].keys]
+    n = len(calls)
+    cl2 = KaraokeVersionClient(cache_file=tmp_path / "c.json", fetcher=fetch)   # cache from disk
+    p2 = cl2.search([Key.parse("Am")], 122, 128)
+    assert p2.songs[0].details_loaded and p2.songs[0].bpm == 130 and len(calls) == n + 1
+
+
+def test_kv_library_match():
+    from keytool.research import KVSong, in_library, library_index
+    idx = library_index([{"title": "Losing My Religion (Remastered)", "artist": "R.E.M."}])
+    assert in_library(KVSong("Losing My Religion", "R.E.M.", 1991, "u"), idx)
+    assert not in_library(KVSong("Hulapalu", "Andreas Gabalier", 2015, "u"), idx)
