@@ -456,7 +456,6 @@ class DetailPanel(QWidget, Translatable):
         self.bpm_apply = QPushButton()
         self.t(self.bpm_apply.setText, "apply")
         self.bpm_apply.clicked.connect(lambda: self.bpm_changed.emit(self.bpm.value()))
-        self.bpm.setButtonSymbols(QDoubleSpinBox.NoButtons)
         self.half = QPushButton("½")
         self.half.setFixedWidth(40)
         self.half.setToolTip("BPM / 2")

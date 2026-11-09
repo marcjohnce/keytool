@@ -40,6 +40,7 @@ class Settings:
     tag_key_notation: str = "sharps"  # notation used when writing the key tag
     workers: int = 0                # 0 = auto (CPU count - 1)
     reanalyze_existing: bool = False
+    volume: float = 0.8             # player volume 0..1
 
     @classmethod
     def load(cls) -> "Settings":

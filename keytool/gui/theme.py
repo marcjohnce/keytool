@@ -61,6 +61,8 @@ def apply_theme(app: QApplication, name: str) -> dict:
         QToolButton:checked {{ background: {c['accent']}; color: {c['accent_text']}; }}
         QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {{
             background: {c['base']}; border: 1px solid {c['border']}; border-radius: 6px; padding: 4px 6px; min-height: 18px; }}
+        QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{ width: 0px; border: none; }}
+        QAbstractSpinBox::up-arrow, QAbstractSpinBox::down-arrow {{ width: 0px; height: 0px; }}
         QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {{ border-color: {c['accent']}; }}
         QPushButton {{ background: {c['button']}; border: 1px solid {c['border']}; border-radius: 6px; padding: 5px 12px; }}
         QPushButton:hover {{ background: {c['hover']}; }}

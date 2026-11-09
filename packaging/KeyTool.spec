@@ -14,7 +14,7 @@ for pkg in ("librosa", "av", "mcp", "soundfile", "lazy_loader", "pooch"):
     except Exception:
         pass
 hidden += collect_submodules("keytool") + collect_submodules("scipy.signal") + collect_submodules("sklearn.utils") + [
-    "numba", "llvmlite", "mutagen", "pydantic", "anyio", "uvicorn", "starlette",
+    "PySide6.QtMultimedia", "numba", "llvmlite", "mutagen", "pydantic", "anyio", "uvicorn", "starlette",
 ]
 datas += [(os.path.join(ROOT, "keytool", "resources"), "keytool/resources")]
 excludes = ["tkinter", "matplotlib", "IPython", "pytest"]

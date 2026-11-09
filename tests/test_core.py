@@ -326,3 +326,34 @@ def test_db_migration_adds_columns(tmp_path):
     db = Database(p)
     cols = {r[1] for r in db.conn().execute("PRAGMA table_info(tracks)")}
     assert {"bpm_source", "key_source"} <= cols
+
+
+# ------------------------------------------------------------------ waveform
+def test_waveform_and_cache(tmp_path, monkeypatch):
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path / "data"))
+    from keytool.waveform import get_waveform
+    y = make_track(120, 0, False, seconds=20)
+    y[: SR * 5] = 0                       # 5 s silence at the start
+    f = tmp_path / "w.wav"
+    _write_wav(f, y)
+    wf = get_waveform(str(f))
+    assert len(wf.peaks) == len(wf.colors) == 1600 and abs(wf.duration - 20) < 0.1
+    assert wf.peaks.max() <= 1.0 and wf.peaks[:300].max() < 0.01 and wf.peaks[500:].mean() > 0.2
+    assert wf.colors.dtype == np.uint8 and wf.colors.shape[1] == 3
+    cached = list((tmp_path / "data" / "waveforms").glob("*.npz"))
+    assert len(cached) == 1
+    wf2 = get_waveform(str(f))            # from cache
+    assert np.array_equal(wf.peaks, wf2.peaks)
+
+
+def test_waveform_band_colours(tmp_path, monkeypatch):
+    """Bass-heavy audio is drawn bluer than treble-heavy audio."""
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path / "data"))
+    from keytool.waveform import compute_waveform
+    t = np.arange(SR * 6) / SR
+    for name, freq in (("low", 60.0), ("high", 6000.0)):
+        _write_wav(tmp_path / f"{name}.wav", (0.5 * np.sin(2 * np.pi * freq * t)).astype(np.float32))
+    low = compute_waveform(str(tmp_path / "low.wav")).colors.mean(axis=0)
+    high = compute_waveform(str(tmp_path / "high.wav")).colors.mean(axis=0)
+    assert low[2] > low[0]                # blue dominates for bass
+    assert high[0] > low[0] + 100         # treble is much brighter in red/green

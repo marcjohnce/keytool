@@ -120,6 +120,13 @@ _T: dict[str, tuple[str, str]] = {
     "delete_everywhere": ("Überall entfernen", "Remove everywhere"),
     "filter_by": ("Danach filtern", "Filter by this"),
     "about": ("Über", "About"),
+    "play": ("Abspielen", "Play"),
+    "play_pause": ("Abspielen / Pause", "Play / pause"),
+    "stop": ("Stopp", "Stop"),
+    "volume": ("Lautstärke", "Volume"),
+    "mute": ("Stumm", "Mute"),
+    "waveform_loading": ("Wellenform wird berechnet …", "Calculating waveform …"),
+    "file_missing": ("Datei nicht gefunden", "File not found"),
 }
 
 

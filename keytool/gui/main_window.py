@@ -19,6 +19,7 @@ from ..i18n import set_language, tr
 from ..keys import NOTATIONS, Key
 from ..library import Library
 from ..tags import AUDIO_EXTENSIONS
+from .player import PlayerPanel
 from .settings_dialog import SettingsDialog
 from .theme import apply_theme, resolve_theme
 from .widgets import DetailPanel, ID_ROLE, KeyFilter, KeywordFilter, SORT_ROLE, TrackModel, Translatable
@@ -155,12 +156,12 @@ class MainWindow(QMainWindow, Translatable):
             form.addRow(lbl, w)
         self.f_year_from, self.f_year_to = QSpinBox(), QSpinBox()
         for w in (self.f_year_from, self.f_year_to):
-            w.setRange(0, 2100); w.setSpecialValueText("–"); w.setValue(0); w.setButtonSymbols(QSpinBox.NoButtons)
+            w.setRange(0, 2100); w.setSpecialValueText("–"); w.setValue(0)
         yr = QHBoxLayout(); yr.addWidget(self.f_year_from, 1); yr.addWidget(QLabel("–")); yr.addWidget(self.f_year_to, 1)
         lbl = QLabel(); self.t(lbl.setText, "year"); form.addRow(lbl, yr)
         self.f_bpm_from, self.f_bpm_to = QDoubleSpinBox(), QDoubleSpinBox()
         for w in (self.f_bpm_from, self.f_bpm_to):
-            w.setRange(0, 400); w.setDecimals(1); w.setSpecialValueText("–"); w.setValue(0); w.setButtonSymbols(QDoubleSpinBox.NoButtons)
+            w.setRange(0, 400); w.setDecimals(1); w.setSpecialValueText("–"); w.setValue(0)
         br = QHBoxLayout(); br.addWidget(self.f_bpm_from, 1); br.addWidget(QLabel("–")); br.addWidget(self.f_bpm_to, 1)
         lbl = QLabel(); self.t(lbl.setText, "bpm"); form.addRow(lbl, br)
         lv.addLayout(form)
@@ -220,7 +221,20 @@ class MainWindow(QMainWindow, Translatable):
         self.center.addWidget(self.table)
         hint_wrap = QWidget(); hv = QVBoxLayout(hint_wrap); hv.addStretch(); hv.addWidget(self.drop_hint); hv.addStretch()
         self.center.addWidget(hint_wrap)
-        cw = QWidget(); cv = QVBoxLayout(cw); cv.setContentsMargins(4, 8, 4, 8); cv.addWidget(self.center)
+        self.player = PlayerPanel(self.s)
+        self.table.doubleClicked.connect(lambda _: self.player.play())
+        QShortcut(QKeySequence(Qt.Key_Space), self.table, activated=self.player.toggle,
+                  context=Qt.WidgetWithChildrenShortcut)
+        QShortcut(QKeySequence(Qt.Key_Space), self.player, activated=self.player.toggle,
+                  context=Qt.WidgetWithChildrenShortcut)
+        cw = QWidget(); cv = QVBoxLayout(cw); cv.setContentsMargins(4, 8, 4, 8)
+        vsplit = QSplitter(Qt.Vertical)
+        vsplit.setChildrenCollapsible(False)
+        vsplit.addWidget(self.player)
+        vsplit.addWidget(self.center)
+        vsplit.setStretchFactor(0, 0); vsplit.setStretchFactor(1, 1)
+        vsplit.setSizes([150, 700])
+        cv.addWidget(vsplit)
         split.addWidget(cw)
 
         # ---------------- right: details
@@ -256,6 +270,8 @@ class MainWindow(QMainWindow, Translatable):
         dark = resolve_theme(self.s.theme) == "dark"
         self.model.dark = dark
         self.f_keys.apply_colors(dark)
+        if hasattr(self, "player"):
+            self.player.set_dark(dark)
         self.theme_btn.setText("☀" if dark else "☾")
         self.theme_btn.setToolTip(tr("theme_light") if dark else tr("theme_dark"))
         self.model.refresh_all()
@@ -274,6 +290,7 @@ class MainWindow(QMainWindow, Translatable):
         self.model.notation = notation
         self.f_keys.set_notation(notation)
         self.details.set_notation(notation)
+        self.player.set_notation(notation)
         self.model.refresh_all()
 
     def set_language(self, lang: str):
@@ -295,6 +312,7 @@ class MainWindow(QMainWindow, Translatable):
         self.f_keys.set_notation(self.s.notation)
         self.f_keywords.retranslate()
         self.details.retranslate()
+        self.player.retranslate()
         self.model.refresh_all()
         self.update_count()
 
@@ -362,7 +380,24 @@ class MainWindow(QMainWindow, Translatable):
         return [r for r in self.model.rows if r["id"] in ids]
 
     def selection_changed(self, *_):
-        self.details.set_rows(self.selected_rows())
+        rows = self.selected_rows()
+        self.details.set_rows(rows)
+        if not hasattr(self, "player"):
+            return
+        cur = self.table.currentIndex()
+        cur_id = cur.data(ID_ROLE) if cur.isValid() else None
+        row = next((r for r in rows if r["id"] == cur_id), rows[0] if rows else None)
+        self.player.set_track(row)
+
+    def _released(self, ids, fn):
+        """Run fn while the player has released the affected file (Windows file locking)."""
+        paths = {r["path"] for r in self.lib.db.get_tracks(ids)}
+        restores = [self.player.release_file(p) for p in paths]
+        try:
+            return fn()
+        finally:
+            for r in restores:
+                r()
 
     def toggle_harmonic(self, on: bool):
         if on:
@@ -444,13 +479,13 @@ class MainWindow(QMainWindow, Translatable):
 
     # ------------------------------------------------------------------ edits
     def set_bpm(self, value: float):
-        for tid in self.selected_ids():
-            self.lib.set_bpm(tid, round(value, 2) if value > 0 else None)
+        ids = self.selected_ids()
+        self._released(ids, lambda: [self.lib.set_bpm(t, round(value, 2) if value > 0 else None) for t in ids])
         self.refresh()
 
     def set_key(self, code: str):
-        for tid in self.selected_ids():
-            self.lib.set_key(tid, code or None)
+        ids = self.selected_ids()
+        self._released(ids, lambda: [self.lib.set_key(t, code or None) for t in ids])
         self.refresh()
 
     def add_keywords(self, kws: list[str]):
@@ -473,12 +508,10 @@ class MainWindow(QMainWindow, Translatable):
         self.refresh_keywords(); self.refresh()
 
     def write_tags_selected(self):
-        ok = err = 0
-        for tid in self.selected_ids():
-            if self.lib._write_tags_safe(tid) is None:
-                ok += 1
-            else:
-                err += 1
+        ids = self.selected_ids()
+        results = self._released(ids, lambda: [self.lib._write_tags_safe(t) for t in ids])
+        ok = sum(1 for r in results if r is None)
+        err = len(results) - ok
         msg = tr("tags_written", n=ok)
         if err:
             msg += " · " + tr("tag_errors", n=err)
@@ -504,6 +537,8 @@ class MainWindow(QMainWindow, Translatable):
         if not rows:
             return
         m = QMenu(self)
+        m.addAction("▶  " + tr("play"), self.player.play)
+        m.addSeparator()
         m.addAction(tr("reanalyze"), self.reanalyze_selected)
         m.addAction(tr("write_tags"), self.write_tags_selected)
         m.addAction(tr("reset_manual"), lambda: (self.lib.reset_manual(self.selected_ids()), self.reanalyze_selected()))
@@ -558,6 +593,8 @@ class MainWindow(QMainWindow, Translatable):
             self.start_import(paths)
 
     def closeEvent(self, e):
+        self.player.shutdown()
+        self.s.save()
         if self.worker:
             self.worker.cancel.set()
         if self.thread:

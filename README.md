@@ -18,6 +18,8 @@ die Bibliothek zugreifen.
 | DJ-Extras | „Harmonisch passend“: Titel, die nach dem Camelot-Rad zur Auswahl passen (±6 % BPM); BPM halbieren/verdoppeln |
 | Tags | BPM & Tonart werden nach der Analyse **automatisch in die Datei geschrieben** (ID3 TBPM/TKEY, Vorbis BPM/INITIALKEY, MP4 tmpo/initialkey) – abschaltbar |
 | Manuelle Korrektur | BPM/Tonart überschreiben; manuelle Werte bleiben bei einer erneuten Analyse erhalten |
+| Player | Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
+| Wellenform | Übersicht des ausgewählten Titels über der Trackliste, gefärbt nach Frequenzbändern (Bass blau, Mitten bernstein, Höhen weiß), Klicken/Ziehen zum Spulen, Taktmarken aus der BPM |
 | Oberfläche | Deutsch / Englisch, heller und dunkler Modus (oder System), Umschalten ohne Neustart |
 | MCP-Server | Vollzugriff: suchen, Details, Schlüsselwörter, Werte setzen, Tags schreiben, Ordner einlesen & analysieren |
 
@@ -43,6 +45,9 @@ Ein separates FFmpeg ist nicht nötig.
 * **Tonart-Filter:** Die farbigen Felder entsprechen dem Camelot-Rad; die Beschriftung folgt der gewählten Notation.
 * **Schlüsselwörter:** Titel auswählen (Mehrfachauswahl möglich), rechts eingeben, mehrere mit Komma trennen.
   Ein Doppelklick auf ein Schlüsselwort filtert danach. Rechtsklick in der Filterliste: umbenennen/entfernen.
+* **Abspielen:** Titel auswählen → Wellenform und Player oben laden den Titel. Leertaste oder Doppelklick
+  startet/pausiert, Klicken oder Ziehen in der Wellenform spult. Werden während der Wiedergabe Tags in die
+  Datei geschrieben, gibt der Player die Datei kurz frei und spielt an derselben Stelle weiter.
 * **Kontextmenü der Tabelle:** erneut analysieren, Tags schreiben, im Explorer anzeigen, aus der Bibliothek entfernen
   (die Dateien selbst werden nie gelöscht).
 * **Einstellungen:** Sprache, Darstellung, Notation, BPM-Bereich, automatisches Tag-Schreiben und welche Notation in
@@ -114,8 +119,9 @@ keytool/
   db.py             SQLite-Bibliothek & Suche
   library.py        Einlesen, parallele Analyse, Tag-Schreiben
   mcp_server.py     MCP-Server
+  waveform.py       Wellenform-Berechnung (3 Frequenzbänder) mit Cache
   i18n.py           Deutsch/Englisch
-  gui/              Qt-Oberfläche (Hauptfenster, Filter, Details, Themes)
+  gui/              Qt-Oberfläche (Hauptfenster, Camelot-Rad, Player, Details, Themes)
 packaging/          PyInstaller-Spezifikation, Starter, Icon
 tests/              Tests mit synthetisch erzeugten Audiodateien in allen Formaten
 ```
