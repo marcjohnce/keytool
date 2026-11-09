@@ -36,6 +36,7 @@ class Settings:
     bpm_min: float = 70.0
     bpm_max: float = 180.0
     use_existing_tags: bool = True  # take BPM/key from file tags instead of analysing
+    write_edits: bool = True        # write edited title/artist/album/genre/comment/energy into the files
     write_tags: bool = True         # write BPM/key into files after analysis
     tag_key_notation: str = "sharps"  # notation used when writing the key tag
     workers: int = 0                # 0 = auto (CPU count - 1)

@@ -54,7 +54,8 @@ class Translatable:
 
 # =========================================================================== table model
 class TrackModel(QAbstractTableModel):
-    COLUMNS = ["title", "artist", "album", "year", "bpm", "key", "duration", "keywords", "genre", "ext", "status", "path"]
+    COLUMNS = ["title", "artist", "album", "year", "bpm", "key", "energy", "duration", "keywords", "genre", "comment",
+               "ext", "bitrate", "status", "path"]
     HEADER_KEYS = {"ext": "format"}
 
     def __init__(self, parent=None):
@@ -115,14 +116,16 @@ class TrackModel(QAbstractTableModel):
                 return (v or "").upper()
             if col == "status":
                 return tr(f"st_{v}") if v else ""
-            if col == "year":
+            if col in ("year", "energy", "bitrate"):
                 return str(v) if v else ""
+            if col == "comment":
+                return (v or "").replace("\n", " ⏎ ")
             return v or ""
         if role == SORT_ROLE:
             if col == "key":
                 k = Key.from_code(v)
                 return (k.camelot_number * 2 + (0 if k.minor else 1)) if k else 999
-            if col in ("bpm", "year", "duration"):
+            if col in ("bpm", "year", "duration", "energy", "bitrate"):
                 return float(v) if v else 1e9
             if col == "keywords":
                 return ", ".join(v or []).lower()
@@ -136,7 +139,7 @@ class TrackModel(QAbstractTableModel):
                 return QColor("#111111")
             if col == "status" and v == "error":
                 return QColor("#ff6b6b")
-        if role == Qt.TextAlignmentRole and col in ("bpm", "key", "year", "duration", "ext"):
+        if role == Qt.TextAlignmentRole and col in ("bpm", "key", "year", "duration", "ext", "energy", "bitrate"):
             return int(Qt.AlignCenter)
         if role == Qt.ToolTipRole:
             if col == "bpm" and r.get("bpm"):
@@ -146,7 +149,7 @@ class TrackModel(QAbstractTableModel):
                 return f"{k.long_name(tr.lang)} · {k.camelot()} · {k.sharps()} / {k.flats()} – {source_text(r, 'key')}"
             if col == "status" and r.get("error"):
                 return r["error"]
-            if col == "path":
+            if col in ("path", "comment"):
                 return v
         return None
 
@@ -420,89 +423,135 @@ class KeywordFilter(QWidget, Translatable):
 
 
 # =========================================================================== detail panel
+# =========================================================================== detail panel
+def fmt_size(n) -> str:
+    if not n:
+        return ""
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}".replace(".", ",")
+        n /= 1024
+
+
+MIXED = object()
+
+
+def _common(rows: list[dict], field: str):
+    vals = {r.get(field) for r in rows}
+    return vals.pop() if len(vals) == 1 else MIXED
+
+
 class DetailPanel(QWidget, Translatable):
-    bpm_changed = Signal(float)
-    key_changed = Signal(str)
+    """Editable track details: metadata, key/energy/tempo; read-only file info; keywords.
+
+    Edits are collected and applied with "Save" (Ctrl+S). With several tracks selected, only the
+    fields that were actually changed are applied to all of them."""
+    save_requested = Signal(dict)
+    reveal_requested = Signal(str)
     keywords_added = Signal(list)
     keyword_removed = Signal(str)
     keyword_clicked = Signal(str)
+
+    TEXT_FIELDS = ("title", "artist", "album")
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._tr_init()
         self.notation = "camelot"
         self.rows: list[dict] = []
+        self._loading = False
+        self.dirty: set[str] = set()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(4, 4, 4, 4)
-        self.heading = QLabel()
-        self.heading.setObjectName("heading")
-        self.heading.setWordWrap(True)
+        lay.setSpacing(8)
+
+        self.heading = QLabel(); self.heading.setObjectName("heading"); self.heading.setWordWrap(True)
+        self.sub = QLabel(); self.sub.setObjectName("dim"); self.sub.setWordWrap(True)
         lay.addWidget(self.heading)
-        self.sub = QLabel()
-        self.sub.setObjectName("dim")
-        self.sub.setWordWrap(True)
-        self.sub.setTextInteractionFlags(Qt.TextSelectableByMouse)
         lay.addWidget(self.sub)
 
-        self.form_w = QWidget()
-        form = QFormLayout(self.form_w)
-        form.setContentsMargins(0, 8, 0, 0)
-        # BPM
-        bpm_row = QHBoxLayout()
-        self.bpm = QDoubleSpinBox()
-        self.bpm.setRange(0, 400)
-        self.bpm.setDecimals(1)
-        self.bpm.setSpecialValueText("–")
-        self.bpm_apply = QPushButton()
-        self.t(self.bpm_apply.setText, "apply")
-        self.bpm_apply.clicked.connect(lambda: self.bpm_changed.emit(self.bpm.value()))
-        self.half = QPushButton("½")
-        self.half.setFixedWidth(40)
-        self.half.setToolTip("BPM / 2")
-        self.half.clicked.connect(lambda: self.bpm.setValue(self.bpm.value() / 2))
-        self.double = QPushButton("x2")
-        self.double.setFixedWidth(40)
-        self.double.setToolTip("BPM x 2")
-        self.double.clicked.connect(lambda: self.bpm.setValue(self.bpm.value() * 2))
-        for w in (self.bpm, self.half, self.double, self.bpm_apply):
-            bpm_row.addWidget(w, 1 if w is self.bpm else 0)
-        self.bpm_label = QLabel()
-        self.t(self.bpm_label.setText, "bpm")
-        form.addRow(self.bpm_label, bpm_row)
-        self.bpm_info = QLabel()
-        self.bpm_info.setObjectName("dim")
-        form.addRow("", self.bpm_info)
-        # Key
-        key_row = QHBoxLayout()
+        # ---------------- metadata
+        from PySide6.QtWidgets import QGroupBox, QPlainTextEdit, QSpinBox
+        self.g_meta = QGroupBox(); self.t(self.g_meta.setTitle, "g_metadata")
+        fm = QFormLayout(self.g_meta)
+        fm.setLabelAlignment(Qt.AlignLeft)
+        self.edits: dict[str, QLineEdit] = {}
+        for f in self.TEXT_FIELDS:
+            e = QLineEdit()
+            e.textEdited.connect(lambda _=None, f=f: self._mark(f))
+            self.edits[f] = e
+            lbl = QLabel(); self.t(lbl.setText, f)
+            fm.addRow(lbl, e)
+        self.genre = QComboBox(); self.genre.setEditable(True); self.genre.setInsertPolicy(QComboBox.NoInsert)
+        self.genre.lineEdit().textEdited.connect(lambda _: self._mark("genre"))
+        self.genre.activated.connect(lambda _: self._mark("genre"))
+        lbl = QLabel(); self.t(lbl.setText, "genre"); fm.addRow(lbl, self.genre)
+        self.comment = QPlainTextEdit(); self.comment.setFixedHeight(58); self.comment.setTabChangesFocus(True)
+        self.comment.textChanged.connect(lambda: self._mark("comment"))
+        lbl = QLabel(); self.t(lbl.setText, "comment"); fm.addRow(lbl, self.comment)
+        lay.addWidget(self.g_meta)
+
+        # ---------------- key / energy / tempo
+        self.g_music = QGroupBox(); self.t(self.g_music.setTitle, "g_music")
+        fk = QFormLayout(self.g_music)
         self.key = QComboBox()
         self.key.addItem("–", "")
         for k in all_keys():
             self.key.addItem("", k.code)
-        self.key_apply = QPushButton()
-        self.t(self.key_apply.setText, "apply")
-        self.key_apply.clicked.connect(lambda: self.key_changed.emit(self.key.currentData() or ""))
-        key_row.addWidget(self.key, 1)
-        key_row.addWidget(self.key_apply)
-        self.key_label = QLabel()
-        self.t(self.key_label.setText, "key")
-        form.addRow(self.key_label, key_row)
-        self.key_info = QLabel()
-        self.key_info.setObjectName("dim")
-        self.key_info.setWordWrap(True)
-        form.addRow("", self.key_info)
-        self.tag_info = QLabel()
-        self.tag_info.setObjectName("dim")
-        self.tag_label = QLabel()
-        self.t(self.tag_label.setText, "tag_values")
-        form.addRow(self.tag_label, self.tag_info)
-        lay.addWidget(self.form_w)
+        self.key.activated.connect(lambda _: self._mark("key"))
+        lbl = QLabel(); self.t(lbl.setText, "key"); fk.addRow(lbl, self.key)
+        self.key_info = QLabel(); self.key_info.setObjectName("dim"); self.key_info.setWordWrap(True)
+        fk.addRow("", self.key_info)
+        erow = QHBoxLayout()
+        self.energy = QSpinBox(); self.energy.setRange(0, 10); self.energy.setSpecialValueText("–")
+        self.energy.valueChanged.connect(lambda _: (self._mark("energy"), self._energy_bar()))
+        self.energy_bar = QLabel(); self.energy_bar.setObjectName("dim")
+        erow.addWidget(self.energy); erow.addWidget(self.energy_bar, 1)
+        lbl = QLabel(); self.t(lbl.setText, "energy"); fk.addRow(lbl, erow)
+        brow = QHBoxLayout()
+        self.bpm = QDoubleSpinBox(); self.bpm.setRange(0, 400); self.bpm.setDecimals(1); self.bpm.setSpecialValueText("–")
+        self.bpm.valueChanged.connect(lambda _: self._mark("bpm"))
+        self.half = QPushButton("½"); self.half.setFixedWidth(40); self.half.setToolTip("BPM / 2")
+        self.half.clicked.connect(lambda: self.bpm.setValue(self.bpm.value() / 2))
+        self.double = QPushButton("x2"); self.double.setFixedWidth(40); self.double.setToolTip("BPM x 2")
+        self.double.clicked.connect(lambda: self.bpm.setValue(self.bpm.value() * 2))
+        brow.addWidget(self.bpm, 1); brow.addWidget(self.half); brow.addWidget(self.double)
+        lbl = QLabel(); self.t(lbl.setText, "tempo"); fk.addRow(lbl, brow)
+        self.bpm_info = QLabel(); self.bpm_info.setObjectName("dim")
+        fk.addRow("", self.bpm_info)
+        lay.addWidget(self.g_music)
 
-        # Keywords
-        self.kw_label = QLabel()
-        self.kw_label.setObjectName("heading")
-        self.t(self.kw_label.setText, "keywords")
-        lay.addSpacing(8)
-        lay.addWidget(self.kw_label)
+        # ---------------- save / revert
+        srow = QHBoxLayout()
+        self.save_btn = QPushButton(); self.save_btn.setObjectName("primary"); self.t(self.save_btn.setText, "save")
+        self.save_btn.clicked.connect(self.save)
+        self.revert_btn = QPushButton(); self.t(self.revert_btn.setText, "revert")
+        self.revert_btn.clicked.connect(lambda: self.set_rows(self.rows))
+        srow.addWidget(self.save_btn, 1); srow.addWidget(self.revert_btn)
+        lay.addLayout(srow)
+        self.save_hint = QLabel(); self.save_hint.setObjectName("dim"); self.save_hint.setWordWrap(True)
+        lay.addWidget(self.save_hint)
+        from PySide6.QtGui import QKeySequence, QShortcut
+        QShortcut(QKeySequence.Save, self, activated=self.save, context=Qt.WidgetWithChildrenShortcut)
+
+        # ---------------- file info (read only)
+        self.g_file = QGroupBox(); self.t(self.g_file.setTitle, "g_file")
+        ff = QFormLayout(self.g_file)
+        self.f_type, self.f_bitrate, self.f_size, self.f_duration, self.f_tags = (QLabel() for _ in range(5))
+        self.f_path = QLabel(); self.f_path.setWordWrap(True); self.f_path.setObjectName("dim")
+        for w in (self.f_type, self.f_bitrate, self.f_size, self.f_duration, self.f_tags, self.f_path):
+            w.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        for key, w in (("filetype", self.f_type), ("bitrate", self.f_bitrate), ("filesize", self.f_size),
+                       ("duration", self.f_duration), ("tag_values", self.f_tags), ("path", self.f_path)):
+            lbl = QLabel(); self.t(lbl.setText, key); ff.addRow(lbl, w)
+        self.reveal_btn = QPushButton(); self.t(self.reveal_btn.setText, "open_folder")
+        self.reveal_btn.clicked.connect(lambda: self.rows and self.reveal_requested.emit(self.rows[0]["path"]))
+        ff.addRow("", self.reveal_btn)
+        lay.addWidget(self.g_file)
+
+        # ---------------- keywords
+        self.g_kw = QGroupBox(); self.t(self.g_kw.setTitle, "keywords")
+        kv = QVBoxLayout(self.g_kw)
         kw_row = QHBoxLayout()
         self.kw_edit = QLineEdit()
         self.t(self.kw_edit.setPlaceholderText, "add_keyword")
@@ -512,29 +561,26 @@ class DetailPanel(QWidget, Translatable):
         comp.setFilterMode(Qt.MatchContains)
         self.kw_edit.setCompleter(comp)
         self.kw_edit.returnPressed.connect(self._add_kw)
-        self.kw_add = QPushButton()
-        self.kw_add.setObjectName("primary")
-        self.t(self.kw_add.setText, "add")
+        self.kw_add = QPushButton(); self.t(self.kw_add.setText, "add")
         self.kw_add.clicked.connect(self._add_kw)
-        kw_row.addWidget(self.kw_edit, 1)
-        kw_row.addWidget(self.kw_add)
-        lay.addLayout(kw_row)
-        self.kw_hint = QLabel()
-        self.kw_hint.setObjectName("dim")
-        lay.addWidget(self.kw_hint)
-        self.kw_list = QListWidget()
+        kw_row.addWidget(self.kw_edit, 1); kw_row.addWidget(self.kw_add)
+        kv.addLayout(kw_row)
+        self.kw_hint = QLabel(); self.kw_hint.setObjectName("dim"); self.kw_hint.setWordWrap(True)
+        kv.addWidget(self.kw_hint)
+        self.kw_list = QListWidget(); self.kw_list.setMinimumHeight(90)
         self.kw_list.itemDoubleClicked.connect(lambda it: self.keyword_clicked.emit(it.data(Qt.UserRole)))
-        lay.addWidget(self.kw_list, 1)
-        self.kw_remove = QPushButton()
-        self.t(self.kw_remove.setText, "remove_kw")
+        kv.addWidget(self.kw_list)
+        self.kw_remove = QPushButton(); self.t(self.kw_remove.setText, "remove_kw")
         self.kw_remove.clicked.connect(self._remove_kw)
-        lay.addWidget(self.kw_remove)
+        kv.addWidget(self.kw_remove)
+        lay.addWidget(self.g_kw)
+        lay.addStretch(1)
         self.retranslate()
 
+    # ------------------------------------------------------------------ texts
     def retranslate(self):
         super().retranslate()
-        self.kw_hint.setText("Tipp: mehrere mit Komma trennen · Doppelklick filtert" if tr.lang == "de"
-                             else "Tip: separate several with commas · double-click filters")
+        self.kw_hint.setText(tr("kw_hint"))
         self.set_notation(self.notation)
 
     def set_notation(self, notation: str):
@@ -542,11 +588,68 @@ class DetailPanel(QWidget, Translatable):
         for i in range(1, self.key.count()):
             k = Key.from_code(self.key.itemData(i))
             self.key.setItemText(i, f"{k.format(notation)}   ({k.long_name(tr.lang)})")
-        self.set_rows(self.rows)
+        dirty = set(self.dirty)
+        self.set_rows(self.rows, keep_edits=bool(dirty))
 
     def set_known_keywords(self, kws: list[str]):
         self.kw_completer_model.setStringList(kws)
 
+    def set_known_genres(self, genres: list[str]):
+        cur = self.genre.currentText()
+        self._loading = True
+        self.genre.clear()
+        self.genre.addItems(genres)
+        self.genre.setEditText(cur)
+        self._loading = False
+
+    # ------------------------------------------------------------------ editing state
+    def _mark(self, field: str):
+        if self._loading or not self.rows:
+            return
+        self.dirty.add(field)
+        self._update_buttons()
+
+    def _update_buttons(self):
+        on = bool(self.dirty) and bool(self.rows)
+        self.save_btn.setEnabled(on)
+        self.revert_btn.setEnabled(on)
+        if len(self.rows) > 1:
+            self.save_hint.setText(tr("multi_edit_hint", n=len(self.rows)))
+        else:
+            self.save_hint.setText(tr("unsaved_changes") if on else "")
+
+    def _energy_bar(self):
+        v = self.energy.value()
+        self.energy_bar.setText("▮" * v + "▯" * (10 - v) if v else "")
+
+    def changes(self) -> dict:
+        out: dict = {}
+        for f in self.dirty:
+            if f in self.TEXT_FIELDS:
+                out[f] = self.edits[f].text().strip()
+            elif f == "genre":
+                out[f] = self.genre.currentText().strip()
+            elif f == "comment":
+                out[f] = self.comment.toPlainText().strip()
+            elif f == "energy":
+                out[f] = self.energy.value() or None
+            elif f == "bpm":
+                out[f] = round(self.bpm.value(), 2) if self.bpm.value() > 0 else None
+            elif f == "key":
+                out[f] = self.key.currentData() or None
+        return out
+
+    def save(self):
+        ch = self.changes()
+        if ch and self.rows:
+            self.dirty.clear()
+            self._update_buttons()
+            self.save_requested.emit(ch)
+
+    def has_unsaved(self) -> bool:
+        return bool(self.dirty)
+
+    # ------------------------------------------------------------------ keywords
     def _add_kw(self):
         parts = [p.strip() for p in self.kw_edit.text().split(",") if p.strip()]
         if parts and self.rows:
@@ -557,62 +660,124 @@ class DetailPanel(QWidget, Translatable):
         for it in self.kw_list.selectedItems():
             self.keyword_removed.emit(it.data(Qt.UserRole))
 
-    def set_rows(self, rows: list[dict]):
+    # ------------------------------------------------------------------ fill
+    def set_rows(self, rows: list[dict], keep_edits: bool = False):
+        same = [r["id"] for r in rows] == [r["id"] for r in self.rows]
+        if keep_edits and same and self.dirty:
+            self.rows = rows
+            self._fill_readonly()
+            return
         self.rows = rows
+        self.dirty.clear()
+        self._loading = True
+        try:
+            self._fill()
+        finally:
+            self._loading = False
+        self._update_buttons()
+
+    def _set_text(self, edit: QLineEdit, val):
+        if val is MIXED:
+            edit.setText("")
+            edit.setPlaceholderText(tr("mixed_values"))
+        else:
+            edit.setText(val or "")
+            edit.setPlaceholderText("")
+
+    def _fill(self):
+        rows = self.rows
         has = bool(rows)
-        self.form_w.setEnabled(has)
-        for w in (self.kw_edit, self.kw_add, self.kw_list, self.kw_remove):
+        for w in (self.g_meta, self.g_music, self.g_kw, self.reveal_btn):
             w.setEnabled(has)
-        self.kw_list.clear()
+        self.reveal_btn.setVisible(len(rows) == 1)
         if not rows:
             self.heading.setText(tr("no_selection"))
             self.sub.setText("")
-            self.bpm.setValue(0)
-            self.key.setCurrentIndex(0)
-            self.bpm_info.setText("")
-            self.key_info.setText("")
-            self.tag_info.setText("")
+            for e in self.edits.values():
+                self._set_text(e, "")
+            self.genre.setEditText(""); self.comment.setPlainText("")
+            self.key.setCurrentIndex(0); self.energy.setValue(0); self.bpm.setValue(0)
+            self.key_info.setText(""); self.bpm_info.setText("")
+            self.kw_list.clear()
+            self._fill_readonly()
+            self._energy_bar()
             return
-        if len(rows) == 1:
-            r = rows[0]
-            self.heading.setText(r["title"] or r["filename"])
-            bits = [r["artist"], r["album"], str(r["year"] or ""), fmt_duration(r["duration"]), (r["ext"] or "").upper()]
-            self.sub.setText(" · ".join(b for b in bits if b) + f"\n{r['path']}")
-            if r.get("error"):
-                self.sub.setText(self.sub.text() + f"\n⚠ {r['error']}")
-            self.bpm.setValue(r["bpm"] or 0)
-            idx = self.key.findData(r["key"] or "")
-            self.key.setCurrentIndex(max(0, idx))
-            self.bpm_info.setText(source_text(r, "bpm") if r["bpm"] else "")
-            k = Key.from_code(r["key"])
-            if k:
-                comp = ", ".join(c.format(self.notation) for c in k.compatible()[1:])
-                src = source_text(r, "key")
-                self.key_info.setText(f"{k.long_name(tr.lang)} · {src}\n↔ {comp}")
-            else:
-                self.key_info.setText("")
-            self.tag_info.setText(f"BPM {r['tag_bpm'] or '–'} · {tr('key')} {r['tag_key'] or '–'}")
-            kws = r.get("keywords", [])
+        one = len(rows) == 1
+        r0 = rows[0]
+        if one:
+            self.heading.setText(r0["title"] or r0["filename"])
+            self.sub.setText(" · ".join(b for b in (r0["artist"], str(r0["year"] or "")) if b))
         else:
             self.heading.setText(tr("n_selected", n=len(rows)))
             self.sub.setText("")
-            self.bpm.setValue(0)
-            self.key.setCurrentIndex(0)
+        for f, e in self.edits.items():
+            self._set_text(e, _common(rows, f))
+        g = _common(rows, "genre")
+        self.genre.setEditText("" if g is MIXED else (g or ""))
+        self.genre.lineEdit().setPlaceholderText(tr("mixed_values") if g is MIXED else "")
+        c = _common(rows, "comment")
+        self.comment.setPlainText("" if c is MIXED else (c or ""))
+        self.comment.setPlaceholderText(tr("mixed_values") if c is MIXED else "")
+        k = _common(rows, "key")
+        if k is MIXED:
+            self.key.setCurrentIndex(-1)
+            self.key.setPlaceholderText(tr("mixed_values"))
+        else:
+            self.key.setCurrentIndex(max(0, self.key.findData(k or "")))
+        e = _common(rows, "energy")
+        self.energy.setValue(0 if e is MIXED else (e or 0))
+        self.energy.setToolTip(tr("mixed_values") if e is MIXED else tr("energy_tip"))
+        b = _common(rows, "bpm")
+        self.bpm.setValue(0 if b is MIXED else (b or 0))
+        self.bpm.setToolTip(tr("mixed_values") if b is MIXED else "")
+        self._energy_bar()
+        # info lines (single selection)
+        if one and r0["bpm"]:
+            self.bpm_info.setText(source_text(r0, "bpm"))
+        else:
             self.bpm_info.setText("")
+        kk = Key.from_code(r0["key"]) if one else None
+        if kk:
+            comp = ", ".join(c.format(self.notation) for c in kk.compatible()[1:])
+            self.key_info.setText(f"{source_text(r0, 'key')}\n↔ {comp}")
+        else:
             self.key_info.setText("")
-            self.tag_info.setText("")
-            # keywords common to the selection are listed, others shown dimmed with count
-            counts: dict[str, int] = {}
-            for r in rows:
-                for k in r.get("keywords", []):
-                    counts[k] = counts.get(k, 0) + 1
-            kws = sorted(counts, key=str.lower)
-        for kw in kws:
-            label = kw
-            if len(rows) > 1:
-                n = sum(1 for r in rows if kw in r.get("keywords", []))
-                if n < len(rows):
-                    label = f"{kw}  ({n}/{len(rows)})"
+        self._fill_readonly()
+        self._fill_keywords()
+
+    def _fill_readonly(self):
+        rows = self.rows
+        if len(rows) == 1:
+            r = rows[0]
+            self.f_type.setText((r["ext"] or "").upper())
+            self.f_bitrate.setText(f"{r['bitrate']} kbit/s" if r.get("bitrate") else "–")
+            self.f_size.setText(fmt_size(r.get("size")) or "–")
+            self.f_duration.setText(fmt_duration(r.get("duration")) or "–")
+            self.f_tags.setText(f"BPM {r['tag_bpm'] or '–'} · {tr('key')} {r['tag_key'] or '–'}")
+            self.f_path.setText(r["path"] + (f"\n⚠ {r['error']}" if r.get("error") else ""))
+        elif rows:
+            types = sorted({(r["ext"] or "").upper() for r in rows})
+            self.f_type.setText(", ".join(types))
+            brs = [r["bitrate"] for r in rows if r.get("bitrate")]
+            self.f_bitrate.setText(f"{min(brs)}–{max(brs)} kbit/s" if brs and min(brs) != max(brs)
+                                   else (f"{brs[0]} kbit/s" if brs else "–"))
+            self.f_size.setText(fmt_size(sum(r.get("size") or 0 for r in rows)) + f"  ({tr('total')})")
+            self.f_duration.setText(fmt_duration(sum(r.get("duration") or 0 for r in rows)))
+            self.f_tags.setText("")
+            self.f_path.setText("")
+        else:
+            for w in (self.f_type, self.f_bitrate, self.f_size, self.f_duration, self.f_tags, self.f_path):
+                w.setText("")
+
+    def _fill_keywords(self):
+        rows = self.rows
+        self.kw_list.clear()
+        counts: dict[str, int] = {}
+        for r in rows:
+            for k in r.get("keywords", []):
+                counts[k] = counts.get(k, 0) + 1
+        for kw in sorted(counts, key=str.lower):
+            label = kw if counts[kw] == len(rows) or len(rows) == 1 else f"{kw}  ({counts[kw]}/{len(rows)})"
             it = QListWidgetItem("🏷  " + label)
             it.setData(Qt.UserRole, kw)
             self.kw_list.addItem(it)

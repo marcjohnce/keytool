@@ -34,6 +34,9 @@ CREATE TABLE IF NOT EXISTS tracks (
     tag_key         TEXT DEFAULT '',
     bpm_source      TEXT DEFAULT '',
     key_source      TEXT DEFAULT '',
+    comment         TEXT DEFAULT '',
+    energy          INTEGER,
+    bitrate         INTEGER,
     status          TEXT DEFAULT 'pending',
     error           TEXT DEFAULT '',
     added_at        REAL,
@@ -55,10 +58,11 @@ CREATE INDEX IF NOT EXISTS ix_keywords_kw ON keywords(keyword COLLATE NOCASE);
 TRACK_COLUMNS = [
     "id", "path", "folder", "filename", "ext", "size", "mtime", "title", "artist", "album", "year",
     "genre", "duration", "bpm", "bpm_confidence", "key", "key_confidence", "bpm_manual", "key_manual",
-    "tag_bpm", "tag_key", "bpm_source", "key_source", "status", "error", "added_at", "analyzed_at",
+    "tag_bpm", "tag_key", "bpm_source", "key_source", "comment", "energy", "bitrate", "status", "error", "added_at", "analyzed_at",
 ]
 
-SORTABLE = {"title", "artist", "album", "year", "bpm", "key", "duration", "added_at", "filename", "genre"}
+SORTABLE = {"title", "artist", "album", "year", "bpm", "key", "duration", "added_at", "filename", "genre", "energy",
+            "comment", "bitrate", "size"}
 
 
 def norm_path(p: str | os.PathLike) -> str:
@@ -95,9 +99,10 @@ class Database:
         c.executescript(SCHEMA)
         # migrations for libraries created by older versions
         cols = {r[1] for r in c.execute("PRAGMA table_info(tracks)")}
-        for col in ("bpm_source", "key_source"):
+        for col, decl in (("bpm_source", "TEXT DEFAULT ''"), ("key_source", "TEXT DEFAULT ''"),
+                          ("comment", "TEXT DEFAULT ''"), ("energy", "INTEGER"), ("bitrate", "INTEGER")):
             if col not in cols:
-                c.execute(f"ALTER TABLE tracks ADD COLUMN {col} TEXT DEFAULT ''")
+                c.execute(f"ALTER TABLE tracks ADD COLUMN {col} {decl}")
 
     # -------------------------------------------------------------- connection
     def conn(self) -> sqlite3.Connection:
@@ -276,10 +281,11 @@ class Database:
                 pat = "%" + word.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
                 cl.append(
                     "(t.title LIKE ? ESCAPE '\\' OR t.artist LIKE ? ESCAPE '\\' OR t.album LIKE ? ESCAPE '\\' "
-                    "OR t.filename LIKE ? ESCAPE '\\' OR t.genre LIKE ? ESCAPE '\\' OR CAST(t.year AS TEXT)=? "
+                    "OR t.filename LIKE ? ESCAPE '\\' OR t.genre LIKE ? ESCAPE '\\' OR t.comment LIKE ? ESCAPE '\\' "
+                    "OR CAST(t.year AS TEXT)=? "
                     "OR EXISTS (SELECT 1 FROM keywords k WHERE k.track_id=t.id AND k.keyword LIKE ? ESCAPE '\\'))"
                 )
-                p += [pat] * 5 + [word, pat]
+                p += [pat] * 6 + [word, pat]
         if q.title:
             like("title", q.title)
         if q.artist:
@@ -316,6 +322,12 @@ class Database:
             cl.append("(t.folder = ? OR t.folder LIKE ? ESCAPE '\\')")
             p += [f, f.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + os.sep.replace("\\", "\\\\") + "%"]
         return ("WHERE " + " AND ".join(cl)) if cl else "", p
+
+    def distinct_values(self, column: str) -> list[str]:
+        if column not in ("genre", "artist", "album"):
+            raise ValueError(column)
+        q = f"SELECT DISTINCT {column} FROM tracks WHERE {column}<>'' ORDER BY {column} COLLATE NOCASE"
+        return [r[0] for r in self.conn().execute(q)]
 
     # -------------------------------------------------------------- stats
     def stats(self) -> dict:

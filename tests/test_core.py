@@ -437,3 +437,58 @@ def test_kv_library_match():
     idx = library_index([{"title": "Losing My Religion (Remastered)", "artist": "R.E.M."}])
     assert in_library(KVSong("Losing My Religion", "R.E.M.", 1991, "u"), idx)
     assert not in_library(KVSong("Hulapalu", "Andreas Gabalier", 2015, "u"), idx)
+
+
+# ------------------------------------------------------------------ editable metadata
+@pytest.mark.parametrize("ext", ["mp3", "wav", "flac", "ogg", "m4a"])
+def test_edit_metadata_roundtrip(tmp_path, ext):
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg needed")
+    raw = tmp_path / "raw.wav"
+    _write_wav(raw, make_track(120, 0, False, seconds=8))
+    f = tmp_path / f"t.{ext}"
+    if ext == "wav":
+        shutil.copy(raw, f)
+    else:
+        _encode(raw, f)
+    lib = Library(Database(tmp_path / "lib.sqlite3"), Settings(write_tags=False, workers=1))
+    lib.scan([str(f)])
+    t = lib.search(Query())[0]
+    assert t["bitrate"] and t["bitrate"] > 0 and t["size"] > 0
+    errs = lib.update_metadata([t["id"]], dict(title="Neu", artist="Künstlerin", album="Platte", genre="Deep House",
+                                               comment="Zeile 1\nZeile 2", energy=7))
+    assert errs == {}
+    md = read_metadata(str(f))
+    assert (md.title, md.artist, md.album, md.genre, md.energy) == ("Neu", "Künstlerin", "Platte", "Deep House", 7)
+    assert md.comment.replace("\r", "") == "Zeile 1\nZeile 2"
+    r = lib.db.get_track(t["id"])
+    assert (r["title"], r["energy"], r["comment"]) == ("Neu", 7, "Zeile 1\nZeile 2")
+    # clearing energy/comment, rescan keeps values consistent with the file
+    lib.update_metadata([t["id"]], dict(energy=None, comment=""))
+    assert read_metadata(str(f)).energy is None and read_metadata(str(f)).comment == ""
+    assert lib.scan([str(f)]).unchanged == 0 or lib.db.get_track(t["id"])["title"] == "Neu"
+
+
+def test_edit_metadata_db_only_and_search(tmp_path):
+    raw = tmp_path / "x.wav"
+    _write_wav(raw, make_track(120, 0, False, seconds=6))
+    lib = Library(Database(tmp_path / "lib.sqlite3"), Settings(write_edits=False))
+    lib.scan([str(raw)])
+    tid = lib.search(Query())[0]["id"]
+    before = os.stat(raw).st_mtime
+    lib.update_metadata([tid], dict(comment="Opener fürs Set", energy=11))   # 11 is out of range -> cleared
+    assert os.stat(raw).st_mtime == before
+    assert lib.db.get_track(tid)["energy"] is None
+    assert len(lib.search(Query(text="opener"))) == 1
+
+
+def test_energy_from_mixed_in_key_comment(tmp_path):
+    from mutagen.id3 import ID3, COMM
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg needed")
+    raw = tmp_path / "r.wav"
+    _write_wav(raw, make_track(120, 0, False, seconds=5))
+    f = tmp_path / "mik.mp3"
+    _encode(raw, f)
+    t = ID3(f); t.add(COMM(encoding=3, lang="eng", desc="", text="8A - Energy 6")); t.save(f)
+    assert read_metadata(str(f)).energy == 6

@@ -68,6 +68,9 @@ def apply_theme(app: QApplication, name: str) -> dict:
         QPushButton:hover {{ background: {c['hover']}; }}
         QPushButton:checked {{ background: {c['accent']}; color: {c['accent_text']}; border-color: {c['accent']}; }}
         QPushButton#primary {{ background: {c['accent']}; color: {c['accent_text']}; border-color: {c['accent']}; }}
+        QPushButton:disabled, QPushButton#primary:disabled {{ background: {c['window']}; color: {c['dim']};
+            border-color: {c['border']}; }}
+        QGroupBox:disabled {{ color: {c['dim']}; }}
         QTableView {{ background: {c['base']}; alternate-background-color: {c['alt']}; border: 1px solid {c['border']};
             border-radius: 8px; gridline-color: transparent; selection-background-color: {c['accent']}; }}
         QHeaderView::section {{ background: {c['window']}; color: {c['dim']}; border: none;

@@ -49,7 +49,8 @@ def _track_out(r: dict, notation: str = "camelot", full: bool = False) -> dict:
     }
     if full:
         out.update(
-            genre=r["genre"], duration_s=r["duration"], format=r["ext"], status=r["status"], error=r["error"] or None,
+            genre=r["genre"], comment=r.get("comment") or "", energy=r.get("energy"),
+            bitrate_kbps=r.get("bitrate"), file_size_bytes=r.get("size"), duration_s=r["duration"], format=r["ext"], status=r["status"], error=r["error"] or None,
             bpm_confidence=r["bpm_confidence"], key_confidence=r["key_confidence"],
             bpm_manual=bool(r["bpm_manual"]), key_manual=bool(r["key_manual"]),
             bpm_source=r.get("bpm_source") or None, key_source=r.get("key_source") or None,
@@ -257,6 +258,22 @@ def set_key(track_id: int, key: str | None, write_tags: bool | None = None) -> d
         code = k.code
     lib().set_key(track_id, code, write_tags)
     return get_track(track_id)
+
+
+@mcp.tool()
+def update_metadata(track_ids: list[int], title: str | None = None, artist: str | None = None,
+                    album: str | None = None, genre: str | None = None, comment: str | None = None,
+                    energy: int | None = None, write_tags: bool | None = None) -> dict:
+    """Edit title, artist, album, genre, comment and/or energy (1-10, 0 clears) of one or more tracks.
+    Only the given fields are changed. write_tags: also write them into the files (default: app setting)."""
+    changes = {k: v for k, v in dict(title=title, artist=artist, album=album, genre=genre, comment=comment,
+                                     energy=energy).items() if v is not None}
+    if not changes:
+        raise ValueError("No field given")
+    if "energy" in changes and not 0 <= int(changes["energy"]) <= 10:
+        raise ValueError("energy must be 0..10")
+    errors = lib().update_metadata(track_ids, changes, write_tags)
+    return {"updated": len(track_ids), "changes": changes, "errors": errors}
 
 
 @mcp.tool()

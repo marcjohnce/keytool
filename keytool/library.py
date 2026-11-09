@@ -17,7 +17,7 @@ from typing import Callable, Iterable
 from .config import Settings, db_path
 from .db import Database, Query, norm_path
 from .keys import Key
-from .tags import is_audio_file, parse_tag_bpm, parse_tag_key, read_metadata, write_bpm_key
+from .tags import EDITABLE_FIELDS, is_audio_file, parse_tag_bpm, parse_tag_key, read_metadata, write_bpm_key, write_metadata
 
 ProgressCB = Callable[[int, int, dict | None], None]   # (done, total, track_row)
 
@@ -101,7 +101,8 @@ class Library:
                 continue
             md = read_metadata(path)
             meta = dict(title=md.title, artist=md.artist, album=md.album, year=md.year, genre=md.genre,
-                        duration=md.duration, tag_bpm=md.tag_bpm, tag_key=md.tag_key)
+                        duration=md.duration, tag_bpm=md.tag_bpm, tag_key=md.tag_key, comment=md.comment,
+                        energy=md.energy, bitrate=md.bitrate)
             tid = self.db.upsert_file(path, st.st_size, st.st_mtime, meta)
             if not existing:
                 rep.added += 1
@@ -257,6 +258,37 @@ class Library:
                              key_confidence=1.0 if key_code else None, key_source="manual" if key_code else "")
         if (self.settings.write_tags if write is None else write) and key_code:
             self._write_tags_safe(track_id)
+
+    def update_metadata(self, track_ids: Iterable[int], changes: dict, write: bool | None = None) -> dict:
+        """Edit title/artist/album/genre/comment/energy for one or many tracks and (optionally) write them
+        into the files. Returns {track_id: error message} for files that could not be written."""
+        changes = {k: v for k, v in changes.items() if k in EDITABLE_FIELDS}
+        if "energy" in changes:
+            e = changes["energy"]
+            changes["energy"] = int(e) if e not in (None, "", 0) and 1 <= int(e) <= 10 else None
+        for k in ("title", "artist", "album", "genre", "comment"):
+            if k in changes:
+                changes[k] = (changes[k] or "").strip()
+        if not changes:
+            return {}
+        errors: dict[int, str] = {}
+        do_write = self.settings.write_edits if write is None else write
+        for tid in track_ids:
+            self.db.update_track(tid, **changes)
+            if not do_write:
+                continue
+            t = self.db.get_track(tid)
+            try:
+                tag_vals = dict(changes)
+                if "energy" in tag_vals:
+                    tag_vals["energy"] = tag_vals["energy"] or ""
+                write_metadata(t["path"], **tag_vals)
+                st = os.stat(t["path"])
+                self.db.update_track(tid, size=st.st_size, mtime=st.st_mtime)
+            except Exception as e:
+                errors[tid] = f"{type(e).__name__}: {e}"
+                self.db.update_track(tid, error=f"Tag write failed: {e}"[:500])
+        return errors
 
     def reset_manual(self, track_ids: Iterable[int]) -> None:
         for tid in track_ids:

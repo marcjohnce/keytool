@@ -17,6 +17,9 @@ class Metadata:
     genre: str = ""
     tag_bpm: str = ""
     tag_key: str = ""
+    comment: str = ""
+    energy: int | None = None          # 1..10 (Mixed-In-Key style energy level)
+    bitrate: int | None = None         # kbit/s
     duration: float | None = None
     extra: dict = field(default_factory=dict)
 
@@ -77,6 +80,14 @@ def _year(text: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def _energy(text) -> int | None:
+    try:
+        v = int(float(str(text).strip()))
+    except (TypeError, ValueError):
+        return None
+    return v if 1 <= v <= 10 else None
+
+
 def read_metadata(path: str) -> Metadata:
     import mutagen
 
@@ -88,6 +99,9 @@ def read_metadata(path: str) -> Metadata:
     if f is not None:
         if getattr(f, "info", None) is not None and getattr(f.info, "length", None):
             md.duration = float(f.info.length)
+        br = getattr(getattr(f, "info", None), "bitrate", None)
+        if br:
+            md.bitrate = int(round(br / 1000))
         tags = f.tags
         if tags is not None:
             cls = type(tags).__name__
@@ -99,6 +113,11 @@ def read_metadata(path: str) -> Metadata:
                 md.genre = _first(tags.get("TCON"))
                 md.tag_bpm = _first(tags.get("TBPM"))
                 md.tag_key = _first(tags.get("TKEY"))
+                comms = [c for c in tags.getall("COMM") if not c.desc.lower().startswith("itun")]
+                md.comment = _first(comms[0]) if comms else ""
+                for fr in tags.getall("TXXX"):
+                    if fr.desc.lower() in ("energylevel", "energy", "energy level"):
+                        md.energy = _energy(_first(fr))
             elif cls in ("MP4Tags",):
                 md.title = _first(tags.get("\xa9nam"))
                 md.artist = _first(tags.get("\xa9ART")) or _first(tags.get("aART"))
@@ -107,6 +126,9 @@ def read_metadata(path: str) -> Metadata:
                 md.genre = _first(tags.get("\xa9gen"))
                 md.tag_bpm = _first(tags.get("tmpo"))
                 md.tag_key = _first(tags.get("----:com.apple.iTunes:initialkey"))
+                md.comment = _first(tags.get("\xa9cmt"))
+                md.energy = _energy(_first(tags.get("----:com.apple.iTunes:EnergyLevel"))
+                                    or _first(tags.get("----:com.apple.iTunes:ENERGYLEVEL")))
             else:  # Vorbis comments (FLAC, OGG, Opus)
                 def g(*names):
                     for n in names:
@@ -124,6 +146,11 @@ def read_metadata(path: str) -> Metadata:
                 md.genre = g("genre")
                 md.tag_bpm = g("bpm", "tbpm")
                 md.tag_key = g("initialkey", "key")
+                md.comment = g("comment", "description")
+                md.energy = _energy(g("energylevel", "energy"))
+        if md.energy is None and md.comment:   # Mixed In Key writes e.g. "8A - Energy 6" into the comment
+            m = re.search(r"Energy\s*(\d{1,2})", md.comment, re.I)
+            md.energy = _energy(m.group(1)) if m else None
     if not (md.title and md.artist and md.album and md.year):
         _fill_from_container(path, md)
     if not md.title:
@@ -158,23 +185,54 @@ def _fill_from_container(path: str, md: Metadata) -> None:
     md.genre = md.genre or meta.get("genre", "").strip()
 
 
+EDITABLE_FIELDS = ("title", "artist", "album", "genre", "comment", "energy")
+
+
 def write_bpm_key(path: str, bpm: float | None, key_text: str | None) -> None:
     """Write BPM and key into the file's native tag format."""
+    write_metadata(path, bpm=bpm, key_text=key_text)
+
+
+def write_metadata(path: str, title: str | None = None, artist: str | None = None, album: str | None = None,
+                   genre: str | None = None, comment: str | None = None, energy: int | None | str = None,
+                   bpm: float | None = None, key_text: str | None = None) -> None:
+    """Write the given fields into the file's native tags (ID3 / Vorbis comments / MP4 atoms).
+
+    None = leave the field untouched, "" = remove it (energy: 0 or "" removes it).
+    """
     import mutagen
-    from mutagen.id3 import ID3, TBPM, TKEY, ID3NoHeaderError
+    from mutagen.id3 import ID3, COMM, TALB, TBPM, TCON, TIT2, TKEY, TPE1, TXXX, ID3NoHeaderError
 
     ext = os.path.splitext(path)[1].lower()
     bpm_txt = str(int(round(bpm))) if bpm else None
+    energy_txt = None if energy is None else (str(int(energy)) if energy not in ("", 0) else "")
+
+    def id3_apply(tags):
+        for frame_id, cls, val in (("TIT2", TIT2, title), ("TPE1", TPE1, artist), ("TALB", TALB, album),
+                                   ("TCON", TCON, genre), ("TBPM", TBPM, bpm_txt), ("TKEY", TKEY, key_text)):
+            if val is None:
+                continue
+            tags.delall(frame_id)
+            if val != "":
+                tags.add(cls(encoding=3, text=val))
+        if comment is not None:
+            for c in [c for c in tags.getall("COMM") if not c.desc.lower().startswith("itun")]:
+                tags.delall(c.HashKey)
+            if comment != "":
+                tags.add(COMM(encoding=3, lang="eng", desc="", text=comment))
+        if energy_txt is not None:
+            for fr in list(tags.getall("TXXX")):
+                if fr.desc.lower() in ("energylevel", "energy", "energy level"):
+                    tags.delall(fr.HashKey)
+            if energy_txt:
+                tags.add(TXXX(encoding=3, desc="EnergyLevel", text=energy_txt))
 
     if ext == ".mp3":
         try:
             tags = ID3(path)
         except ID3NoHeaderError:
             tags = ID3()
-        if bpm_txt:
-            tags.setall("TBPM", [TBPM(encoding=3, text=bpm_txt)])
-        if key_text:
-            tags.setall("TKEY", [TKEY(encoding=3, text=key_text)])
+        id3_apply(tags)
         tags.save(path)
         return
 
@@ -184,10 +242,7 @@ def write_bpm_key(path: str, bpm: float | None, key_text: str | None) -> None:
         f = WAVE(path)
         if f.tags is None:
             f.add_tags()
-        if bpm_txt:
-            f.tags.setall("TBPM", [TBPM(encoding=3, text=bpm_txt)])
-        if key_text:
-            f.tags.setall("TKEY", [TKEY(encoding=3, text=key_text)])
+        id3_apply(f.tags)
         f.save()
         return
 
@@ -197,10 +252,22 @@ def write_bpm_key(path: str, bpm: float | None, key_text: str | None) -> None:
         f = MP4(path)
         if f.tags is None:
             f.add_tags()
+        t = f.tags
+
+        def put(atom, val, free=False):
+            if val is None:
+                return
+            if val == "":
+                t.pop(atom, None)
+            else:
+                t[atom] = [MP4FreeForm(val.encode("utf-8"))] if free else [val]
+
+        put("\xa9nam", title); put("\xa9ART", artist); put("\xa9alb", album)
+        put("\xa9gen", genre); put("\xa9cmt", comment)
+        put("----:com.apple.iTunes:initialkey", key_text, free=True)
+        put("----:com.apple.iTunes:EnergyLevel", energy_txt, free=True)
         if bpm_txt:
-            f.tags["tmpo"] = [int(bpm_txt)]
-        if key_text:
-            f.tags["----:com.apple.iTunes:initialkey"] = [MP4FreeForm(key_text.encode("utf-8"))]
+            t["tmpo"] = [int(bpm_txt)]
         f.save()
         return
 
@@ -210,8 +277,12 @@ def write_bpm_key(path: str, bpm: float | None, key_text: str | None) -> None:
         raise ValueError(f"unsupported file: {path}")
     if f.tags is None:
         f.add_tags()
-    if bpm_txt:
-        f.tags["BPM"] = bpm_txt
-    if key_text:
-        f.tags["INITIALKEY"] = key_text
+    for name, val in (("TITLE", title), ("ARTIST", artist), ("ALBUM", album), ("GENRE", genre),
+                      ("COMMENT", comment), ("ENERGYLEVEL", energy_txt), ("BPM", bpm_txt), ("INITIALKEY", key_text)):
+        if val is None:
+            continue
+        for k in [k for k in f.tags.keys() if k.upper() == name]:
+            del f.tags[k]
+        if val != "":
+            f.tags[name] = val
     f.save()

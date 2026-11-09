@@ -212,7 +212,8 @@ class MainWindow(QMainWindow, Translatable):
         hh = self.table.horizontalHeader()
         hh.setSectionResizeMode(QHeaderView.Interactive)
         hh.setStretchLastSection(True)
-        for col, w in zip(range(len(TrackModel.COLUMNS)), (240, 170, 170, 60, 70, 70, 64, 160, 100, 60, 90, 300)):
+        for col, w in zip(range(len(TrackModel.COLUMNS)),
+                          (240, 170, 170, 56, 64, 64, 56, 60, 150, 100, 160, 56, 64, 90, 300)):
             self.table.setColumnWidth(col, w)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.table_menu)
@@ -241,8 +242,8 @@ class MainWindow(QMainWindow, Translatable):
 
         # ---------------- right: details
         self.details = DetailPanel()
-        self.details.bpm_changed.connect(self.set_bpm)
-        self.details.key_changed.connect(self.set_key)
+        self.details.save_requested.connect(self.save_details)
+        self.details.reveal_requested.connect(self.reveal)
         self.details.keywords_added.connect(self.add_keywords)
         self.details.keyword_removed.connect(self.remove_keyword)
         self.details.keyword_clicked.connect(lambda kw: self.f_keywords.set_selected([kw]))
@@ -354,6 +355,7 @@ class MainWindow(QMainWindow, Translatable):
         self.selection_changed()
 
     def refresh_keywords(self):
+        self.details.set_known_genres(self.lib.db.distinct_values("genre"))
         kws = self.lib.db.all_keywords()
         self.f_keywords.set_keywords(kws)
         self.details.set_known_keywords([k for k, _ in kws])
@@ -383,7 +385,15 @@ class MainWindow(QMainWindow, Translatable):
 
     def selection_changed(self, *_):
         rows = self.selected_rows()
-        self.details.set_rows(rows)
+        old_ids = [r["id"] for r in self.details.rows]
+        if self.details.has_unsaved() and old_ids != [r["id"] for r in rows]:
+            ch = self.details.changes()
+            self.details.dirty.clear()          # prevents asking again from the refresh below
+            if QMessageBox.question(self, tr("app_title"), tr("ask_save_changes"),
+                                    QMessageBox.Save | QMessageBox.Discard, QMessageBox.Save) == QMessageBox.Save:
+                self._apply_detail_changes(old_ids, ch)
+                rows = self.selected_rows()
+        self.details.set_rows(rows, keep_edits=True)
         if not hasattr(self, "player"):
             return
         cur = self.table.currentIndex()
@@ -480,6 +490,33 @@ class MainWindow(QMainWindow, Translatable):
             self.msg_lbl.setText(tr("cancelled") + " …")
 
     # ------------------------------------------------------------------ edits
+    def save_details(self, changes: dict):
+        self._apply_detail_changes([r["id"] for r in self.details.rows], changes)
+        self.details.set_rows(self.selected_rows())
+
+    def _apply_detail_changes(self, ids: list[int], changes: dict):
+        if not ids or not changes:
+            return
+        meta = {k: v for k, v in changes.items() if k not in ("bpm", "key")}
+
+        def work():
+            errs = self.lib.update_metadata(ids, meta) if meta else {}
+            for t in ids:
+                if "bpm" in changes:
+                    self.lib.set_bpm(t, changes["bpm"])
+                if "key" in changes:
+                    self.lib.set_key(t, changes["key"])
+            return errs
+
+        errs = self._released(ids, work)
+        msg = tr("edits_saved", n=len(ids))
+        if errs:
+            msg += " · " + tr("tag_errors", n=len(errs))
+        self.msg_lbl.setText(msg)
+        if "genre" in changes:
+            self.details.set_known_genres(self.lib.db.distinct_values("genre"))
+        self.refresh()
+
     def set_bpm(self, value: float):
         ids = self.selected_ids()
         self._released(ids, lambda: [self.lib.set_bpm(t, round(value, 2) if value > 0 else None) for t in ids])
@@ -614,6 +651,10 @@ class MainWindow(QMainWindow, Translatable):
             self.start_import(paths)
 
     def closeEvent(self, e):
+        if self.details.has_unsaved():
+            if QMessageBox.question(self, tr("app_title"), tr("ask_save_changes"),
+                                    QMessageBox.Save | QMessageBox.Discard, QMessageBox.Save) == QMessageBox.Save:
+                self.details.save()
         self.player.shutdown()
         self.s.save()
         if self.worker:

@@ -17,6 +17,7 @@ die Bibliothek zugreifen.
 | Schlüsselwörter | Pro Titel oder für viele Titel gleichzeitig; umbenennen und überall entfernen |
 | DJ-Extras | „Harmonisch passend“: Titel, die nach dem Camelot-Rad zur Auswahl passen (±6 % BPM); BPM halbieren/verdoppeln |
 | Tags | BPM & Tonart werden nach der Analyse **automatisch in die Datei geschrieben** (ID3 TBPM/TKEY, Vorbis BPM/INITIALKEY, MP4 tmpo/initialkey) – abschaltbar |
+| Detailansicht | Titel, Interpret, Album, Genre, Kommentar, Tonart, Energy (1–10) und Tempo bearbeiten – einzeln oder für viele Titel gleichzeitig; Dateityp, Bitrate, Dateigröße, Dauer und Pfad werden angezeigt. Änderungen werden in die Datei-Tags geschrieben (abschaltbar) |
 | Manuelle Korrektur | BPM/Tonart überschreiben; manuelle Werte bleiben bei einer erneuten Analyse erhalten |
 | Recherche | Titel bei **Karaoke-Version** (karaoke-version.de) nach Tonart(en) und BPM-Bereich suchen; Treffer direkt in KeyTool mit Tonart(en), Tempo, Dauer, Preis und Markierung, ob der Titel schon in der Bibliothek ist |
 | Player | Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
@@ -46,6 +47,11 @@ Ein separates FFmpeg ist nicht nötig.
 * **Tonart-Filter:** Die farbigen Felder entsprechen dem Camelot-Rad; die Beschriftung folgt der gewählten Notation.
 * **Schlüsselwörter:** Titel auswählen (Mehrfachauswahl möglich), rechts eingeben, mehrere mit Komma trennen.
   Ein Doppelklick auf ein Schlüsselwort filtert danach. Rechtsklick in der Filterliste: umbenennen/entfernen.
+* **Details bearbeiten:** rechts Felder ändern und „Speichern“ (Strg+S) oder „Verwerfen“. Bei mehreren
+  ausgewählten Titeln zeigen unterschiedliche Werte „(verschiedene Werte)“; übernommen werden nur die Felder,
+  die du änderst. Wechselst du mit ungespeicherten Änderungen den Titel, fragt KeyTool nach. Energy wird als
+  `TXXX:EnergyLevel` (MP3/WAV), `ENERGYLEVEL` (FLAC/OGG) bzw. `EnergyLevel` (M4A) gespeichert; Mixed-In-Key-
+  Kommentare wie „8A - Energy 6“ werden beim Einlesen erkannt.
 * **Abspielen:** Titel auswählen → Wellenform und Player oben laden den Titel. Leertaste oder Doppelklick
   startet/pausiert, Klicken oder Ziehen in der Wellenform spult. Werden während der Wiedergabe Tags in die
   Datei geschrieben, gibt der Player die Datei kurz frei und spielt an derselben Stelle weiter.
@@ -104,6 +110,7 @@ GUI und MCP-Server nutzen dieselbe Datenbank (`%APPDATA%\KeyTool\library.sqlite3
 | `library_stats` | Anzahl, Status, BPM-Spanne, Tonart-Verteilung |
 | `convert_key`, `list_all_keys` | Notationen umrechnen |
 | `list_keywords`, `add_keywords`, `remove_keywords`, `set_keywords`, `rename_keyword` | Schlüsselwörter |
+| `update_metadata` | Titel, Interpret, Album, Genre, Kommentar, Energy ändern (ein oder mehrere Titel) |
 | `set_bpm`, `set_key`, `write_tags` | Manuelle Korrektur und Tags schreiben |
 | `analyze_paths`, `reanalyze_tracks`, `get_job_status`, `cancel_job` | Dateien/Ordner einlesen und analysieren (Hintergrund-Job) |
 | `search_karaoke_version` | Karaoke-Version nach Tonart(en)/BPM durchsuchen, optional mit Tempo/Tonarten/Dauer je Treffer |
