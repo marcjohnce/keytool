@@ -30,6 +30,13 @@ def source_text(r: dict, field: str) -> str:
     return f"{tr('auto')} · {tr('confidence')} {int((conf or 0) * 100)} %"
 
 
+def fmt_datetime(ts) -> str:
+    import time
+    if not ts:
+        return ""
+    return time.strftime("%d.%m.%Y %H:%M" if tr.lang == "de" else "%Y-%m-%d %H:%M", time.localtime(ts))
+
+
 def fmt_duration(sec) -> str:
     if not sec:
         return ""
@@ -55,7 +62,7 @@ class Translatable:
 # =========================================================================== table model
 class TrackModel(QAbstractTableModel):
     COLUMNS = ["title", "artist", "album", "year", "bpm", "key", "energy", "duration", "keywords", "genre", "comment",
-               "ext", "bitrate", "status", "path"]
+               "ext", "bitrate", "status", "analyzed_ok_at", "path"]
     HEADER_KEYS = {"ext": "format"}
 
     def __init__(self, parent=None):
@@ -138,6 +145,8 @@ class TrackModel(QAbstractTableModel):
                 return tr(f"st_{v}") if v else ""
             if col in ("year", "energy", "bitrate"):
                 return str(v) if v else ""
+            if col == "analyzed_ok_at":
+                return fmt_datetime(v)
             if col == "comment":
                 return (v or "").replace("\n", " ⏎ ")
             return v or ""
@@ -145,7 +154,7 @@ class TrackModel(QAbstractTableModel):
             if col == "key":
                 k = Key.from_code(v)
                 return (k.camelot_number * 2 + (0 if k.minor else 1)) if k else 999
-            if col in ("bpm", "year", "duration", "energy", "bitrate"):
+            if col in ("bpm", "year", "duration", "energy", "bitrate", "analyzed_ok_at"):
                 return float(v) if v else 1e9
             if col == "keywords":
                 return ", ".join(v or []).lower()
@@ -557,12 +566,13 @@ class DetailPanel(QWidget, Translatable):
         # ---------------- file info (read only)
         self.g_file = QGroupBox(); self.t(self.g_file.setTitle, "g_file")
         ff = QFormLayout(self.g_file)
-        self.f_type, self.f_bitrate, self.f_size, self.f_duration, self.f_tags = (QLabel() for _ in range(5))
+        self.f_type, self.f_bitrate, self.f_size, self.f_duration, self.f_tags, self.f_analyzed = (QLabel() for _ in range(6))
         self.f_path = QLabel(); self.f_path.setWordWrap(True); self.f_path.setObjectName("dim")
-        for w in (self.f_type, self.f_bitrate, self.f_size, self.f_duration, self.f_tags, self.f_path):
+        for w in (self.f_type, self.f_bitrate, self.f_size, self.f_duration, self.f_tags, self.f_analyzed, self.f_path):
             w.setTextInteractionFlags(Qt.TextSelectableByMouse)
         for key, w in (("filetype", self.f_type), ("bitrate", self.f_bitrate), ("filesize", self.f_size),
-                       ("duration", self.f_duration), ("tag_values", self.f_tags), ("path", self.f_path)):
+                       ("duration", self.f_duration), ("tag_values", self.f_tags), ("analyzed_ok_at", self.f_analyzed),
+                       ("path", self.f_path)):
             lbl = QLabel(); self.t(lbl.setText, key); ff.addRow(lbl, w)
         self.reveal_btn = QPushButton(); self.t(self.reveal_btn.setText, "open_folder")
         self.reveal_btn.clicked.connect(lambda: self.rows and self.reveal_requested.emit(self.rows[0]["path"]))
@@ -774,6 +784,7 @@ class DetailPanel(QWidget, Translatable):
             self.f_size.setText(fmt_size(r.get("size")) or "–")
             self.f_duration.setText(fmt_duration(r.get("duration")) or "–")
             self.f_tags.setText(f"BPM {r['tag_bpm'] or '–'} · {tr('key')} {r['tag_key'] or '–'}")
+            self.f_analyzed.setText(fmt_datetime(r.get("analyzed_ok_at")) or tr("never"))
             self.f_path.setText(r["path"] + (f"\n⚠ {r['error']}" if r.get("error") else ""))
         elif rows:
             types = sorted({(r["ext"] or "").upper() for r in rows})
@@ -784,9 +795,10 @@ class DetailPanel(QWidget, Translatable):
             self.f_size.setText(fmt_size(sum(r.get("size") or 0 for r in rows)) + f"  ({tr('total')})")
             self.f_duration.setText(fmt_duration(sum(r.get("duration") or 0 for r in rows)))
             self.f_tags.setText("")
+            self.f_analyzed.setText("")
             self.f_path.setText("")
         else:
-            for w in (self.f_type, self.f_bitrate, self.f_size, self.f_duration, self.f_tags, self.f_path):
+            for w in (self.f_type, self.f_bitrate, self.f_size, self.f_duration, self.f_tags, self.f_analyzed, self.f_path):
                 w.setText("")
 
     def _fill_keywords(self):

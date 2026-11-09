@@ -82,6 +82,15 @@ Ein separates FFmpeg ist nicht nötig.
   * Doppelklick öffnet die Song-Seite, „Suche im Browser öffnen“ die gleiche Suche auf der Website.
   * Die AGB von Karaoke-Version untersagen Crawling nur für KI-Training, die robots.txt erlaubt die Suchseiten.
     KeyTool ruft nur ab, was du anforderst, identifiziert sich als „KeyTool“ und hält Pausen zwischen Anfragen ein.
+* **Analyse-Warteschlange** (☰ Warteschlange in der Toolbar): Alle Analysen – Import, „Ausstehende analysieren“,
+  „Erneut analysieren“ – landen in einer Warteschlange, die von oben nach unten abgearbeitet wird (bei mehreren
+  parallelen Analysen starten immer die obersten wartenden Titel; mit „Parallele Analysen = 1“ streng nacheinander).
+  * **Jetzt analysieren** (Rechtsklick in der Liste oder in der Warteschlange) setzt Titel an die Spitze.
+  * **Aus Warteschlange entfernen** nimmt wartende Titel heraus; ihr Status wird auf den Stand vor dem Einreihen
+    zurückgesetzt. „Wartende entfernen“ leert die Warteschlange, laufende Analysen werden noch beendet.
+  * Doppelklick zeigt den Titel in der Liste; fertige Einträge lassen sich ausblenden.
+* **Zuletzt analysiert:** Für jede Datei wird der Zeitpunkt der letzten *erfolgreichen* Analyse gespeichert und in
+  Liste (Spalte „Zuletzt analysiert“) und Details angezeigt; fehlgeschlagene Analysen ändern ihn nicht.
 * **Titel in andere Programme ziehen:** Ausgewählte Titel (auch mehrere) aus der Liste per Drag & Drop in einen
   Browser (z. B. Upload-Feld), einen Audioplayer, den Explorer oder DJ-Software ziehen – übergeben werden die
   Originaldateien. Zurück ins KeyTool-Fenster gezogen passiert nichts.
@@ -173,6 +182,7 @@ Umgebungsvariablen: `KEYTOOL_DATA_DIR` (Ordner für Einstellungen + Datenbank), 
 ```
 keytool/
   analysis.py       BPM- und Tonart-Erkennung (klassisch / schnell)
+  analysis_queue.py Analyse-Warteschlange (Reihenfolge, „Jetzt analysieren“, absturzsicher)
   compare.py        Vergleich der Tonart-Verfahren an eigenen Titeln
   keys.py           Tonart-Modell, Notationen, Camelot-Rad
   tags.py           Metadaten lesen, BPM/Tonart in Tags schreiben

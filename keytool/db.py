@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS tracks (
     status          TEXT DEFAULT 'pending',
     error           TEXT DEFAULT '',
     added_at        REAL,
-    analyzed_at     REAL
+    analyzed_at     REAL,
+    analyzed_ok_at  REAL
 );
 CREATE INDEX IF NOT EXISTS ix_tracks_bpm ON tracks(bpm);
 CREATE INDEX IF NOT EXISTS ix_tracks_key ON tracks(key);
@@ -58,11 +59,11 @@ CREATE INDEX IF NOT EXISTS ix_keywords_kw ON keywords(keyword COLLATE NOCASE);
 TRACK_COLUMNS = [
     "id", "path", "folder", "filename", "ext", "size", "mtime", "title", "artist", "album", "year",
     "genre", "duration", "bpm", "bpm_confidence", "key", "key_confidence", "bpm_manual", "key_manual",
-    "tag_bpm", "tag_key", "bpm_source", "key_source", "comment", "energy", "bitrate", "status", "error", "added_at", "analyzed_at",
+    "tag_bpm", "tag_key", "bpm_source", "key_source", "comment", "energy", "bitrate", "status", "error", "added_at", "analyzed_at", "analyzed_ok_at",
 ]
 
 SORTABLE = {"title", "artist", "album", "year", "bpm", "key", "duration", "added_at", "filename", "genre", "energy",
-            "comment", "bitrate", "size"}
+            "comment", "bitrate", "size", "analyzed_ok_at"}
 
 
 def norm_path(p: str | os.PathLike) -> str:
@@ -100,7 +101,8 @@ class Database:
         # migrations for libraries created by older versions
         cols = {r[1] for r in c.execute("PRAGMA table_info(tracks)")}
         for col, decl in (("bpm_source", "TEXT DEFAULT ''"), ("key_source", "TEXT DEFAULT ''"),
-                          ("comment", "TEXT DEFAULT ''"), ("energy", "INTEGER"), ("bitrate", "INTEGER")):
+                          ("comment", "TEXT DEFAULT ''"), ("energy", "INTEGER"), ("bitrate", "INTEGER"),
+                          ("analyzed_ok_at", "REAL")):
             if col not in cols:
                 c.execute(f"ALTER TABLE tracks ADD COLUMN {col} {decl}")
 
@@ -172,7 +174,8 @@ class Database:
         t = self.get_track(track_id)
         if not t:
             return
-        upd: dict[str, Any] = dict(status="ok", error="", analyzed_at=time.time())
+        now = time.time()
+        upd: dict[str, Any] = dict(status="ok", error="", analyzed_at=now, analyzed_ok_at=now)  # last successful run
         # fields missing from the result were not analysed (e.g. BPM-only analysis) and stay untouched
         if "bpm" in result and not t["bpm_manual"] and not (keep_tag_values and t["bpm_source"] == "tags" and t["bpm"]):
             upd.update(bpm=result.get("bpm"), bpm_confidence=result.get("bpm_confidence"), bpm_source="analysis")

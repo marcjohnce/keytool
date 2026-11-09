@@ -19,7 +19,9 @@ from ..i18n import set_language, tr
 from ..keys import NOTATIONS, Key
 from ..library import Library
 from ..tags import AUDIO_EXTENSIONS
+from ..analysis_queue import DONE, ERROR, RUNNING, WAITING, AnalysisQueue
 from .player import PlayerPanel
+from .queue_panel import QueueBridge, QueuePanel
 from .settings_dialog import SettingsDialog
 from .theme import apply_theme, resolve_theme
 from .widgets import DetailPanel, ID_ROLE, KeyFilter, KeywordFilter, SORT_ROLE, TrackModel, Translatable
@@ -27,34 +29,25 @@ from .widgets import DetailPanel, ID_ROLE, KeyFilter, KeywordFilter, SORT_ROLE, 
 
 # =========================================================================== worker
 class Worker(QObject):
+    """Scans files/folders (reads tags, finds new/changed files). The analysis itself runs in the queue."""
     scan_progress = Signal(int)
-    progress = Signal(int, int, object)
     finished = Signal(dict)
 
-    def __init__(self, library: Library, paths: list[str] | None = None, ids: list[int] | None = None,
-                 keep_tag_values: bool = True):
+    def __init__(self, library: Library, paths: list[str]):
         super().__init__()
-        self.lib, self.paths, self.ids = library, paths, ids
-        self.keep_tag_values = keep_tag_values
+        self.lib, self.paths = library, paths
         self.cancel = threading.Event()
 
     def run(self):
         try:
-            if self.paths is not None:
-                rep = self.lib.scan(self.paths, self.cancel, lambda n, _p: self.scan_progress.emit(n))
-                res = self.lib.analyze(rep.to_analyze or [], self._prog, self.cancel)
-                res.update(found=rep.found, added=rep.added, unchanged=rep.unchanged, from_tags=rep.from_tags)
-            else:
-                res = self.lib.analyze(self.ids or [], self._prog, self.cancel, keep_tag_values=self.keep_tag_values)
-                res.setdefault("unchanged", 0)
+            rep = self.lib.scan(self.paths, self.cancel, lambda n, _p: self.scan_progress.emit(n))
+            res = dict(found=rep.found, added=rep.added, unchanged=rep.unchanged, from_tags=rep.from_tags,
+                       to_analyze=rep.to_analyze or [], cancelled=self.cancel.is_set())
         except Exception as e:  # never let the thread die silently
-            res = dict(ok=0, errors=1, unchanged=0, error=str(e))
+            res = dict(found=0, added=0, unchanged=0, from_tags=0, to_analyze=[], error=str(e))
         finally:
             self.lib.db.close()
         self.finished.emit(res)
-
-    def _prog(self, done, total, row):
-        self.progress.emit(done, total, row)
 
 
 class SortProxy(QSortFilterProxyModel):
@@ -73,6 +66,11 @@ class MainWindow(QMainWindow, Translatable):
         set_language(self.s.language)
         self.thread: QThread | None = None
         self.worker: Worker | None = None
+        self._scan_backlog: list[list[str]] = []
+        self._batch_done = 0
+        self.queue_bridge = QueueBridge()
+        self.queue_bridge.changed.connect(self.on_queue_event)
+        self.queue = AnalysisQueue(library, on_change=self.queue_bridge.changed.emit)
         self.harmonic_ids: list[int] | None = None
         self.setAcceptDrops(True)
         self.resize(1480, 880)
@@ -80,6 +78,7 @@ class MainWindow(QMainWindow, Translatable):
         self._build_toolbar()
         self._build_central()
         self._build_statusbar()
+        self._build_queue_dock()
         self.search_timer = QTimer(self, singleShot=True, interval=180, timeout=self.refresh)
         QShortcut(QKeySequence.Find, self, activated=lambda: (self.f_text.setFocus(), self.f_text.selectAll()))
         QShortcut(QKeySequence.Delete, self.table, activated=self.remove_selected)
@@ -108,9 +107,12 @@ class MainWindow(QMainWindow, Translatable):
         self.a_reanalyze = self._act("reanalyze", self.reanalyze_selected, "↻")
         self.a_tags = self._act("write_tags", self.write_tags_selected, "🏷")
         self.a_research = self._act("research", lambda: self.open_research(False), "🔎")
+        self.a_queue = QAction(self)
+        self.a_queue.setCheckable(True)
+        self.a_queue.toggled.connect(lambda on: self.queue_dock.setVisible(on))
         self.a_settings = self._act("settings", self.open_settings, "⚙")
         self.a_files.setShortcut(QKeySequence.Open)
-        for a in (self.a_files, self.a_folder, None, self.a_pending, self.a_reanalyze, self.a_tags, None,
+        for a in (self.a_files, self.a_folder, None, self.a_pending, self.a_reanalyze, self.a_tags, self.a_queue, None,
                   self.a_research):
             tb.addSeparator() if a is None else tb.addAction(a)
         from PySide6.QtWidgets import QSizePolicy
@@ -217,7 +219,7 @@ class MainWindow(QMainWindow, Translatable):
         hh.setSectionResizeMode(QHeaderView.Interactive)
         hh.setStretchLastSection(True)
         for col, w in zip(range(len(TrackModel.COLUMNS)),
-                          (240, 170, 170, 56, 64, 64, 56, 60, 150, 100, 160, 56, 64, 90, 300)):
+                          (240, 170, 170, 56, 64, 64, 56, 60, 150, 100, 160, 56, 64, 90, 120, 300)):
             self.table.setColumnWidth(col, w)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.table_menu)
@@ -270,6 +272,19 @@ class MainWindow(QMainWindow, Translatable):
         split.setStretchFactor(0, 0); split.setStretchFactor(1, 1); split.setStretchFactor(2, 0)
         split.setSizes([330, 800, 370])
         self.setCentralWidget(split)
+
+    def _build_queue_dock(self):
+        from PySide6.QtWidgets import QDockWidget
+        self.queue_panel = QueuePanel(self.queue)
+        self.queue_panel.select_track.connect(self.select_track_by_id)
+        self.queue_dock = QDockWidget(self)
+        self.queue_dock.setObjectName("queueDock")
+        self.queue_dock.setWidget(self.queue_panel)
+        self.queue_dock.setFeatures(QDockWidget.DockWidgetClosable | QDockWidget.DockWidgetMovable)
+        self.addDockWidget(Qt.BottomDockWidgetArea, self.queue_dock)
+        self.queue_dock.visibilityChanged.connect(lambda v: (self.a_queue.blockSignals(True), self.a_queue.setChecked(v),
+                                                             self.a_queue.blockSignals(False)))
+        self.queue_dock.hide()
 
     def _build_statusbar(self):
         sb = self.statusBar()
@@ -332,6 +347,10 @@ class MainWindow(QMainWindow, Translatable):
         self.f_keywords.retranslate()
         self.details.retranslate()
         self.player.retranslate()
+        if hasattr(self, "queue_panel"):
+            self.queue_panel.retranslate()
+            self.queue_dock.setWindowTitle(tr("queue_title"))
+            self.update_progress()
         self.model.refresh_all()
         self.update_count()
 
@@ -478,57 +497,101 @@ class MainWindow(QMainWindow, Translatable):
 
     def analyze_pending(self):
         ids = self.lib.db.pending_ids() + [r["id"] for r in self.lib.search(Query(status="error"))]
-        if ids:
-            self.start_worker(Worker(self.lib, ids=ids))
+        self.enqueue(ids, keep_tag_values=True)
 
     def reanalyze_selected(self):
-        ids = self.selected_ids()
-        if ids:  # explicit re-analysis: really analyse, even if the values came from tags
-            self.start_worker(Worker(self.lib, ids=ids, keep_tag_values=False))
+        # explicit re-analysis: really analyse, even if the values came from tags -> end of the queue
+        self.enqueue(self.selected_ids(), keep_tag_values=False)
+
+    def analyze_now_selected(self):
+        # "analyse now": to the top of the queue
+        self.enqueue(self.selected_ids(), keep_tag_values=False, front=True)
+
+    def enqueue(self, ids: list[int], keep_tag_values: bool, front: bool = False):
+        if not ids:
+            return
+        if not self.queue.is_busy():
+            self._batch_done = 0
+        self.queue.add(ids, keep_tag_values=keep_tag_values, front=front)
+        self.queue_dock.show()
+        self.refresh()
+
+    def select_track_by_id(self, track_id: int):
+        for row in range(self.proxy.rowCount()):
+            if self.proxy.index(row, 0).data(ID_ROLE) == track_id:
+                self.table.selectRow(row)
+                self.table.scrollTo(self.proxy.index(row, 0))
+                return
 
     def start_import(self, paths: list[str]):
-        self.start_worker(Worker(self.lib, paths=paths))
-
-    def start_worker(self, worker: Worker):
-        if self.thread is not None:
-            QMessageBox.information(self, tr("app_title"), tr("busy"))
+        if self.thread is not None:                     # a scan is running -> do this one afterwards
+            self._scan_backlog.append(paths)
             return
+        worker = Worker(self.lib, paths)
         self.worker = worker
         self.thread = QThread(self)
         worker.moveToThread(self.thread)
         self.thread.started.connect(worker.run)
         worker.scan_progress.connect(lambda n: self.msg_lbl.setText(tr("scanning", n=n)))
-        worker.progress.connect(self.on_progress)
-        worker.finished.connect(self.on_finished)
+        worker.finished.connect(self.on_scan_finished)
         self.progress.setRange(0, 0); self.progress.show(); self.cancel_btn.show()
         self.msg_lbl.setText(tr("scanning", n=0))
         self.thread.start()
 
-    def on_progress(self, done: int, total: int, row):
-        self.progress.setRange(0, total)
-        self.progress.setValue(done)
-        if row:
-            self.msg_lbl.setText(tr("analyzing", done=done, total=total, name=row.get("title") or row.get("filename")))
-            self.model.update_row(row)
-        if done % 20 == 0 or done == total:
-            self.refresh()
-
-    def on_finished(self, res: dict):
+    def on_scan_finished(self, res: dict):
         self.thread.quit(); self.thread.wait()
         self.thread = None; self.worker = None
-        self.progress.hide(); self.cancel_btn.hide()
-        if res.get("cancelled"):
-            self.msg_lbl.setText(tr("cancelled"))
-        else:
-            self.msg_lbl.setText(tr("done_msg", ok=res.get("ok", 0), errors=res.get("errors", 0),
-                                    from_tags=res.get("from_tags", 0),
-                                    unchanged=res.get("unchanged", 0)) + (f" – {res['error']}" if res.get("error") else ""))
+        if res.get("to_analyze"):
+            self.enqueue(res["to_analyze"], keep_tag_values=True)
+        self.msg_lbl.setText(tr("scan_done", found=res.get("found", 0), from_tags=res.get("from_tags", 0),
+                                unchanged=res.get("unchanged", 0), queued=len(res.get("to_analyze", [])))
+                             + (f" – {res['error']}" if res.get("error") else ""))
         self.refresh()
+        if self._scan_backlog:
+            self.start_import(self._scan_backlog.pop(0))
+        else:
+            self.update_progress()
+
+    def on_queue_event(self, event: str, item):
+        if event == "finished" and item is not None:
+            self._batch_done += 1
+            row = self.lib.db.get_track(item.track_id)
+            if row:
+                row["keywords"] = self.lib.db.keywords_for([row["id"]])[row["id"]]
+                self.model.update_row(row)
+                if item.track_id in self.selected_ids():
+                    self.selection_changed()
+        self.queue_panel.schedule()
+        self.update_progress()
+        if not self.queue.is_busy() and event == "finished":
+            c = self.queue.counts()
+            self.msg_lbl.setText(tr("queue_all_done", done=c[DONE], errors=c[ERROR]))
+            self.refresh()
+
+    def update_progress(self):
+        c = self.queue.counts()
+        busy = c[WAITING] + c[RUNNING]
+        self.a_queue.setText(f"☰  {tr('queue')}" + (f" ({busy})" if busy else ""))
+        if self.thread is not None:                     # scanning shows its own (indeterminate) progress
+            return
+        if busy:
+            total = self._batch_done + busy
+            self.progress.setRange(0, total); self.progress.setValue(self._batch_done)
+            self.progress.show(); self.cancel_btn.show()
+            running = [i for i in self.queue.items() if i.state == RUNNING]
+            if running:
+                self.msg_lbl.setText(tr("analyzing", done=self._batch_done + 1, total=total, name=running[0].title))
+        else:
+            self.progress.hide(); self.cancel_btn.hide()
 
     def cancel_work(self):
+        """Stop scanning and drop all waiting tracks (running analyses finish)."""
         if self.worker:
             self.worker.cancel.set()
-            self.msg_lbl.setText(tr("cancelled") + " …")
+        self._scan_backlog.clear()
+        n = self.queue.clear_waiting()
+        self.msg_lbl.setText(tr("cancelled") + (f" ({n})" if n else ""))
+        self.update_progress()
 
     # ------------------------------------------------------------------ edits
     def save_details(self, changes: dict):
@@ -619,6 +682,7 @@ class MainWindow(QMainWindow, Translatable):
         m = QMenu(self)
         m.addAction("▶  " + tr("play"), self.player.play)
         m.addSeparator()
+        m.addAction("⚡  " + tr("analyze_now"), self.analyze_now_selected)
         m.addAction(tr("reanalyze"), self.reanalyze_selected)
         m.addAction(tr("write_tags"), self.write_tags_selected)
         m.addAction(tr("reset_manual"), lambda: (self.lib.reset_manual(self.selected_ids()), self.reanalyze_selected()))
@@ -700,6 +764,7 @@ class MainWindow(QMainWindow, Translatable):
                                     QMessageBox.Save | QMessageBox.Discard, QMessageBox.Save) == QMessageBox.Save:
                 self.details.save()
         self.player.shutdown()
+        self.queue.shutdown()
         self.s.save()
         if self.worker:
             self.worker.cancel.set()

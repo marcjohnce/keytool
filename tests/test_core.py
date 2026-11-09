@@ -1,4 +1,5 @@
 import os
+import time
 import shutil
 import subprocess
 import sys
@@ -798,3 +799,77 @@ def test_track_list_drag_mime(tmp_path, monkeypatch):
     assert [u.toLocalFile() for u in md.urls()] == files                  # one entry per row, missing file skipped
     assert md.text().splitlines() == files
     assert m.supportedDragActions() == Qt.CopyAction
+
+
+# ------------------------------------------------------------------ analysis queue
+def _queue_lib(tmp_path, names, workers=1):
+    from keytool.library import Library
+    for i, n in enumerate(names):
+        _write_wav(tmp_path / f"{n}.wav", make_track(110 + i, i % 12, False, seconds=6, seed=i))
+    lib = Library(Database(tmp_path / "lib.sqlite3"), Settings(write_tags=False, workers=workers))
+    lib.scan([str(tmp_path)])
+    ids = {r["filename"][:-4]: r["id"] for r in lib.search(Query())}
+    return lib, ids
+
+
+def _log_order(log):
+    return [l.split("|")[0][:-4] for l in log.read_text().split()] if log.exists() else []
+
+
+def test_queue_order_and_analyse_now(tmp_path, monkeypatch):
+    from crashy import slow_recording_worker
+    from keytool.analysis_queue import AnalysisQueue, DONE
+    log = tmp_path / "order.log"
+    monkeypatch.setenv("KEYTOOL_TEST_LOG", str(log))
+    names = ["a", "b", "c", "d", "e"]
+    lib, ids = _queue_lib(tmp_path, names, workers=1)
+    lib.worker_fn = slow_recording_worker
+    q = AnalysisQueue(lib)
+    q.add([ids[n] for n in names], keep_tag_values=False)
+    time.sleep(0.2)                                   # 'a' is running now
+    q.move_to_front([ids["e"], ids["d"]])             # "analyse now": e, then d go to the top
+    q.remove([ids["b"]])
+    assert q.wait_idle(120)
+    assert _log_order(log) == ["a", "e", "d", "c"]    # strictly top to bottom, b removed
+    st = {i.track_id: i.state for i in q.items()}
+    assert all(st[ids[n]] == DONE for n in "aecd") and ids["b"] not in st
+    assert lib.db.get_track(ids["c"])["status"] == "ok" and lib.db.get_track(ids["c"])["bpm"]
+    # re-adding a finished track queues it again; adding a waiting one twice does not duplicate it
+    assert q.add([ids["a"], ids["a"]], keep_tag_values=False) == 1
+    assert q.wait_idle(60) and _log_order(log)[-1] == "a"
+    q.shutdown()
+
+
+def test_queue_parallel_starts_in_order(tmp_path, monkeypatch):
+    from crashy import slow_recording_worker
+    from keytool.analysis_queue import AnalysisQueue
+    log = tmp_path / "order.log"
+    monkeypatch.setenv("KEYTOOL_TEST_LOG", str(log))
+    names = ["p1", "p2", "p3", "p4"]
+    lib, ids = _queue_lib(tmp_path, names, workers=2)
+    lib.worker_fn = slow_recording_worker
+    q = AnalysisQueue(lib)
+    q.add([ids[n] for n in names])
+    assert q.wait_idle(120)
+    order = _log_order(log)
+    assert set(order[:2]) == {"p1", "p2"} and set(order[2:]) == {"p3", "p4"}
+    q.shutdown()
+
+
+def test_queue_survives_crashing_worker(tmp_path, monkeypatch):
+    from crashy import crashing_recording_worker
+    from keytool.analysis_queue import AnalysisQueue, DONE, ERROR
+    monkeypatch.setenv("KEYTOOL_TEST_LOG", str(tmp_path / "log"))
+    names = ["ok1", "x CRASH", "ok2", "ok3"]
+    lib, ids = _queue_lib(tmp_path, names, workers=2)
+    lib.worker_fn = crashing_recording_worker
+    events = []
+    q = AnalysisQueue(lib, on_change=lambda ev, it: events.append(ev))
+    q.add([ids[n] for n in names], keep_tag_values=False)
+    assert q.wait_idle(180)
+    st = {i.track_id: i for i in q.items()}
+    assert st[ids["x CRASH"]].state == ERROR and "crash" in st[ids["x CRASH"]].error.lower()
+    assert all(st[ids[n]].state == DONE for n in ("ok1", "ok2", "ok3"))
+    assert lib.db.get_track(ids["x CRASH"])["status"] == "error"
+    assert "started" in events and "finished" in events
+    q.shutdown()

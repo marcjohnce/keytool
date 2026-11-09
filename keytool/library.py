@@ -139,6 +139,34 @@ class Library:
         return False
 
     # ----------------------------------------------------------- analysis
+    # ----------------------------------------------------------- single analysis job (shared by queue)
+    @staticmethod
+    def job_parts(t: dict, keep_tag_values: bool = True) -> tuple[bool, bool]:
+        """(analyse BPM?, analyse key?) - values from the file tags (on import) and manual values are
+        kept, so only the missing part is computed (e.g. BPM only if the key is in the tags)."""
+        def needs(field: str) -> bool:
+            if t[f"{field}_manual"] and t[field]:
+                return False
+            return not (keep_tag_values and t[f"{field}_source"] == "tags" and t[field])
+        return needs("bpm"), needs("key")
+
+    def submit_args(self, t: dict, keep_tag_values: bool = True) -> tuple | None:
+        """Arguments for worker_fn, or None if nothing has to be analysed."""
+        do_bpm, do_key = self.job_parts(t, keep_tag_values)
+        if not (do_bpm or do_key):
+            return None
+        s = self.settings
+        return (t["path"], s.bpm_min, s.bpm_max, do_bpm, do_key, s.key_method)
+
+    def store_result(self, track_id: int, result: dict | None, error: str | None,
+                     keep_tag_values: bool = True) -> None:
+        if error is None:
+            self.db.set_analysis(track_id, result, keep_tag_values)
+            if self.settings.write_tags:
+                self._write_tags_safe(track_id, only_new=True)
+        else:
+            self.db.set_error(track_id, error)
+
     def analyze(self, track_ids: Iterable[int], progress: ProgressCB | None = None,
                 cancel: threading.Event | None = None, workers: int | None = None,
                 keep_tag_values: bool = True) -> dict:
@@ -154,14 +182,7 @@ class Library:
         tracks = {t["id"]: t for t in self.db.get_tracks(ids)}
         order = [i for i in ids if i in tracks]
 
-        # what has to be analysed per track: values taken from the file tags (on import) and manual
-        # values are kept, so only the missing part is computed (e.g. BPM only if the key is in the tags)
-        def needs(t: dict, field: str) -> bool:
-            if t[f"{field}_manual"] and t[field]:
-                return False
-            return not (keep_tag_values and t[f"{field}_source"] == "tags" and t[field])
-
-        jobs = {tid: (needs(tracks[tid], "bpm"), needs(tracks[tid], "key")) for tid in order}
+        jobs = {tid: self.job_parts(tracks[tid], keep_tag_values) for tid in order}
         for tid in [t for t in order if not any(jobs[t])]:      # nothing left to analyse
             self.db.update_track(tid, status="ok", error="")
         order = [t for t in order if any(jobs[t])]
@@ -178,14 +199,8 @@ class Library:
 
         def finish(tid: int, res: dict | None, err: str | None):
             handled.add(tid)
-            if err is None:
-                self.db.set_analysis(tid, res, keep_tag_values)
-                if s.write_tags:
-                    self._write_tags_safe(tid, only_new=True)
-                stats["ok"] += 1
-            else:
-                self.db.set_error(tid, err)
-                stats["errors"] += 1
+            self.store_result(tid, res, err, keep_tag_values)
+            stats["ok" if err is None else "errors"] += 1
             stats["done"] += 1
             if progress:
                 progress(stats["done"], total, self.db.get_track(tid))
