@@ -7,7 +7,7 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 datas, binaries, hidden = [], [], []
-for pkg in ("librosa", "av", "mcp", "soundfile", "lazy_loader", "pooch"):
+for pkg in ("librosa", "av", "mcp", "soundfile", "lazy_loader", "pooch", "pedalboard"):
     try:
         d, b, h = collect_all(pkg)
         datas += d; binaries += b; hidden += h

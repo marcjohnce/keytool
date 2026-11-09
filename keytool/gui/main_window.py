@@ -348,6 +348,8 @@ class MainWindow(QMainWindow, Translatable):
 
     def refresh(self):
         selected = set(self.selected_ids())
+        cur = self.table.currentIndex() if hasattr(self, "table") else None
+        current_id = cur.data(ID_ROLE) if cur is not None and cur.isValid() else None
         if self.harmonic_ids is not None:
             rows = [r for r in self.lib.search(self.build_query()) if r["id"] in set(self.harmonic_ids)]
         else:
@@ -363,6 +365,11 @@ class MainWindow(QMainWindow, Translatable):
                 if idx.data(ID_ROLE) in selected:
                     sel.select(idx, self.proxy.index(row, self.proxy.columnCount() - 1))
             sm.select(sel, QItemSelectionModel.ClearAndSelect)
+            # keep the current row too (needed for previous/next track and keyboard navigation)
+            for row in range(self.proxy.rowCount()):
+                if self.proxy.index(row, 0).data(ID_ROLE) == current_id:
+                    sm.setCurrentIndex(self.proxy.index(row, 0), QItemSelectionModel.NoUpdate)
+                    break
         self.update_count()
         self.selection_changed()
 

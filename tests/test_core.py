@@ -692,3 +692,33 @@ def test_import_analyses_only_missing_values(tmp_path, tagged_dir, monkeypatch):
     log.write_text("")
     lib.analyze([k["id"]], keep_tag_values=False)
     assert log.read_text().strip() == "key_only.flac|1|1"
+
+
+# ------------------------------------------------------------------ transposition (+-1 semitone, original tempo)
+@pytest.mark.parametrize("st,expected", [(1, "A#m"), (-1, "G#m")])
+def test_transpose_render(tmp_path, monkeypatch, st, expected):
+    pytest.importorskip("pedalboard")
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg needed")
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path / "data"))
+    from keytool.transpose import cached, render
+    from keytool.analysis import analyze_file
+    from keytool.tags import write_metadata
+    import soundfile as sf
+    raw = tmp_path / "raw.wav"
+    _write_wav(raw, make_track(124, 9, True, seconds=70))          # A minor, 124 BPM, > 2 chunks
+    src = tmp_path / "song.mp3"
+    _encode(raw, src)
+    out = render(str(src), st)
+    r, o = analyze_file(out), analyze_file(str(src))
+    assert Key.from_code(r.key).sharps() == expected               # pitch moved by one semitone
+    assert abs(r.bpm - o.bpm) < 0.5 and abs(r.duration - o.duration) < 0.05   # tempo and length unchanged
+    d, sr = sf.read(out)
+    assert d.shape[1] == 2
+    jumps = np.abs(np.diff(d[:, 0]))
+    b = int(30 * sr)
+    assert jumps[b - 300:b + 300].max() <= np.percentile(jumps, 99.95) + 1e-6   # no click at the chunk boundary
+    # editing tags does not invalidate the cached version, a different transposition is separate
+    write_metadata(str(src), title="Neu", bpm=124, key_text="8A")
+    assert cached(str(src), st) == out
+    assert cached(str(src), -st) is None

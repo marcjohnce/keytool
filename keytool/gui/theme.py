@@ -100,6 +100,8 @@ def apply_theme(app: QApplication, name: str) -> dict:
             background: #d2deff; border-color: #d2deff; }}
         #playerPanel QPushButton:disabled, #playerPanel QPushButton#primary:disabled, #playerPanel QToolButton:disabled {{
             background: rgba(255,255,255,0.35); color: rgba(0,0,0,0.45); border-color: transparent; }}
+        #playerPanel QPushButton#transpose:checked {{ background: #111111; color: #ffffff; border-color: #111111; }}
+        #playerPanel QLabel#tpLabel {{ font-weight: 700; padding-left: 6px; }}
         #playerPanel QSlider::groove:horizontal {{ height: 4px; background: rgba(255,255,255,0.35); border-radius: 2px; }}
         #playerPanel QSlider::sub-page:horizontal {{ background: #ffffff; border-radius: 2px; }}
         #playerPanel QSlider::handle:horizontal {{ width: 14px; margin: -5px 0; border-radius: 7px; background: #ffffff;

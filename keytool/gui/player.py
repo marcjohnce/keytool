@@ -191,6 +191,26 @@ class CoverView(QWidget):
         dlg.exec()
 
 
+class _TransposeEmitter(QObject):
+    progress = Signal(str, int, float)        # path, semitones, fraction
+    done = Signal(str, int, str, str)         # path, semitones, output file, error
+
+
+class _TransposeJob(QRunnable):
+    def __init__(self, path: str, semitones: int, emitter: _TransposeEmitter):
+        super().__init__()
+        self.path, self.semitones, self.emitter = path, semitones, emitter
+
+    def run(self):
+        try:
+            from ..transpose import render
+            out = render(self.path, self.semitones,
+                         progress=lambda f: self.emitter.progress.emit(self.path, self.semitones, f))
+            self.emitter.done.emit(self.path, self.semitones, out, "")
+        except Exception as e:
+            self.emitter.done.emit(self.path, self.semitones, "", f"{type(e).__name__}: {e}")
+
+
 # =========================================================================== waveform view
 class WaveformView(QWidget):
     seek_requested = Signal(float)    # fraction 0..1
@@ -432,6 +452,29 @@ class PlayerPanel(QWidget, Translatable):
         self.stop_btn = QPushButton()
         self.stop_btn.setFixedWidth(44)
         self.stop_btn.clicked.connect(self.stop)
+        # transposition: -1 / 0 / +1 semitone at the original tempo
+        from PySide6.QtWidgets import QButtonGroup
+        from .. import transpose as _tp
+        self.semitones = 0
+        self.source_file: str | None = None       # file currently loaded in the player (original or transposed)
+        self._rendering: set[tuple[str, int]] = set()
+        self._want_play = False
+        self._tp_available = _tp.available()
+        self.tp_emitter = _TransposeEmitter()
+        self.tp_emitter.progress.connect(self._transpose_progress)
+        self.tp_emitter.done.connect(self._transpose_done)
+        self.tp_group = QButtonGroup(self)
+        self.tp_group.setExclusive(True)
+        self.tp_buttons: dict[int, QPushButton] = {}
+        for st, label in ((-1, "−1"), (0, "0"), (1, "+1")):
+            b = QPushButton(label)
+            b.setCheckable(True)
+            b.setFixedSize(38, 30)
+            b.setChecked(st == 0)
+            b.setObjectName("transpose")
+            b.clicked.connect(lambda _=False, st=st: self.set_semitones(st))
+            self.tp_group.addButton(b)
+            self.tp_buttons[st] = b
         self.title = QLabel()
         self.title.setTextFormat(Qt.RichText)
         self.time = QLabel("0:00 / 0:00")
@@ -446,7 +489,10 @@ class PlayerPanel(QWidget, Translatable):
         self.volume.setFixedWidth(110)
         self.volume.setValue(int(round(getattr(settings, "volume", 0.8) * 100)))
         self.volume.valueChanged.connect(self._volume)
+        tp_lbl = QLabel("♯♭"); tp_lbl.setObjectName("tpLabel")
+        self._tp_label = tp_lbl
         for wdg, stretch in ((self.prev_btn, 0), (self.play_btn, 0), (self.next_btn, 0), (self.stop_btn, 0),
+                             (tp_lbl, 0), (self.tp_buttons[-1], 0), (self.tp_buttons[0], 0), (self.tp_buttons[1], 0),
                              (self.title, 1), (self.time, 0),
                              (self.mute_btn, 0), (self.volume, 0)):
             bar.addWidget(wdg, stretch)
@@ -487,6 +533,11 @@ class PlayerPanel(QWidget, Translatable):
         super().retranslate()
         self.play_btn.setToolTip(tr("play_pause") + " (Space)")
         self.stop_btn.setToolTip(tr("stop"))
+        for st, b in self.tp_buttons.items():
+            b.setToolTip(tr("transpose_tip", st=f"{st:+d}" if st else "0") if self._tp_available
+                         else tr("transpose_unavailable"))
+            b.setEnabled(self._tp_available or st == 0)
+        self._tp_label.setToolTip(tr("transpose"))
         self.prev_btn.setToolTip(tr("prev_track") + " (Ctrl+←)")
         self.next_btn.setToolTip(tr("next_track") + " (Ctrl+→)")
         self.volume.setToolTip(tr("volume"))
@@ -531,8 +582,13 @@ class PlayerPanel(QWidget, Translatable):
         if r.get("bpm"):
             bits.append(f"{r['bpm']:.1f} BPM")
         k = Key.from_code(r.get("key"))
-        if k:
+        st = getattr(self, "semitones", 0)
+        if k and st:
+            bits.append(f"{k.format(self.notation)} → <b>{k.transpose(st).format(self.notation)}</b> ({st:+d})")
+        elif k:
             bits.append(k.format(self.notation))
+        elif st:
+            bits.append(f"{st:+d} HT" if tr.lang == "de" else f"{st:+d} st")
         title = (r.get("title") or r.get("filename") or "").replace("<", "&lt;")
         artist = (r.get("artist") or "").replace("<", "&lt;")
         mk = getattr(self, "markers", None)
@@ -577,10 +633,71 @@ class PlayerPanel(QWidget, Translatable):
             return
         self.wave.clear(tr("waveform_loading"))
         self.pool.start(_WaveformJob(self.path, self.emitter))
+        self.source_file = None
+        self._want_play = autoplay
         if self.player is not None:
-            self.player.setSource(QUrl.fromLocalFile(self.path))
-            if autoplay:
+            self._load_version(keep_position=False)
+        self._tick()
+
+    # -- transposition
+    def set_semitones(self, st: int):
+        if st != 0 and not self._tp_available:
+            st = 0
+        self.semitones = st
+        self.tp_buttons[st].setChecked(True)
+        self._update_title()
+        if self.path and self.player is not None:
+            self._load_version(keep_position=True)
+
+    def _load_version(self, keep_position: bool):
+        """Play the original (0) or the transposed version of the current track. If the transposed
+        version still has to be rendered, the current audio keeps playing and is replaced seamlessly."""
+        from ..transpose import cached
+        target = self.path if self.semitones == 0 else cached(self.path, self.semitones)
+        if target:
+            self._switch_source(target, keep_position)
+            self._status("")
+            return
+        key = (self.path, self.semitones)
+        if key not in self._rendering:
+            self._rendering.add(key)
+            self.pool.start(_TransposeJob(self.path, self.semitones, self.tp_emitter))
+        self._status(tr("transposing", st=f"{self.semitones:+d}", pct=0))
+
+    def _switch_source(self, file: str, keep_position: bool):
+        if self.player is None or file == self.source_file:
+            if self._want_play and not self.is_playing():
+                self._want_play = False
                 self.player.play()
+            return
+        if keep_position and self.source_file:
+            pos, playing = self.player.position(), self.is_playing() or self._want_play
+        else:
+            pos, playing = 0, self._want_play
+        self._want_play = False
+        self.player.stop()
+        self.source_file = file
+        self._pending = (pos, playing) if (pos or playing) else None
+        self.player.setSource(QUrl.fromLocalFile(file))
+        if not self._pending and playing:
+            self.player.play()
+
+    def _transpose_progress(self, path: str, st: int, frac: float):
+        if path == self.path and st == self.semitones:
+            self._status(tr("transposing", st=f"{st:+d}", pct=int(frac * 100)))
+
+    def _transpose_done(self, path: str, st: int, out: str, err: str):
+        self._rendering.discard((path, st))
+        if path != self.path or st != self.semitones:
+            return
+        if err:
+            self._status("⚠ " + err)
+            return
+        self._status("")
+        self._switch_source(out, keep_position=True)
+
+    def _status(self, text: str):
+        self._status_text = text
         self._tick()
 
     def _cover_ready(self, path: str, img):
@@ -639,15 +756,17 @@ class PlayerPanel(QWidget, Translatable):
 
     def release_file(self, path: str):
         """Let go of a file (e.g. before writing tags). Returns a restore callback."""
-        if self.player is None or path != self.path:
-            return lambda: None
+        if self.player is None or path != self.path or self.source_file != path:
+            return lambda: None          # not loaded, or a transposed copy is playing -> nothing to release
         pos, playing = self.player.position(), self.is_playing()
         self.player.stop()
         self.player.setSource(QUrl())
+        self.source_file = None
 
         def restore():
             if self.path == path:
                 self._pending = (pos, playing)
+                self.source_file = path
                 self.player.setSource(QUrl.fromLocalFile(path))
                 self.wave.set_position(pos / max(1, int(self.wave.duration * 1000)))
         return restore
@@ -658,6 +777,9 @@ class PlayerPanel(QWidget, Translatable):
 
     def toggle(self):
         if self.player is None or not self.path:
+            return
+        if self.source_file is None:            # transposed version still rendering -> play when ready
+            self._want_play = not self._want_play
             return
         if self.is_playing():
             self.player.pause()
@@ -692,7 +814,9 @@ class PlayerPanel(QWidget, Translatable):
         dur = self.player.duration() or int(self.wave.duration * 1000)
         if dur and not self.wave._drag:
             self.wave.set_position(pos / dur)
-        self.time.setText(f"{fmt_time(pos)} / {fmt_time(dur)}")
+        status = getattr(self, "_status_text", "")
+        self.time.setText((status + "   ") if status else "")
+        self.time.setText(self.time.text() + f"{fmt_time(pos)} / {fmt_time(dur)}")
 
     def _state_changed(self, state):
         playing = state == QMediaPlayer.PlayingState

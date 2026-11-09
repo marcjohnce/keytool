@@ -22,6 +22,7 @@ die Bibliothek zugreifen.
 | Manuelle Korrektur | BPM/Tonart überschreiben; manuelle Werte bleiben bei einer erneuten Analyse erhalten |
 | Recherche | Titel bei **Karaoke-Version** (karaoke-version.de) nach Tonart(en) und BPM-Bereich suchen; Treffer direkt in KeyTool mit Tonart(en), Tempo, Dauer, Preis und Markierung, ob der Titel schon in der Bibliothek ist |
 | Player | Blaues Player-Panel (Farbe der Listenauswahl) mit weißen Knöpfen; Cover (eingebettet oder cover.jpg/folder.jpg im Ordner, sonst Platzhalter), vorheriger/nächster Titel, Play/Pause, Stopp, automatisches Weiterspielen; Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
+| Transponieren | Wiedergabe um einen Halbton höher (+1) oder tiefer (−1) bei unverändertem Tempo (Rubber Band über pedalboard); Positionen und Cue-Punkte bleiben gültig |
 | Serato-Cues | Vorhandene Serato-DJ-Hot-Cues (Farbe, Name) und gespeicherte Loops werden aus den Dateien gelesen (MP3, WAV, FLAC, M4A; OGG soweit möglich) und in der Wellenform angezeigt; Klick auf ein Cue-Fähnchen oder Alt+1…8 springt hin |
 | Wellenform | Übersicht des ausgewählten Titels über der Trackliste, gefärbt nach Frequenzbändern (Bass blau, Mitten bernstein, Höhen weiß), Klicken/Ziehen zum Spulen, Taktmarken aus der BPM |
 | Oberfläche | Deutsch / Englisch, heller und dunkler Modus (oder System), Umschalten ohne Neustart |
@@ -32,6 +33,7 @@ die Bibliothek zugreifen.
 **Variante A – aus dem Quellcode:**
 1. Python 3.10–3.13 (64 Bit) von python.org installieren (Haken bei „Add to PATH“).
 2. `start.bat` doppelklicken. Beim ersten Start wird eine virtuelle Umgebung eingerichtet (dauert ein paar Minuten).
+   Kommen in einer neuen Version Pakete hinzu, installiert `start.bat` sie beim nächsten Start automatisch nach.
 
 **Variante B – eigene .exe bauen:**
 1. `build_exe.bat` doppelklicken.
@@ -59,6 +61,11 @@ Ein separates FFmpeg ist nicht nötig.
   zum vorherigen/nächsten Titel in der aktuellen Sortierung und Filterung; ⏮ startet nach den ersten 3 Sekunden
   erst den Titel neu. Am Titelende geht es mit dem nächsten weiter, am Listenende hält der Player an. Ein Klick
   aufs Cover zeigt es groß.
+* **Transponieren:** Im Player „−1 / 0 / +1“ wählen. Der Titel spielt weiter, während im Hintergrund die
+  transponierte Fassung berechnet wird (auf allen CPU-Kernen; Fortschritt neben der Zeitanzeige), dann wird
+  nahtlos an derselben Stelle umgeschaltet. Das Tempo bleibt exakt gleich, die Anzeige zeigt die neue Tonart
+  (z. B. „8A → 3A (+1)“). Die Einstellung gilt auch für die nächsten Titel; berechnete Fassungen werden
+  zwischengespeichert (die letzten 12, im Datenordner unter `transpose_cache`). Die Originaldatei wird nie verändert.
 * **Serato-Cues:** Hot Cues erscheinen in der Wellenform als rote Linie mit nummeriertem Fähnchen, gespeicherte
   Loops als hinterlegter Bereich (🔒 = gesperrt). Ein Klick auf Linie oder Fähnchen (oder Alt+1…8) setzt die Wiedergabeposition millisekundengenau auf den Cue – auch
   während der Wiedergabe und während der Titel noch lädt. Tooltips zeigen Name und Zeit. Gelesen wird der Tag „Serato Markers2“ (Formatbeschreibung: Holzhaus/serato-tags);
@@ -150,6 +157,7 @@ keytool/
   mcp_server.py     MCP-Server
   research.py       Suche & Parser für Karaoke-Version
   serato.py         Serato-Cues/-Loops lesen (Serato Markers2)
+  transpose.py      Transponieren ±1 Halbton bei Originaltempo (pedalboard/Rubber Band)
   waveform.py       Wellenform-Berechnung (3 Frequenzbänder) mit Cache
   i18n.py           Deutsch/Englisch
   gui/              Qt-Oberfläche (Hauptfenster, Camelot-Rad, Player, Details, Themes)
@@ -158,3 +166,8 @@ tests/              Tests mit synthetisch erzeugten Audiodateien in allen Format
 ```
 
 Tests: `pip install pytest` und `python -m pytest tests`.
+
+## Lizenzhinweis
+
+Das Transponieren nutzt [pedalboard](https://github.com/spotify/pedalboard) (GPLv3) mit der Rubber-Band-Bibliothek.
+Für die private Nutzung ist das unproblematisch; wer KeyTool samt pedalboard weitergibt, muss die GPLv3 beachten.
