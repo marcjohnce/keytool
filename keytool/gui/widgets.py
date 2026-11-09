@@ -1,6 +1,7 @@
 """Reusable widgets: track table model, key filter grid, keyword filter, detail panel."""
 from __future__ import annotations
 
+import math
 import os
 from typing import Callable
 
@@ -122,7 +123,7 @@ class TrackModel(QAbstractTableModel):
             return camelot_color(v, self.dark)
         if role == Qt.ForegroundRole:
             if col == "key" and v:
-                return QColor("#ffffff") if self.dark else QColor("#111111")
+                return QColor("#111111")
             if col == "status" and v == "error":
                 return QColor("#ff6b6b")
         if role == Qt.TextAlignmentRole and col in ("bpm", "key", "year", "duration", "ext"):
@@ -144,58 +145,192 @@ class TrackModel(QAbstractTableModel):
 
 # =========================================================================== key filter
 class KeyFilter(QWidget):
+    """Clickable Camelot wheel: outer ring = major (B), inner ring = minor (A), 12B at the top.
+
+    Left click toggles a key, right click selects the key plus its harmonic neighbours,
+    a click in the centre clears the selection.
+    """
     changed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.notation = "camelot"
-        grid = QGridLayout(self)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setSpacing(3)
-        self.buttons: dict[str, QToolButton] = {}
-        for k in all_keys():
-            b = QToolButton()
-            b.setCheckable(True)
-            b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            b.setMinimumWidth(36)
-            b.toggled.connect(lambda _=False: self.changed.emit())
-            self.buttons[k.code] = b
-            n = k.camelot_number - 1
-            # 4 columns x 6 rows, A (minor) and B (major) side by side
-            grid.addWidget(b, n % 6, (n // 6) * 2 + (0 if k.minor else 1))
-        self.set_notation("camelot")
+        self.dark = True
+        self._selected: set[str] = set()
+        self._hover: str | None = None
+        self.setMouseTracking(True)
+        self.setMinimumSize(220, 220)
+        sp = QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        sp.setHeightForWidth(True)
+        self.setSizePolicy(sp)
 
+    # ------------------------------------------------------------------ public API
     def set_notation(self, notation: str):
         self.notation = notation
-        for code, b in self.buttons.items():
-            k = Key.from_code(code)
-            b.setText(k.format(notation))
-            b.setToolTip(f"{k.long_name(tr.lang)} · {k.camelot()}")
+        self.update()
 
     def apply_colors(self, dark: bool):
-        for code, b in self.buttons.items():
-            c = camelot_color(code, dark)
-            fg = "#ffffff" if dark else "#111111"
-            soft = QColor(c); soft.setAlpha(55)
-            b.setStyleSheet(
-                f"QToolButton {{ border: 1px solid {c.name()}; border-radius: 6px; padding: 4px 2px;"
-                f" background: rgba({soft.red()},{soft.green()},{soft.blue()},{soft.alpha()}); }}"
-                f"QToolButton:hover {{ background: {c.name()}; color: {fg}; }}"
-                f"QToolButton:checked {{ background: {c.name()}; color: {fg}; font-weight: 700; border: 2px solid {fg}; }}"
-            )
+        self.dark = dark
+        self.update()
 
     def selected(self) -> list[str]:
-        return [c for c, b in self.buttons.items() if b.isChecked()]
+        return sorted(self._selected)
 
     def set_selected(self, codes: list[str]):
-        for c, b in self.buttons.items():
-            b.blockSignals(True)
-            b.setChecked(c in codes)
-            b.blockSignals(False)
+        self._selected = set(codes)
+        self.update()
         self.changed.emit()
 
     def clear(self):
         self.set_selected([])
+
+    # ------------------------------------------------------------------ geometry
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, w):
+        return min(w, 340)
+
+    def sizeHint(self):
+        from PySide6.QtCore import QSize
+        return QSize(300, 300)
+
+    def _radii(self):
+        side = min(self.width(), self.height()) - 4
+        R = side / 2
+        return R, R * 0.66, R * 0.33   # outer, ring border, inner hole
+
+    def _center(self):
+        from PySide6.QtCore import QPointF
+        return QPointF(self.width() / 2, self.height() / 2)
+
+    @staticmethod
+    def _angle(n: int) -> float:
+        # Qt angles: 0 deg = 3 o'clock, counter-clockwise. 12 at the top, numbers increase clockwise.
+        return 90.0 - (n % 12) * 30.0
+
+    def _key_at(self, pos) -> str | None:
+        c = self._center()
+        dx, dy = pos.x() - c.x(), c.y() - pos.y()
+        dist = math.hypot(dx, dy)
+        R, mid, hole = self._radii()
+        if dist > R or dist < hole:
+            return None
+        ang = math.degrees(math.atan2(dy, dx))
+        n = int(round((90.0 - ang) / 30.0)) % 12
+        n = 12 if n == 0 else n
+        minor = dist < mid
+        for k in all_keys():
+            if k.camelot_number == n and k.minor == minor:
+                return k.code
+        return None
+
+    # ------------------------------------------------------------------ painting
+    def paintEvent(self, _):
+        from PySide6.QtCore import QPointF, QRectF
+        from PySide6.QtGui import QFont, QPainter, QPainterPath, QPen
+
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        c = self._center()
+        R, mid, hole = self._radii()
+        bg = self.palette().color(self.backgroundRole())
+        any_sel = bool(self._selected)
+        font = QFont(self.font())
+        for k in all_keys():
+            r_out, r_in = (mid, hole) if k.minor else (R, mid)
+            start = self._angle(k.camelot_number) - 15
+            outer = QRectF(c.x() - r_out, c.y() - r_out, 2 * r_out, 2 * r_out)
+            inner = QRectF(c.x() - r_in, c.y() - r_in, 2 * r_in, 2 * r_in)
+            path = QPainterPath()
+            path.arcMoveTo(outer, start)
+            path.arcTo(outer, start, 30)
+            path.arcTo(inner, start + 30, -30)
+            path.closeSubpath()
+            col = QColor(camelot_color(k.code, self.dark))
+            sel = k.code in self._selected
+            if any_sel and not sel:
+                col.setAlpha(70)
+            if k.code == self._hover and not sel:
+                col = col.lighter(115)
+                col.setAlpha(255 if not any_sel else 150)
+            p.setBrush(col)
+            p.setPen(QPen(bg, 2))
+            p.drawPath(path)
+            # label
+            a = math.radians(self._angle(k.camelot_number))
+            rl = (r_out + r_in) / 2
+            pt = QPointF(c.x() + math.cos(a) * rl, c.y() - math.sin(a) * rl)
+            text = k.format(self.notation)
+            font.setBold(sel)
+            font.setPointSizeF(max(7.0, R / (16 if len(text) <= 2 else 19)))
+            p.setFont(font)
+            txt = QColor("#111111")
+            if any_sel and not sel:
+                txt = QColor(self.palette().color(self.foregroundRole()))
+                txt.setAlpha(150)
+            p.setPen(txt)
+            box = QRectF(pt.x() - 30, pt.y() - 12, 60, 24)
+            p.drawText(box, Qt.AlignCenter, text)
+        # selection outlines on top
+        for code in self._selected:
+            k = Key.from_code(code)
+            r_out, r_in = (mid, hole) if k.minor else (R, mid)
+            start = self._angle(k.camelot_number) - 15
+            outer = QRectF(c.x() - r_out + 2, c.y() - r_out + 2, 2 * r_out - 4, 2 * r_out - 4)
+            inner = QRectF(c.x() - r_in - 2, c.y() - r_in - 2, 2 * r_in + 4, 2 * r_in + 4)
+            path = QPainterPath()
+            path.arcMoveTo(outer, start + 1)
+            path.arcTo(outer, start + 1, 28)
+            path.arcTo(inner, start + 29, -28)
+            path.closeSubpath()
+            p.setBrush(Qt.NoBrush)
+            p.setPen(QPen(self.palette().color(self.foregroundRole()), 2.5))
+            p.drawPath(path)
+        # centre: selection count / hint
+        p.setPen(self.palette().color(self.foregroundRole()))
+        font.setBold(True)
+        font.setPointSizeF(max(8.0, R / 14))
+        p.setFont(font)
+        label = str(len(self._selected)) + " ✕" if self._selected else tr("all_keys")
+        p.drawText(QRectF(c.x() - hole, c.y() - hole, 2 * hole, 2 * hole), Qt.AlignCenter, label)
+        p.end()
+
+    # ------------------------------------------------------------------ interaction
+    def mouseMoveEvent(self, e):
+        code = self._key_at(e.position())
+        if code != self._hover:
+            self._hover = code
+            self.setCursor(Qt.PointingHandCursor if code or self._in_centre(e.position()) else Qt.ArrowCursor)
+            if code:
+                k = Key.from_code(code)
+                self.setToolTip(f"{k.camelot()} · {k.sharps()} / {k.flats()} · {k.long_name(tr.lang)}")
+            else:
+                self.setToolTip(tr("reset_filters") if self._selected else "")
+            self.update()
+
+    def leaveEvent(self, _):
+        self._hover = None
+        self.update()
+
+    def _in_centre(self, pos) -> bool:
+        c = self._center()
+        return math.hypot(pos.x() - c.x(), pos.y() - c.y()) < self._radii()[2]
+
+    def mousePressEvent(self, e):
+        pos = e.position()
+        code = self._key_at(pos)
+        if code is None:
+            if self._in_centre(pos) and self._selected:
+                self.clear()
+            return
+        if e.button() == Qt.RightButton:
+            # key + harmonic neighbours (Camelot +-1, relative major/minor)
+            self.set_selected([k.code for k in Key.from_code(code).compatible()])
+        elif e.button() == Qt.LeftButton:
+            sel = set(self._selected)
+            sel.symmetric_difference_update({code})
+            self.set_selected(sorted(sel))
 
 
 # =========================================================================== keyword filter

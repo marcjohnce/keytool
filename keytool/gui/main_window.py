@@ -165,6 +165,8 @@ class MainWindow(QMainWindow, Translatable):
         kl = QLabel(); kl.setObjectName("dim"); self.t(kl.setText, "key"); lv.addWidget(kl)
         self.f_keys = KeyFilter()
         lv.addWidget(self.f_keys)
+        wh = QLabel(); wh.setObjectName("dim"); wh.setWordWrap(True); self.t(wh.setText, "wheel_hint")
+        lv.addWidget(wh)
         self.harmonic_btn = QPushButton(); self.harmonic_btn.setCheckable(True)
         self.t(self.harmonic_btn.setText, "harmonic"); self.t(self.harmonic_btn.setToolTip, "harmonic_tip")
         self.harmonic_btn.toggled.connect(self.toggle_harmonic)
@@ -343,7 +345,7 @@ class MainWindow(QMainWindow, Translatable):
             w.blockSignals(True); w.clear(); w.blockSignals(False)
         for w in (self.f_year_from, self.f_year_to, self.f_bpm_from, self.f_bpm_to):
             w.blockSignals(True); w.setValue(0); w.blockSignals(False)
-        self.f_keys.blockSignals(True); self.f_keys.clear(); self.f_keys.blockSignals(False)
+        self.f_keys.blockSignals(True); self.f_keys.clear(); self.f_keys.blockSignals(False); self.f_keys.update()
         self.f_keywords.blockSignals(True); self.f_keywords.set_selected([]); self.f_keywords.blockSignals(False)
         self.refresh()
 

@@ -88,11 +88,17 @@ def apply_theme(app: QApplication, name: str) -> dict:
     return c
 
 
+def camelot_hue(number: int) -> int:
+    """Hue of a Camelot number as on the classic wheel: 3 yellow-green, 6 red, 9 violet, 12 cyan."""
+    return int((90 - (number - 3) * 30) % 360)
+
+
 def camelot_color(code: str | None, dark: bool) -> QColor | None:
     k = Key.from_code(code)
     if not k:
         return None
-    hue = int(((k.camelot_number - 1) * 30 + 0) % 360)
+    hue = camelot_hue(k.camelot_number)
+    # outer ring (major) a little lighter than the inner ring (minor), like the Camelot wheel
     if dark:
-        return QColor.fromHsl(hue, 150, 95 if k.minor else 120)
-    return QColor.fromHsl(hue, 190, 205 if k.minor else 225)
+        return QColor.fromHsl(hue, 170, 150 if k.minor else 175)
+    return QColor.fromHsl(hue, 200, 170 if k.minor else 195)
