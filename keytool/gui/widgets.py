@@ -20,6 +20,16 @@ SORT_ROLE = Qt.UserRole + 1
 ID_ROLE = Qt.UserRole + 2
 
 
+def source_text(r: dict, field: str) -> str:
+    """'manual' / 'from file tags' / 'auto · confidence 87 %' for bpm or key."""
+    if r.get(f"{field}_manual"):
+        return tr("manual")
+    if r.get(f"{field}_source") == "tags":
+        return tr("from_tags")
+    conf = r.get(f"{field}_confidence")
+    return f"{tr('auto')} · {tr('confidence')} {int((conf or 0) * 100)} %"
+
+
 def fmt_duration(sec) -> str:
     if not sec:
         return ""
@@ -130,12 +140,10 @@ class TrackModel(QAbstractTableModel):
             return int(Qt.AlignCenter)
         if role == Qt.ToolTipRole:
             if col == "bpm" and r.get("bpm"):
-                src = tr("manual") if r.get("bpm_manual") else f"{tr('confidence')}: {int((r.get('bpm_confidence') or 0) * 100)} %"
-                return f"{r['bpm']:.2f} BPM – {src}"
+                return f"{r['bpm']:.2f} BPM – {source_text(r, 'bpm')}"
             if col == "key" and r.get("key"):
                 k = Key.from_code(r["key"])
-                src = tr("manual") if r.get("key_manual") else f"{tr('confidence')}: {int((r.get('key_confidence') or 0) * 100)} %"
-                return f"{k.long_name(tr.lang)} · {k.camelot()} · {k.sharps()} / {k.flats()} – {src}"
+                return f"{k.long_name(tr.lang)} · {k.camelot()} · {k.sharps()} / {k.flats()} – {source_text(r, 'key')}"
             if col == "status" and r.get("error"):
                 return r["error"]
             if col == "path":
@@ -576,13 +584,11 @@ class DetailPanel(QWidget, Translatable):
             self.bpm.setValue(r["bpm"] or 0)
             idx = self.key.findData(r["key"] or "")
             self.key.setCurrentIndex(max(0, idx))
-            self.bpm_info.setText(
-                tr("manual") if r["bpm_manual"] else
-                (f"{tr('auto')} · {tr('confidence')} {int((r['bpm_confidence'] or 0) * 100)} %" if r["bpm"] else ""))
+            self.bpm_info.setText(source_text(r, "bpm") if r["bpm"] else "")
             k = Key.from_code(r["key"])
             if k:
                 comp = ", ".join(c.format(self.notation) for c in k.compatible()[1:])
-                src = tr("manual") if r["key_manual"] else f"{tr('auto')} · {tr('confidence')} {int((r['key_confidence'] or 0) * 100)} %"
+                src = source_text(r, "key")
                 self.key_info.setText(f"{k.long_name(tr.lang)} · {src}\n↔ {comp}")
             else:
                 self.key_info.setText("")

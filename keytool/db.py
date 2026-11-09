@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS tracks (
     key_manual      INTEGER DEFAULT 0,
     tag_bpm         TEXT DEFAULT '',
     tag_key         TEXT DEFAULT '',
+    bpm_source      TEXT DEFAULT '',
+    key_source      TEXT DEFAULT '',
     status          TEXT DEFAULT 'pending',
     error           TEXT DEFAULT '',
     added_at        REAL,
@@ -53,7 +55,7 @@ CREATE INDEX IF NOT EXISTS ix_keywords_kw ON keywords(keyword COLLATE NOCASE);
 TRACK_COLUMNS = [
     "id", "path", "folder", "filename", "ext", "size", "mtime", "title", "artist", "album", "year",
     "genre", "duration", "bpm", "bpm_confidence", "key", "key_confidence", "bpm_manual", "key_manual",
-    "tag_bpm", "tag_key", "status", "error", "added_at", "analyzed_at",
+    "tag_bpm", "tag_key", "bpm_source", "key_source", "status", "error", "added_at", "analyzed_at",
 ]
 
 SORTABLE = {"title", "artist", "album", "year", "bpm", "key", "duration", "added_at", "filename", "genre"}
@@ -89,8 +91,13 @@ class Database:
         self.path = str(path)
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self._local = threading.local()
-        with self.conn() as c:
-            c.executescript(SCHEMA)
+        c = self.conn()
+        c.executescript(SCHEMA)
+        # migrations for libraries created by older versions
+        cols = {r[1] for r in c.execute("PRAGMA table_info(tracks)")}
+        for col in ("bpm_source", "key_source"):
+            if col not in cols:
+                c.execute(f"ALTER TABLE tracks ADD COLUMN {col} TEXT DEFAULT ''")
 
     # -------------------------------------------------------------- connection
     def conn(self) -> sqlite3.Connection:
@@ -154,15 +161,17 @@ class Database:
         sets = ", ".join(f"{k}=?" for k in fields_)
         self.conn().execute(f"UPDATE tracks SET {sets} WHERE id=?", (*fields_.values(), track_id))
 
-    def set_analysis(self, track_id: int, result: dict) -> None:
+    def set_analysis(self, track_id: int, result: dict, keep_tag_values: bool = True) -> None:
+        """Store an analysis result. Manual values are never overwritten; values read from the
+        file's tags are kept unless keep_tag_values is False (explicit re-analysis)."""
         t = self.get_track(track_id)
         if not t:
             return
         upd: dict[str, Any] = dict(status="ok", error="", analyzed_at=time.time())
-        if not t["bpm_manual"]:
-            upd.update(bpm=result.get("bpm"), bpm_confidence=result.get("bpm_confidence"))
-        if not t["key_manual"]:
-            upd.update(key=result.get("key"), key_confidence=result.get("key_confidence"))
+        if not t["bpm_manual"] and not (keep_tag_values and t["bpm_source"] == "tags" and t["bpm"]):
+            upd.update(bpm=result.get("bpm"), bpm_confidence=result.get("bpm_confidence"), bpm_source="analysis")
+        if not t["key_manual"] and not (keep_tag_values and t["key_source"] == "tags" and t["key"]):
+            upd.update(key=result.get("key"), key_confidence=result.get("key_confidence"), key_source="analysis")
         if result.get("duration") and not t["duration"]:
             upd["duration"] = result["duration"]
         self.update_track(track_id, **upd)

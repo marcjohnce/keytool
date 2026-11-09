@@ -64,6 +64,9 @@ class SettingsDialog(QDialog):
         f.addRow(lbl, row)
         self.workers = QSpinBox(); self.workers.setRange(0, 64); self.workers.setValue(settings.workers)
         f.addRow(tr("s_workers"), self.workers)
+        self.use_tags = QCheckBox(tr("s_use_tags")); self.use_tags.setChecked(settings.use_existing_tags)
+        self.use_tags.setToolTip(tr("s_use_tags_tip"))
+        f.addRow(self.use_tags)
         self.write_tags = QCheckBox(tr("s_write_tags").replace("&", "&&")); self.write_tags.setChecked(settings.write_tags)
         f.addRow(self.write_tags)
         self.tag_notation = QComboBox()
@@ -102,6 +105,7 @@ class SettingsDialog(QDialog):
             s.bpm_max = s.bpm_min * 2
         s.workers = self.workers.value()
         s.write_tags = self.write_tags.isChecked()
+        s.use_existing_tags = self.use_tags.isChecked()
         s.tag_key_notation = self.tag_notation.currentData()
         s.reanalyze_existing = self.reanalyze.isChecked()
         s.save()

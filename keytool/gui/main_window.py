@@ -30,9 +30,11 @@ class Worker(QObject):
     progress = Signal(int, int, object)
     finished = Signal(dict)
 
-    def __init__(self, library: Library, paths: list[str] | None = None, ids: list[int] | None = None):
+    def __init__(self, library: Library, paths: list[str] | None = None, ids: list[int] | None = None,
+                 keep_tag_values: bool = True):
         super().__init__()
         self.lib, self.paths, self.ids = library, paths, ids
+        self.keep_tag_values = keep_tag_values
         self.cancel = threading.Event()
 
     def run(self):
@@ -40,9 +42,9 @@ class Worker(QObject):
             if self.paths is not None:
                 rep = self.lib.scan(self.paths, self.cancel, lambda n, _p: self.scan_progress.emit(n))
                 res = self.lib.analyze(rep.to_analyze or [], self._prog, self.cancel)
-                res.update(found=rep.found, added=rep.added, unchanged=rep.unchanged)
+                res.update(found=rep.found, added=rep.added, unchanged=rep.unchanged, from_tags=rep.from_tags)
             else:
-                res = self.lib.analyze(self.ids or [], self._prog, self.cancel)
+                res = self.lib.analyze(self.ids or [], self._prog, self.cancel, keep_tag_values=self.keep_tag_values)
                 res.setdefault("unchanged", 0)
         except Exception as e:  # never let the thread die silently
             res = dict(ok=0, errors=1, unchanged=0, error=str(e))
@@ -393,8 +395,8 @@ class MainWindow(QMainWindow, Translatable):
 
     def reanalyze_selected(self):
         ids = self.selected_ids()
-        if ids:
-            self.start_worker(Worker(self.lib, ids=ids))
+        if ids:  # explicit re-analysis: really analyse, even if the values came from tags
+            self.start_worker(Worker(self.lib, ids=ids, keep_tag_values=False))
 
     def start_import(self, paths: list[str]):
         self.start_worker(Worker(self.lib, paths=paths))
@@ -431,6 +433,7 @@ class MainWindow(QMainWindow, Translatable):
             self.msg_lbl.setText(tr("cancelled"))
         else:
             self.msg_lbl.setText(tr("done_msg", ok=res.get("ok", 0), errors=res.get("errors", 0),
+                                    from_tags=res.get("from_tags", 0),
                                     unchanged=res.get("unchanged", 0)) + (f" – {res['error']}" if res.get("error") else ""))
         self.refresh()
 

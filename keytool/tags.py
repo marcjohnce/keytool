@@ -21,6 +21,41 @@ class Metadata:
     extra: dict = field(default_factory=dict)
 
 
+def parse_tag_bpm(text: str | None) -> float | None:
+    """BPM from a tag value: '128', '128.00', '128,5', '128 BPM'. Plausible range 30-300."""
+    if not text:
+        return None
+    m = re.search(r"\d+(?:[.,]\d+)?", str(text))
+    if not m:
+        return None
+    try:
+        v = float(m.group(0).replace(",", "."))
+    except ValueError:
+        return None
+    return round(v, 2) if 30 <= v <= 300 else None
+
+
+def parse_tag_key(text: str | None) -> str | None:
+    """Canonical key code from a tag value in any common notation.
+
+    Handles 'Am', 'A minor', 'Amin', '8A', '08A', '1m' (Open Key), 'Abm', 'G#m' and
+    Mixed-In-Key style values like '8A - 6' or '8A/Am'. Off-key markers ('o') give None.
+    """
+    from .keys import Key
+
+    if not text:
+        return None
+    t = str(text).strip()
+    k = Key.parse(t)
+    if k:
+        return k.code
+    for part in re.split(r"\s*[-/|,;]\s*|\s+", t):
+        k = Key.parse(part)
+        if k:
+            return k.code
+    return None
+
+
 def is_audio_file(path: str) -> bool:
     return os.path.splitext(path)[1].lower() in AUDIO_EXTENSIONS
 

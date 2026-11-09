@@ -52,6 +52,7 @@ def _track_out(r: dict, notation: str = "camelot", full: bool = False) -> dict:
             genre=r["genre"], duration_s=r["duration"], format=r["ext"], status=r["status"], error=r["error"] or None,
             bpm_confidence=r["bpm_confidence"], key_confidence=r["key_confidence"],
             bpm_manual=bool(r["bpm_manual"]), key_manual=bool(r["key_manual"]),
+            bpm_source=r.get("bpm_source") or None, key_source=r.get("key_source") or None,
             key_all_notations={n: k.format(n) for n in NOTATIONS} | {"name": k.long_name()} if k else None,
             tag_bpm=r["tag_bpm"], tag_key=r["tag_key"],
         )
@@ -265,11 +266,11 @@ def _run_job(job_id: str, paths: list[str] | None, ids: list[int] | None):
             job["phase"] = "scanning"
             rep = L.scan(paths, job["cancel"])
             job.update(phase="analyzing", found=rep.found, added=rep.added, unchanged=rep.unchanged,
-                       total=len(rep.to_analyze or []))
+                       from_tags=rep.from_tags, total=len(rep.to_analyze or []))
             res = L.analyze(rep.to_analyze or [], prog, job["cancel"])
         else:
             job.update(phase="analyzing", total=len(ids or []))
-            res = L.analyze(ids or [], prog, job["cancel"])
+            res = L.analyze(ids or [], prog, job["cancel"], keep_tag_values=False)
         job.update(result=res, phase="cancelled" if res.get("cancelled") else "finished")
     except Exception as e:
         job.update(phase="failed", error=str(e))
@@ -295,14 +296,16 @@ def _start_job(paths: list[str] | None, ids: list[int] | None, wait_seconds: flo
 @mcp.tool()
 def analyze_paths(paths: list[str], wait_seconds: float = 60) -> dict:
     """Import and analyze audio files and/or folders (recursively). Supported: MP3, WAV, FLAC, OGG, M4A.
-    Unchanged, already analyzed files are skipped. Runs in the background; waits up to wait_seconds and
+    Unchanged, already analyzed files are skipped. Files that already carry BPM and key tags are not
+    analyzed; the tag values are taken over (setting 'use_existing_tags'). Runs in the background; waits up to wait_seconds and
     returns the job status. Poll get_job_status for long imports."""
     return _start_job(list(paths), None, wait_seconds)
 
 
 @mcp.tool()
 def reanalyze_tracks(track_ids: list[int] | None = None, pending_and_errors: bool = False, wait_seconds: float = 60) -> dict:
-    """Re-run the analysis for the given track ids, or for all pending/failed tracks if pending_and_errors=true."""
+    """Re-run the analysis for the given track ids, or for all pending/failed tracks if pending_and_errors=true.
+    This always analyzes the audio, also for values that were taken from file tags (manual values are kept)."""
     L = lib()
     ids = list(track_ids or [])
     if pending_and_errors:

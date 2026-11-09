@@ -172,3 +172,157 @@ def test_crashing_worker_is_isolated(tmp_path):
     rows = {r["filename"]: r for r in lib.search(Query())}
     assert all(rows[f"{n}.wav"]["status"] == ("error" if "CRASH" in n else "ok") for n in names)
     assert "crash" in rows["b CRASH.wav"]["error"].lower()
+
+
+# ------------------------------------------------------------------ existing tags
+@pytest.mark.parametrize("text,camelot", [
+    ("Am", "8A"), ("A minor", "8A"), ("Amin", "8A"), ("08A", "8A"), ("8A - 6", "8A"), ("8A/Am", "8A"),
+    ("1m", "8A"), ("Abm", "1A"), ("G#m", "1A"), ("Gb", "2B"), ("F#", "2B"), ("Fis-Moll", None), ("o", None), ("", None),
+])
+def test_parse_tag_key(text, camelot):
+    from keytool.tags import parse_tag_key
+    code = parse_tag_key(text)
+    assert (Key.from_code(code).camelot() if code else None) == camelot
+
+
+@pytest.mark.parametrize("text,bpm", [("128", 128), ("128.00", 128), ("127,5", 127.5), ("174 BPM", 174),
+                                      ("0", None), ("999", None), ("", None), ("abc", None)])
+def test_parse_tag_bpm(text, bpm):
+    from keytool.tags import parse_tag_bpm
+    assert parse_tag_bpm(text) == bpm
+
+
+def _encode(src_wav, target):
+    ext = os.path.splitext(str(target))[1]
+    codec = {".mp3": ["-c:a", "libmp3lame"], ".flac": ["-c:a", "flac"], ".ogg": ["-c:a", "libvorbis"],
+             ".m4a": ["-c:a", "aac"]}[ext]
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(src_wav), *codec, str(target)], check=True)
+
+
+def _set_raw_tags(path, bpm_text, key_text):
+    """Write tag values verbatim (as other DJ tools would)."""
+    import mutagen
+    from mutagen.id3 import ID3, TBPM, TKEY, ID3NoHeaderError
+    from mutagen.mp4 import MP4, MP4FreeForm
+    ext = os.path.splitext(str(path))[1]
+    if ext == ".mp3":
+        try:
+            t = ID3(path)
+        except ID3NoHeaderError:
+            t = ID3()
+        if bpm_text:
+            t.add(TBPM(encoding=3, text=bpm_text))
+        if key_text:
+            t.add(TKEY(encoding=3, text=key_text))
+        t.save(path)
+    elif ext == ".m4a":
+        f = MP4(path)
+        if bpm_text:
+            f["tmpo"] = [int(float(bpm_text))]
+        if key_text:
+            f["----:com.apple.iTunes:initialkey"] = [MP4FreeForm(key_text.encode())]
+        f.save()
+    else:
+        f = mutagen.File(path)
+        if bpm_text:
+            f["BPM"] = bpm_text
+        if key_text:
+            f["INITIALKEY"] = key_text
+        f.save()
+
+
+@pytest.fixture
+def tagged_dir(tmp_path):
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg needed")
+    raw = tmp_path / "raw.wav"
+    # audio is really in C major / 120 BPM - tag values deliberately differ, so we can tell
+    # whether they were taken over or analysed
+    _write_wav(raw, make_track(120, 0, False, seconds=15))
+    d = tmp_path / "music"
+    d.mkdir()
+    files = {
+        "full.mp3": ("128", "Am"),
+        "mik.flac": ("128.00", "8A - 6"),
+        "itunes.m4a": ("128", "Abm"),
+        "openkey.ogg": ("140", "1m"),
+        "bpm_only.mp3": ("127.5", None),
+        "key_only.flac": (None, "F#m"),
+        "none.mp3": (None, None),
+    }
+    for name, (b, k) in files.items():
+        _encode(raw, d / name)
+        _set_raw_tags(d / name, b, k)
+    return d
+
+
+def _lib(tmp_path, **kw):
+    return Library(Database(tmp_path / "lib.sqlite3"), Settings(workers=2, **kw))
+
+
+def test_existing_tags_are_used(tmp_path, tagged_dir):
+    lib = _lib(tmp_path, write_tags=True, tag_key_notation="camelot")
+    res = lib.import_paths([str(tagged_dir)])
+    assert res["from_tags"] == 4 and res["total"] == 3 and res["errors"] == 0, res
+    rows = {r["filename"]: r for r in lib.search(Query())}
+    k = lambda f: Key.from_code(rows[f]["key"]).camelot()
+    # full tags: taken over unchanged, never analysed
+    for f, bpm, key in (("full.mp3", 128, "8A"), ("mik.flac", 128, "8A"), ("itunes.m4a", 128, "1A"), ("openkey.ogg", 140, "8A")):
+        r = rows[f]
+        assert (r["bpm"], k(f), r["status"]) == (bpm, key, "ok"), f
+        assert r["bpm_source"] == r["key_source"] == "tags" and r["analyzed_at"] is None, f
+    # partial tags: the present value is kept, the missing one is analysed
+    assert rows["bpm_only.mp3"]["bpm"] == 127.5 and rows["bpm_only.mp3"]["bpm_source"] == "tags"
+    assert k("bpm_only.mp3") == "8B" and rows["bpm_only.mp3"]["key_source"] == "analysis"
+    assert k("key_only.flac") == "11A" and rows["key_only.flac"]["key_source"] == "tags"
+    assert abs(rows["key_only.flac"]["bpm"] - 120) < 1 and rows["key_only.flac"]["bpm_source"] == "analysis"
+    assert abs(rows["none.mp3"]["bpm"] - 120) < 1 and k("none.mp3") == "8B"
+    # tag values from other tools are not rewritten in the files, only the missing value is added
+    md = read_metadata(str(tagged_dir / "bpm_only.mp3"))
+    assert md.tag_bpm == "127.5" and md.tag_key == "8B"
+    assert read_metadata(str(tagged_dir / "full.mp3")).tag_key == "Am"
+    assert read_metadata(str(tagged_dir / "key_only.flac")).tag_key == "F#m"
+    # a second import changes nothing
+    assert lib.scan([str(tagged_dir)]).unchanged == 7
+
+
+def test_reanalyze_overrides_tag_values(tmp_path, tagged_dir):
+    lib = _lib(tmp_path, write_tags=False)
+    lib.import_paths([str(tagged_dir)])
+    tid = lib.search(Query(text="full"))[0]["id"]
+    lib.analyze([tid], keep_tag_values=False)
+    r = lib.db.get_track(tid)
+    assert abs(r["bpm"] - 120) < 1 and Key.from_code(r["key"]).camelot() == "8B"
+    assert r["bpm_source"] == r["key_source"] == "analysis"
+
+
+def test_manual_values_beat_tags(tmp_path, tagged_dir):
+    lib = _lib(tmp_path, write_tags=False)
+    lib.import_paths([str(tagged_dir)])
+    tid = lib.search(Query(text="full"))[0]["id"]
+    lib.set_bpm(tid, 64.0)
+    os.utime(lib.db.get_track(tid)["path"])  # file "changed" -> rescan reads tags again
+    lib.scan([str(tagged_dir)])
+    r = lib.db.get_track(tid)
+    assert r["bpm"] == 64.0 and r["bpm_source"] == "manual" and Key.from_code(r["key"]).camelot() == "8A"
+
+
+def test_use_existing_tags_off(tmp_path, tagged_dir):
+    lib = _lib(tmp_path, write_tags=False, use_existing_tags=False)
+    res = lib.import_paths([str(tagged_dir)])
+    assert res["from_tags"] == 0 and res["ok"] == 7
+    assert all(abs(r["bpm"] - 120) < 1 for r in lib.search(Query()))
+
+
+def test_db_migration_adds_columns(tmp_path):
+    import sqlite3
+    p = tmp_path / "old.sqlite3"
+    c = sqlite3.connect(p)
+    c.execute("CREATE TABLE tracks (id INTEGER PRIMARY KEY, path TEXT UNIQUE, folder TEXT, filename TEXT, ext TEXT, "
+              "size INTEGER, mtime REAL, title TEXT, artist TEXT, album TEXT, year INTEGER, genre TEXT, duration REAL, "
+              "bpm REAL, bpm_confidence REAL, key TEXT, key_confidence REAL, bpm_manual INTEGER, key_manual INTEGER, "
+              "tag_bpm TEXT, tag_key TEXT, status TEXT, error TEXT, added_at REAL, analyzed_at REAL)")
+    c.commit(); c.close()
+    db = Database(p)
+    cols = {r[1] for r in db.conn().execute("PRAGMA table_info(tracks)")}
+    assert {"bpm_source", "key_source"} <= cols

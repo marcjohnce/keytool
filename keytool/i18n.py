@@ -60,6 +60,14 @@ _T: dict[str, tuple[str, str]] = {
     "apply": ("Übernehmen", "Apply"),
     "manual": ("manuell", "manual"),
     "auto": ("automatisch", "auto"),
+    "from_tags": ("aus Datei-Tags", "from file tags"),
+    "s_use_tags": ("Vorhandene BPM-/Tonart-Tags übernehmen statt zu analysieren",
+                   "Use existing BPM/key tags instead of analysing"),
+    "s_use_tags_tip": ("Hat eine Datei bereits BPM und Tonart in ihren Tags, werden diese Werte übernommen. "
+                       "Fehlt einer der Werte, wird nur dieser per Analyse ergänzt. "
+                       "„Erneut analysieren“ analysiert immer.",
+                       "If a file already has BPM and key in its tags, those values are used. If one is "
+                       "missing, only that one is filled in by analysis. 'Re-analyze' always analyses."),
     "reset_manual": ("Manuelle Werte zurücksetzen", "Reset manual values"),
     "open_folder": ("Im Explorer anzeigen", "Show in Explorer"),
     "copy_path": ("Pfad kopieren", "Copy path"),
@@ -71,8 +79,8 @@ _T: dict[str, tuple[str, str]] = {
     "tracks_count": ("{shown} von {total} Titeln", "{shown} of {total} tracks"),
     "scanning": ("Suche Audiodateien … {n}", "Scanning audio files … {n}"),
     "analyzing": ("Analysiere {done}/{total}: {name}", "Analyzing {done}/{total}: {name}"),
-    "done_msg": ("Fertig: {ok} analysiert, {errors} Fehler, {unchanged} unverändert",
-                 "Done: {ok} analyzed, {errors} errors, {unchanged} unchanged"),
+    "done_msg": ("Fertig: {ok} analysiert, {from_tags} aus Tags übernommen, {errors} Fehler, {unchanged} unverändert",
+                 "Done: {ok} analyzed, {from_tags} taken from tags, {errors} errors, {unchanged} unchanged"),
     "cancel": ("Abbrechen", "Cancel"),
     "cancelled": ("Abgebrochen", "Cancelled"),
     "busy": ("Es läuft bereits eine Analyse.", "An analysis is already running."),

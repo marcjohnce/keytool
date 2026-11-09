@@ -17,7 +17,7 @@ from typing import Callable, Iterable
 from .config import Settings, db_path
 from .db import Database, Query, norm_path
 from .keys import Key
-from .tags import is_audio_file, read_metadata, write_bpm_key
+from .tags import is_audio_file, parse_tag_bpm, parse_tag_key, read_metadata, write_bpm_key
 
 ProgressCB = Callable[[int, int, dict | None], None]   # (done, total, track_row)
 
@@ -68,6 +68,7 @@ class ScanReport:
     found: int = 0
     added: int = 0
     unchanged: int = 0
+    from_tags: int = 0
     to_analyze: list[int] | None = None
 
 
@@ -104,13 +105,35 @@ class Library:
             tid = self.db.upsert_file(path, st.st_size, st.st_mtime, meta)
             if not existing:
                 rep.added += 1
+            if self.settings.use_existing_tags and self._apply_tag_values(tid, md.tag_bpm, md.tag_key):
+                rep.from_tags += 1      # BPM and key both known from the file -> no analysis
+                continue
             self.db.update_track(tid, status="pending")
             rep.to_analyze.append(tid)
         return rep
 
+    def _apply_tag_values(self, track_id: int, tag_bpm: str, tag_key: str) -> bool:
+        """Take BPM/key from the file tags (manual values win). Returns True if both are known."""
+        t = self.db.get_track(track_id)
+        bpm, key = parse_tag_bpm(tag_bpm), parse_tag_key(tag_key)
+        upd: dict = {}
+        if bpm is not None and not t["bpm_manual"]:
+            upd.update(bpm=bpm, bpm_confidence=None, bpm_source="tags")
+        if key is not None and not t["key_manual"]:
+            upd.update(key=key, key_confidence=None, key_source="tags")
+        if upd:
+            self.db.update_track(track_id, **upd)
+        has_bpm = bpm is not None or (t["bpm_manual"] and t["bpm"])
+        has_key = key is not None or (t["key_manual"] and t["key"])
+        if has_bpm and has_key:
+            self.db.update_track(track_id, status="ok", error="")
+            return True
+        return False
+
     # ----------------------------------------------------------- analysis
     def analyze(self, track_ids: Iterable[int], progress: ProgressCB | None = None,
-                cancel: threading.Event | None = None, workers: int | None = None) -> dict:
+                cancel: threading.Event | None = None, workers: int | None = None,
+                keep_tag_values: bool = True) -> dict:
         """Analyze tracks in a process pool that survives crashing workers.
 
         If a worker process dies (native crash in a decoder, out of memory, ...), the pool is
@@ -136,9 +159,9 @@ class Library:
         def finish(tid: int, res: dict | None, err: str | None):
             handled.add(tid)
             if err is None:
-                self.db.set_analysis(tid, res)
+                self.db.set_analysis(tid, res, keep_tag_values)
                 if s.write_tags:
-                    self._write_tags_safe(tid)
+                    self._write_tags_safe(tid, only_new=True)
                 stats["ok"] += 1
             else:
                 self.db.set_error(tid, err)
@@ -187,12 +210,12 @@ class Library:
                      cancel: threading.Event | None = None) -> dict:
         rep = self.scan(paths, cancel)
         res = self.analyze(rep.to_analyze or [], progress, cancel)
-        return dict(found=rep.found, added=rep.added, unchanged=rep.unchanged, **res)
+        return dict(found=rep.found, added=rep.added, unchanged=rep.unchanged, from_tags=rep.from_tags, **res)
 
     # ----------------------------------------------------------- tags
-    def _write_tags_safe(self, track_id: int) -> str | None:
+    def _write_tags_safe(self, track_id: int, only_new: bool = False) -> str | None:
         try:
-            self.write_tags(track_id)
+            self.write_tags(track_id, only_new)
             return None
         except Exception as e:
             t = self.db.get_track(track_id)
@@ -201,26 +224,37 @@ class Library:
                 self.db.update_track(track_id, error=msg[:500])
             return msg
 
-    def write_tags(self, track_id: int) -> None:
+    def write_tags(self, track_id: int, only_new: bool = False) -> None:
+        """Write BPM/key into the file. only_new: skip values that were read from the tags anyway."""
         t = self.db.get_track(track_id)
         if not t:
             raise KeyError(track_id)
         k = Key.from_code(t["key"])
+        bpm = t["bpm"]
         key_text = k.format(self.settings.tag_key_notation) if k else None
-        write_bpm_key(t["path"], t["bpm"], key_text)
+        if only_new:
+            if t["bpm_source"] == "tags":
+                bpm = None
+            if t["key_source"] == "tags":
+                key_text = None
+        if not bpm and not key_text:
+            return
+        write_bpm_key(t["path"], bpm, key_text)
         st = os.stat(t["path"])
         self.db.update_track(track_id, size=st.st_size, mtime=st.st_mtime,
-                             tag_bpm=str(int(round(t["bpm"]))) if t["bpm"] else t["tag_bpm"],
+                             tag_bpm=str(int(round(bpm))) if bpm else t["tag_bpm"],
                              tag_key=key_text or t["tag_key"])
 
     # ----------------------------------------------------------- manual edits
     def set_bpm(self, track_id: int, bpm: float | None, write: bool | None = None) -> None:
-        self.db.update_track(track_id, bpm=bpm, bpm_manual=1 if bpm is not None else 0, bpm_confidence=1.0 if bpm else None)
+        self.db.update_track(track_id, bpm=bpm, bpm_manual=1 if bpm is not None else 0,
+                             bpm_confidence=1.0 if bpm else None, bpm_source="manual" if bpm else "")
         if (self.settings.write_tags if write is None else write) and bpm:
             self._write_tags_safe(track_id)
 
     def set_key(self, track_id: int, key_code: str | None, write: bool | None = None) -> None:
-        self.db.update_track(track_id, key=key_code, key_manual=1 if key_code else 0, key_confidence=1.0 if key_code else None)
+        self.db.update_track(track_id, key=key_code, key_manual=1 if key_code else 0,
+                             key_confidence=1.0 if key_code else None, key_source="manual" if key_code else "")
         if (self.settings.write_tags if write is None else write) and key_code:
             self._write_tags_safe(track_id)
 
