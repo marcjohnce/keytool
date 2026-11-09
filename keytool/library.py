@@ -34,11 +34,17 @@ def _worker_init() -> None:
         os.environ[var] = "1"
 
 
-def _analyze_worker(path: str, bpm_min: float, bpm_max: float) -> dict:
+def _analyze_worker(path: str, bpm_min: float, bpm_max: float, do_bpm: bool = True, do_key: bool = True) -> dict:
     # Imported lazily so the GUI process starts fast and workers are self-contained
     from .analysis import analyze_file
 
-    return analyze_file(path, bpm_min, bpm_max).to_dict()
+    res = analyze_file(path, bpm_min, bpm_max, do_bpm, do_key).to_dict()
+    # only report what was actually analysed, so nothing else gets overwritten
+    if not do_bpm:
+        res.pop("bpm"); res.pop("bpm_confidence")
+    if not do_key:
+        res.pop("key"); res.pop("key_confidence")
+    return res
 
 
 def _make_pool(workers: int) -> ProcessPoolExecutor:
@@ -146,6 +152,18 @@ class Library:
         ids = list(track_ids)
         tracks = {t["id"]: t for t in self.db.get_tracks(ids)}
         order = [i for i in ids if i in tracks]
+
+        # what has to be analysed per track: values taken from the file tags (on import) and manual
+        # values are kept, so only the missing part is computed (e.g. BPM only if the key is in the tags)
+        def needs(t: dict, field: str) -> bool:
+            if t[f"{field}_manual"] and t[field]:
+                return False
+            return not (keep_tag_values and t[f"{field}_source"] == "tags" and t[field])
+
+        jobs = {tid: (needs(tracks[tid], "bpm"), needs(tracks[tid], "key")) for tid in order}
+        for tid in [t for t in order if not any(jobs[t])]:      # nothing left to analyse
+            self.db.update_track(tid, status="ok", error="")
+        order = [t for t in order if any(jobs[t])]
         total = len(order)
         stats = dict(done=0, ok=0, errors=0)
         if not total:
@@ -177,7 +195,8 @@ class Library:
             broken = False
             try:
                 for tid in remaining:
-                    futs[pool.submit(self.worker_fn, tracks[tid]["path"], s.bpm_min, s.bpm_max)] = tid
+                    do_bpm, do_key = jobs[tid]
+                    futs[pool.submit(self.worker_fn, tracks[tid]["path"], s.bpm_min, s.bpm_max, do_bpm, do_key)] = tid
                 pending = set(futs)
                 while pending:
                     if cancel and cancel.is_set():

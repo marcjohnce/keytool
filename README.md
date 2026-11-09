@@ -16,6 +16,7 @@ die Bibliothek zugreifen.
 | Suche | Freitext + Titel, Interpret, Album, Jahr von/bis, BPM von/bis, Tonarten (Mehrfachauswahl), Schlüsselwörter (alle/mindestens eins) |
 | Schlüsselwörter | Pro Titel oder für viele Titel gleichzeitig; umbenennen und überall entfernen |
 | DJ-Extras | „Harmonisch passend“: Titel, die nach dem Camelot-Rad zur Auswahl passen (±6 % BPM); BPM halbieren/verdoppeln |
+| Nur Fehlendes analysieren | Steht nur die Tonart in den Tags, wird nur die BPM analysiert (etwa 20× schneller als die volle Analyse); steht nur die BPM drin, nur die Tonart; stehen beide drin, gar nichts |
 | Tags | BPM & Tonart werden nach der Analyse **automatisch in die Datei geschrieben** (ID3 TBPM/TKEY, Vorbis BPM/INITIALKEY, MP4 tmpo/initialkey) – abschaltbar |
 | Detailansicht | Titel, Interpret, Album, Genre, Kommentar, Tonart, Energy (1–10) und Tempo bearbeiten – einzeln oder für viele Titel gleichzeitig; Dateityp, Bitrate, Dateigröße, Dauer und Pfad werden angezeigt. Änderungen werden in die Datei-Tags geschrieben (abschaltbar) |
 | Manuelle Korrektur | BPM/Tonart überschreiben; manuelle Werte bleiben bei einer erneuten Analyse erhalten |

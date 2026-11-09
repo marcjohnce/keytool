@@ -657,3 +657,38 @@ def test_serato_garbage_is_ignored(tmp_path):
     _encode(raw, f)
     t = ID3(f); t.add(GEOB(encoding=0, mime="application/octet-stream", desc="Serato Markers2", data=b"\x02\x05junk")); t.save(f)
     assert not read_serato_markers(str(f))
+
+
+# ------------------------------------------------------------------ analyse only what is missing
+def test_analyze_file_parts(tmp_path):
+    import time
+    from keytool.analysis import analyze_file
+    f = tmp_path / "a.wav"
+    _write_wav(f, make_track(126, 9, True, seconds=30))
+    t0 = time.time(); full = analyze_file(str(f)); t_full = time.time() - t0
+    t0 = time.time(); bpm_only = analyze_file(str(f), do_key=False); t_bpm = time.time() - t0
+    assert bpm_only.key is None and abs(bpm_only.bpm - 126) < 1 and full.key == Key.parse("Am").code
+    assert t_bpm < t_full                         # key detection skipped
+    key_only = analyze_file(str(f), do_bpm=False)
+    assert key_only.bpm is None and key_only.key == Key.parse("Am").code
+
+
+def test_import_analyses_only_missing_values(tmp_path, tagged_dir, monkeypatch):
+    log = tmp_path / "jobs.log"
+    monkeypatch.setenv("KEYTOOL_TEST_LOG", str(log))
+    from crashy import recording_worker
+    lib = _lib(tmp_path, write_tags=False)
+    lib.worker_fn = recording_worker
+    lib.import_paths([str(tagged_dir)])
+    jobs = {l.split("|")[0]: (l.split("|")[1], l.split("|")[2]) for l in log.read_text().split()}
+    assert jobs == {"bpm_only.mp3": ("0", "1"),      # BPM in tags -> key only
+                    "key_only.flac": ("1", "0"),     # key in tags -> BPM only
+                    "none.mp3": ("1", "1")}          # nothing in tags -> both; fully tagged files: no job
+    rows = {r["filename"]: r for r in lib.search(Query())}
+    k = rows["key_only.flac"]
+    assert Key.from_code(k["key"]).camelot() == "11A" and k["key_source"] == "tags"
+    assert abs(k["bpm"] - 120) < 1 and k["bpm_source"] == "analysis" and k["status"] == "ok"
+    # explicit re-analysis still analyses everything
+    log.write_text("")
+    lib.analyze([k["id"]], keep_tag_values=False)
+    assert log.read_text().strip() == "key_only.flac|1|1"

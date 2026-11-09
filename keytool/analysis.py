@@ -242,8 +242,11 @@ def detect_key(y: np.ndarray, sr: int = SR, chunk_seconds: float = 45.0) -> tupl
 
 
 # ----------------------------------------------------------------- entry point
-def analyze_file(path: str, bpm_min: float = 70, bpm_max: float = 180) -> AnalysisResult:
+def analyze_file(path: str, bpm_min: float = 70, bpm_max: float = 180,
+                 do_bpm: bool = True, do_key: bool = True) -> AnalysisResult:
+    """Analyse tempo and/or key. A part that is switched off is skipped entirely (the key detection
+    is the expensive part, so a BPM-only analysis is several times faster) and returned as None."""
     y, duration = load_audio(path)
-    bpm, bconf = detect_bpm(y, SR, bpm_min, bpm_max)
-    key, kconf = detect_key(y, SR)
+    bpm, bconf = detect_bpm(y, SR, bpm_min, bpm_max) if do_bpm else (None, 0.0)
+    key, kconf = detect_key(y, SR) if do_key else (None, 0.0)
     return AnalysisResult(bpm=bpm, bpm_confidence=bconf, key=key, key_confidence=kconf, duration=round(duration, 2))

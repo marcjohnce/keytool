@@ -173,9 +173,10 @@ class Database:
         if not t:
             return
         upd: dict[str, Any] = dict(status="ok", error="", analyzed_at=time.time())
-        if not t["bpm_manual"] and not (keep_tag_values and t["bpm_source"] == "tags" and t["bpm"]):
+        # fields missing from the result were not analysed (e.g. BPM-only analysis) and stay untouched
+        if "bpm" in result and not t["bpm_manual"] and not (keep_tag_values and t["bpm_source"] == "tags" and t["bpm"]):
             upd.update(bpm=result.get("bpm"), bpm_confidence=result.get("bpm_confidence"), bpm_source="analysis")
-        if not t["key_manual"] and not (keep_tag_values and t["key_source"] == "tags" and t["key"]):
+        if "key" in result and not t["key_manual"] and not (keep_tag_values and t["key_source"] == "tags" and t["key"]):
             upd.update(key=result.get("key"), key_confidence=result.get("key_confidence"), key_source="analysis")
         if result.get("duration") and not t["duration"]:
             upd["duration"] = result["duration"]
