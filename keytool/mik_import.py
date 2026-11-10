@@ -41,6 +41,12 @@ class ImportPlan:
     missing_existing: list[MikSong]        # not in the library, file exists -> can be added
     missing_gone: list[MikSong]            # not in the library, file no longer exists
     by_filename: int = 0                   # how many of `matched` were found via the file name only
+    library_gone: list[MikSong] = field(default_factory=list)   # in the library, but the file no longer exists
+
+    @property
+    def gone(self) -> int:
+        """Tracks skipped because their file does not exist (any more)."""
+        return len(self.missing_gone) + len(self.library_gone)
 
 
 @dataclass
@@ -122,6 +128,7 @@ def plan_import(db, songs: list[MikSong]) -> ImportPlan:
     """Match MIK songs to library tracks: exact path first, then a unique file name."""
     rows = db.conn().execute("SELECT id, path, filename FROM tracks").fetchall()
     by_path = {_path_key(r["path"]): r["id"] for r in rows}
+    path_of = {r["id"]: r["path"] for r in rows}
     names: dict[str, list[int]] = {}
     for r in rows:
         names.setdefault((r["filename"] or "").lower(), []).append(r["id"])
@@ -140,7 +147,10 @@ def plan_import(db, songs: list[MikSong]) -> ImportPlan:
                 tid = cands[0]
                 plan.by_filename += 1
         if tid is not None:
-            plan.matched[tid] = s
+            if os.path.exists(path_of[tid]):
+                plan.matched[tid] = s
+            else:
+                plan.library_gone.append(s)                 # library entry whose file is gone: skip
         elif os.path.exists(s.file):
             plan.missing_existing.append(s)
         else:
@@ -158,12 +168,18 @@ def apply_import(lib, plan: ImportPlan, add_missing: bool = False, collections_a
 
     overwrite=True replaces KeyTool's own analysis and tag values, False only fills empty fields. Values set by
     hand are never replaced. Collections become keywords. With add_missing, files only known to Mixed In Key are
-    added to the library first (without queueing an analysis - MIK already has the values)."""
-    res = ImportResult(not_found=len(plan.missing_gone) + (0 if add_missing else len(plan.missing_existing)))
+    added to the library first (without queueing an analysis - MIK already has the values). Tracks whose file
+    does not exist are ignored, both MIK-only songs and library entries; this is checked again here."""
+    res = ImportResult(not_found=plan.gone + (0 if add_missing else len(plan.missing_existing)))
     matched = dict(plan.matched)
-    if add_missing and plan.missing_existing:
-        lib.scan([s.file for s in plan.missing_existing], cancel=cancel)
-        for s in plan.missing_existing:
+    # files can disappear between the preview and the import: check again, skip what is gone
+    to_add = []
+    if add_missing:
+        to_add = [s for s in plan.missing_existing if os.path.exists(s.file)]
+        res.not_found += len(plan.missing_existing) - len(to_add)
+    if to_add:
+        lib.scan([s.file for s in to_add], cancel=cancel)
+        for s in to_add:
             t = lib.db.get_track_by_path(norm_path(s.file))
             if t:
                 matched[t["id"]] = s
@@ -178,6 +194,9 @@ def apply_import(lib, plan: ImportPlan, add_missing: bool = False, collections_a
                 break
             t = db.get_track(tid)
             if not t:
+                continue
+            if not os.path.exists(t["path"]):
+                res.not_found += 1
                 continue
             upd: dict = {}
             if s.bpm and not t["bpm_manual"] and (overwrite or not t["bpm"]):

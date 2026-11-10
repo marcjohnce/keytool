@@ -122,8 +122,8 @@ class MikImportDialog(QDialog):
             lines.append(tr("mik_by_name", n=p.by_filename))
         if p.missing_existing:
             lines.append(tr("mik_missing", n=len(p.missing_existing)))
-        if p.missing_gone:
-            lines.append(tr("mik_gone", n=len(p.missing_gone)))
+        if p.gone:
+            lines.append(tr("mik_gone", n=p.gone))
         self.details.setText("\n".join(lines))
         self.details.setVisible(bool(lines))
         names = sorted({c for s in p.songs for c in s.collections}, key=str.lower)
