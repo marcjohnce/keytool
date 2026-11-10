@@ -57,9 +57,10 @@ Ein separates FFmpeg ist nicht nötig.
   die du änderst. Wechselst du mit ungespeicherten Änderungen den Titel, fragt KeyTool nach. Energy wird als
   `TXXX:EnergyLevel` (MP3/WAV), `ENERGYLEVEL` (FLAC/OGG) bzw. `EnergyLevel` (M4A) gespeichert; Mixed-In-Key-
   Kommentare wie „8A - Energy 6“ werden beim Einlesen erkannt.
-* **Abspielen:** Titel auswählen → Cover, Wellenform und Player oben laden den Titel. Leertaste oder Doppelklick
-  startet/pausiert, Klicken oder Ziehen in der Wellenform spult. ⏮/⏭ (Strg+←/→ oder Medientasten) springen
-  zum vorherigen/nächsten Titel in der aktuellen Sortierung und Filterung; ⏮ startet nach den ersten 3 Sekunden
+* **Abspielen:** Doppelklick (oder Enter) lädt einen Titel ins Deck und spielt ihn ab; einfaches Auswählen zeigt
+  nur die Details. Leertaste startet/pausiert, Klicken oder Ziehen in der Wellenform spult. Wird der Titel im Deck
+  neu analysiert oder bearbeitet, zeigt das Deck sofort die neuen Werte. ⏮/⏭ (Strg+←/→ oder Medientasten)
+  springen vom Titel im Deck zum vorherigen/nächsten in der aktuellen Sortierung und Filterung; ⏮ startet nach den ersten 3 Sekunden
   erst den Titel neu. Am Titelende geht es mit dem nächsten weiter, am Listenende hält der Player an. Ein Klick
   aufs Cover zeigt es groß.
 * **Transponieren:** Im Player „−1 / 0 / +1“ wählen. Der Titel spielt weiter, während im Hintergrund die
@@ -95,7 +96,7 @@ Ein separates FFmpeg ist nicht nötig.
 * **Titel in andere Programme ziehen:** Ausgewählte Titel (auch mehrere) aus der Liste per Drag & Drop in einen
   Browser (z. B. Upload-Feld), einen Audioplayer, den Explorer oder DJ-Software ziehen – übergeben werden die
   Originaldateien. Zurück ins KeyTool-Fenster gezogen passiert nichts.
-* **Kontextmenü der Tabelle:** erneut analysieren, Tags schreiben, im Explorer anzeigen, aus der Bibliothek entfernen
+* **Kontextmenü der Tabelle:** abspielen, ins Deck laden, nach Interpret / Album / Tonart filtern, erneut analysieren, Tags schreiben, im Explorer anzeigen, aus der Bibliothek entfernen
   (die Dateien selbst werden nie gelöscht).
 * **Einstellungen:** Sprache, Darstellung, Notation, BPM-Bereich, automatisches Tag-Schreiben und welche Notation in
   den Tonart-Tag geschrieben wird (Standard: Kreuze, z. B. „F#m“ – kompatibel mit Rekordbox/Serato/Traktor).

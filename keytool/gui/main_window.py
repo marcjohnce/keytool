@@ -235,10 +235,6 @@ class MainWindow(QMainWindow, Translatable):
                           (44, 210, 140, 140, 62, 60, 78, 80, 56, 52, 150, 100, 160, 56, 64, 90, 120, 300)):
             self.table.setColumnWidth(col, w)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
-        # right click only selects for the context menu, it never loads the title into the deck
-        self._deck_hold = False
-        self.table.viewport().installEventFilter(self)
-        self.table.installEventFilter(self)
         self.table.customContextMenuRequested.connect(self.table_menu)
         self.table.selectionModel().selectionChanged.connect(self.selection_changed)
         self.drop_hint = QLabel(); self.drop_hint.setObjectName("dropHint"); self.drop_hint.setAlignment(Qt.AlignCenter)
@@ -249,7 +245,10 @@ class MainWindow(QMainWindow, Translatable):
         self.center.addWidget(hint_wrap)
         self.player = PlayerPanel(self.s)
         self.player.deck_changed.connect(self.update_deck)
-        self.table.doubleClicked.connect(lambda _: self.player.play())
+        self.table.doubleClicked.connect(lambda idx: self.load_into_deck(autoplay=True, track_id=idx.data(ID_ROLE)))
+        for k in (Qt.Key_Return, Qt.Key_Enter):
+            QShortcut(QKeySequence(k), self.table, activated=lambda: self.load_into_deck(autoplay=True),
+                      context=Qt.WidgetShortcut)
         self.player.prev_requested.connect(lambda playing: self.play_adjacent(-1, playing))
         self.player.next_requested.connect(lambda playing: self.play_adjacent(1, playing))
         for seq, slot in ((QKeySequence("Ctrl+Right"), lambda: self.play_adjacent(1, self.player.is_playing())),
@@ -399,6 +398,8 @@ class MainWindow(QMainWindow, Translatable):
                     break
         self.update_count()
         self.selection_changed()
+        if hasattr(self, "player"):
+            self.sync_deck()
 
     def refresh_keywords(self):
         self.details.set_known_genres(self.lib.db.distinct_values("genre"))
@@ -440,40 +441,44 @@ class MainWindow(QMainWindow, Translatable):
                 self._apply_detail_changes(old_ids, ch)
                 rows = self.selected_rows()
         self.details.set_rows(rows, keep_edits=True)
-        if not hasattr(self, "player") or self._deck_hold:
-            return
-        cur = self.table.currentIndex()
-        cur_id = cur.data(ID_ROLE) if cur.isValid() else None
-        row = next((r for r in rows if r["id"] == cur_id), rows[0] if rows else None)
-        self.player.set_track(row)
+        # selecting only shows details; a title goes into the deck by double-click (or Enter / context menu)
 
-    def eventFilter(self, obj, e):
-        from PySide6.QtCore import QEvent, QItemSelectionModel
-        table = getattr(self, "table", None)
-        if table is not None and obj is table.viewport() and e.type() == QEvent.MouseButtonPress:
-            if e.button() == Qt.RightButton:
-                # select the clicked row (keeps an existing multi-selection) without touching the deck
-                self._deck_hold = True
-                idx = table.indexAt(e.position().toPoint())
-                sm = table.selectionModel()
-                if idx.isValid() and not sm.isRowSelected(idx.row(), idx.parent()):
-                    sm.setCurrentIndex(idx, QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
-                return True          # Qt's own handling would change the selection again
-            self._deck_hold = False  # left/middle click: normal behaviour, selection loads the deck
-        elif table is not None and obj is table and e.type() == QEvent.KeyPress:
-            if e.key() not in (Qt.Key_Menu, Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta):
-                self._deck_hold = False
-        return super().eventFilter(obj, e)
-
-    def load_into_deck(self, autoplay: bool = False):
-        """Load the current (right-clicked) title into the deck, optionally playing it."""
-        self._deck_hold = False
+    def _menu_row(self) -> dict | None:
+        """The title the user is acting on: the current row if it is selected, else the first selected one."""
         rows = self.selected_rows()
         cur = self.table.currentIndex()
         cur_id = cur.data(ID_ROLE) if cur.isValid() else None
-        row = next((r for r in rows if r["id"] == cur_id), rows[0] if rows else None)
+        return next((r for r in rows if r["id"] == cur_id), rows[0] if rows else None)
+
+    def load_into_deck(self, autoplay: bool = False, track_id: int | None = None):
+        """Load a title into the deck (double-click, Enter, context menu), optionally playing it."""
+        if track_id is not None:
+            row = next((r for r in self.model.rows if r["id"] == track_id), None)
+        else:
+            row = self._menu_row()
         if row:
             self.player.set_track(row, autoplay=autoplay)
+
+    def sync_deck(self):
+        """Keep the deck's key/tempo/title in step with the library after an analysis or an edit.
+        Same file -> the player only refreshes its display, playback is not interrupted."""
+        cur = self.player.row
+        if not cur:
+            return
+        row = next((r for r in self.model.rows if r["id"] == cur["id"]), None) or self.lib.db.get_track(cur["id"])
+        if row and any(row.get(k) != cur.get(k) for k in ("key", "bpm", "energy", "title", "artist", "album", "year")):
+            self.player.set_track(row)
+
+    # -- context menu filters
+    def filter_by_artist(self, row: dict):
+        self.f_artist.setText(row.get("artist") or "")
+
+    def filter_by_album(self, row: dict):
+        self.f_album.setText(row.get("album") or "")
+
+    def filter_by_key(self, row: dict):
+        if row.get("key"):
+            self.f_keys.set_selected([row["key"]])
 
     def set_details_visible(self, on: bool):
         """Show/hide the right sidebar; the track list takes the freed space. Remembered across starts."""
@@ -495,22 +500,24 @@ class MainWindow(QMainWindow, Translatable):
         self.model.set_deck(row["id"], k.code if k else None, row.get("bpm"))
 
     def play_adjacent(self, delta: int, keep_playing: bool):
-        """Select the previous/next track in the list's current order (filter + sorting) and load it;
-        keeps playing if the player was playing. Stops at the end of the list."""
+        """Load the previous/next title relative to the one in the deck, in the list's current order
+        (filter + sorting); keeps playing if the player was playing. Stops at the end of the list."""
         n = self.proxy.rowCount()
         if not n:
             return
-        cur = self.table.currentIndex()
-        row = cur.row() if cur.isValid() else -1
-        target = row + delta
+        deck_id = self.player.row["id"] if self.player.row else None
+        pos = next((r for r in range(n) if self.proxy.index(r, 0).data(ID_ROLE) == deck_id), None)
+        if pos is None:                       # deck title filtered out / empty deck: start from the selection
+            cur = self.table.currentIndex()
+            pos = cur.row() if cur.isValid() else -1
+        target = pos + delta
         if target < 0 or target >= n:
             if delta > 0 and keep_playing:
                 self.player.stop()      # end of the list
             return
         self.table.selectRow(target)
         self.table.scrollTo(self.proxy.index(target, 0))
-        if keep_playing:
-            self.player.play()
+        self.load_into_deck(autoplay=keep_playing, track_id=self.proxy.index(target, 0).data(ID_ROLE))
 
     def _released(self, ids, fn):
         """Run fn while the player has released the affected file (Windows file locking)."""
@@ -612,6 +619,8 @@ class MainWindow(QMainWindow, Translatable):
                 self.model.update_row(row)
                 if item.track_id in self.selected_ids():
                     self.selection_changed()
+                if self.player.row and self.player.row["id"] == item.track_id:
+                    self.sync_deck()
         self.queue_panel.schedule()
         self.update_progress()
         if not self.queue.is_busy() and event == "finished":
@@ -739,6 +748,14 @@ class MainWindow(QMainWindow, Translatable):
         m.addAction(tr("write_tags"), self.write_tags_selected)
         m.addAction(tr("reset_manual"), lambda: (self.lib.reset_manual(self.selected_ids()), self.reanalyze_selected()))
         m.addAction("🔎  " + tr("research_similar"), lambda: self.open_research(True))
+        m.addSeparator()
+        r0 = self._menu_row()
+        a = m.addAction(tr("filter_artist"), lambda: self.filter_by_artist(r0))
+        a.setEnabled(bool(r0 and r0.get("artist")))
+        a = m.addAction(tr("filter_album"), lambda: self.filter_by_album(r0))
+        a.setEnabled(bool(r0 and r0.get("album")))
+        a = m.addAction(tr("filter_key"), lambda: self.filter_by_key(r0))
+        a.setEnabled(bool(r0 and r0.get("key")))
         m.addSeparator()
         m.addAction(tr("add_keyword"), self._prompt_keywords)
         m.addSeparator()
