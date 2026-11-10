@@ -13,6 +13,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS tracks (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     path            TEXT NOT NULL UNIQUE,
+    path_key        TEXT,
     folder          TEXT NOT NULL,
     filename        TEXT NOT NULL,
     ext             TEXT NOT NULL,
@@ -68,7 +69,18 @@ SORTABLE = {"title", "artist", "album", "year", "bpm", "key", "duration", "added
 
 
 def norm_path(p: str | os.PathLike) -> str:
-    return os.path.normcase(os.path.abspath(str(p))) if os.name == "nt" else os.path.abspath(str(p))
+    """Absolute, normalised path with its original letter case (what is stored and shown)."""
+    return os.path.normpath(os.path.abspath(str(p)))
+
+
+CASE_INSENSITIVE_PATHS = os.name == "nt"      # Windows file systems ignore letter case
+
+
+def path_key(p: str | os.PathLike) -> str:
+    """Form used to compare paths: case-insensitive on Windows (all Unicode letters, not just A–Z),
+    unchanged elsewhere. Stored in tracks.path_key with a unique index."""
+    n = norm_path(p)
+    return n.casefold() if CASE_INSENSITIVE_PATHS else n
 
 
 @dataclass
@@ -107,6 +119,16 @@ class Database:
                           ("album_artist", "TEXT")):      # NULL = not read yet (filled lazily from the file)
             if col not in cols:
                 c.execute(f"ALTER TABLE tracks ADD COLUMN {col} {decl}")
+        # path_key: case-insensitive lookup key on Windows. Older libraries stored the path itself in lower
+        # case (os.path.normcase); their rows get a key now and their original casing back on the next scan.
+        if "path_key" not in cols:
+            c.execute("ALTER TABLE tracks ADD COLUMN path_key TEXT")
+        missing = c.execute("SELECT id, path FROM tracks WHERE path_key IS NULL").fetchall()
+        if missing:
+            c.execute("BEGIN")
+            c.executemany("UPDATE tracks SET path_key=? WHERE id=?", [(path_key(r["path"]), r["id"]) for r in missing])
+            c.execute("COMMIT")
+        c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_tracks_path_key ON tracks(path_key)")
 
     # -------------------------------------------------------------- connection
     def conn(self) -> sqlite3.Connection:
@@ -128,7 +150,7 @@ class Database:
 
     # -------------------------------------------------------------- tracks
     def get_track_by_path(self, path: str) -> dict | None:
-        r = self.conn().execute("SELECT * FROM tracks WHERE path=?", (norm_path(path),)).fetchone()
+        r = self.conn().execute("SELECT * FROM tracks WHERE path_key=?", (path_key(path),)).fetchone()
         return self._row(r) if r else None
 
     def get_track(self, track_id: int) -> dict | None:
@@ -149,8 +171,9 @@ class Database:
     def upsert_file(self, path: str, size: int, mtime: float, meta: dict) -> int:
         p = norm_path(path)
         c = self.conn()
-        row = c.execute("SELECT id FROM tracks WHERE path=?", (p,)).fetchone()
+        row = c.execute("SELECT id FROM tracks WHERE path_key=?", (path_key(p),)).fetchone()
         vals = dict(
+            path=p, path_key=path_key(p),            # path keeps the original casing (fixes old lower-case rows)
             folder=os.path.dirname(p), filename=os.path.basename(p), ext=os.path.splitext(p)[1].lower().lstrip("."),
             size=size, mtime=mtime, **meta,
         )
@@ -158,7 +181,7 @@ class Database:
             sets = ", ".join(f"{k}=?" for k in vals)
             c.execute(f"UPDATE tracks SET {sets} WHERE id=?", (*vals.values(), row["id"]))
             return int(row["id"])
-        vals.update(path=p, added_at=time.time(), status="pending")
+        vals.update(added_at=time.time(), status="pending")
         cols = ", ".join(vals)
         cur = c.execute(f"INSERT INTO tracks ({cols}) VALUES ({','.join('?' * len(vals))})", tuple(vals.values()))
         return int(cur.lastrowid)
@@ -325,9 +348,9 @@ class Database:
         if q.status:
             cl.append("t.status = ?"); p.append(q.status)
         if q.folder:
-            f = norm_path(q.folder)
-            cl.append("(t.folder = ? OR t.folder LIKE ? ESCAPE '\\')")
-            p += [f, f.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + os.sep.replace("\\", "\\\\") + "%"]
+            k = path_key(q.folder).rstrip(os.sep) + os.sep      # everything below this folder
+            cl.append("substr(t.path_key, 1, ?) = ?")
+            p += [len(k), k]
         return ("WHERE " + " AND ".join(cl)) if cl else "", p
 
     def distinct_values(self, column: str) -> list[str]:

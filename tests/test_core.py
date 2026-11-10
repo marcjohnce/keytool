@@ -808,7 +808,8 @@ def test_track_list_drag_mime(tmp_path, monkeypatch):
     m.set_rows([{"id": i, "path": p} for i, p in enumerate(files)] + [{"id": 9, "path": str(tmp_path / "gone.mp3")}])
     assert m.flags(m.index(0, 0)) & Qt.ItemIsDragEnabled
     md = m.mimeData([m.index(r, c) for r in range(3) for c in (0, 1)])   # several columns per row
-    assert [u.toLocalFile() for u in md.urls()] == files                  # one entry per row, missing file skipped
+    # one entry per row, missing file skipped (Qt returns "/" separators on Windows too)
+    assert [os.path.normpath(u.toLocalFile()) for u in md.urls()] == [os.path.normpath(f) for f in files]
     assert md.text().splitlines() == files
     assert m.supportedDragActions() == Qt.CopyAction
 
@@ -863,8 +864,13 @@ def test_queue_parallel_starts_in_order(tmp_path, monkeypatch):
     q = AnalysisQueue(lib)
     q.add([ids[n] for n in names])
     assert q.wait_idle(120)
-    order = _log_order(log)
-    assert set(order[:2]) == {"p1", "p2"} and set(order[2:]) == {"p3", "p4"}
+    assert sorted(_log_order(log)) == names                         # all four analysed
+    # the queue hands tracks to the pool top-down: p1, p2 first, p3/p4 only when a slot frees up.
+    # Compare when the queue started them – the order in which workers *finish* depends on process
+    # start-up times (slow on Windows) and says nothing about the queue.
+    started = {i.track_id: i.started for i in q.items()}
+    first, later = [started[ids[n]] for n in ("p1", "p2")], [started[ids[n]] for n in ("p3", "p4")]
+    assert max(first) <= min(later)
     q.shutdown()
 
 
@@ -903,7 +909,10 @@ def test_analysis_log_records_crashes_and_errors(tmp_path, monkeypatch):
     assert q.wait_idle(120)
     q.shutdown()
     text = log.read_text(encoding="utf-8")
-    assert "Fatal Python error" in text or "Segmentation fault" in text      # faulthandler dump
+    # faulthandler dump: "Fatal Python error: Segmentation fault" (POSIX) or
+    # "Windows fatal exception: access violation" (Windows)
+    assert any(s in text for s in ("Fatal Python error", "Segmentation fault", "Windows fatal exception",
+                                   "access violation"))
     assert "analysis process died; exit codes:" in text and "SEGV.wav" in text
     assert "analysis.log" in lib.db.get_track(ids["SEGV"])["error"]
 
@@ -937,3 +946,84 @@ def test_album_artist_lazy_fill_for_old_libraries(tmp_path):
     assert lib.fill_album_artist(rows) and rows[0]["album_artist"] == "Various Artists"
     assert lib.db.get_track(tid)["album_artist"] == "Various Artists"
     assert not lib.fill_album_artist(rows)                                 # only once
+
+
+# ------------------------------------------------------------------ path letter case (Windows)
+def test_paths_keep_case_but_match_case_insensitively(tmp_path, monkeypatch):
+    """Windows: the library shows paths and file names with their real letter case, but finds a track
+    whatever the case of the lookup path (incl. non-ASCII letters). Old libraries that stored lower-case
+    paths get their casing back on the next scan, without re-analysis."""
+    import sqlite3
+    import keytool.db as dbmod
+    monkeypatch.setattr(dbmod, "CASE_INSENSITIVE_PATHS", True)
+    folder = tmp_path / "Ärzte Live"
+    folder.mkdir()
+    f = folder / "Westerland CRASH.wav"
+    _write_wav(f, make_track(120, 0, False, seconds=3))
+    db = Database(tmp_path / "lib.sqlite3")
+    lib = Library(db, Settings(write_tags=False))
+    lib.scan([str(f)])
+    t = lib.search(Query())[0]
+    assert t["filename"] == "Westerland CRASH.wav" and t["path"] == str(f)          # original case kept
+    assert db.get_track_by_path(str(f).replace("Ärzte", "äRZTE").upper())["id"] == t["id"]
+    assert [r["id"] for r in lib.search(Query(folder=str(folder).lower()))] == [t["id"]]
+    assert db.upsert_file(str(f).lower(), 1, 0, {}) == t["id"]                      # no duplicate row
+    assert len(lib.search(Query())) == 1
+
+    # library written by an older version: path stored in lower case, no path_key column yet
+    old = tmp_path / "old.sqlite3"
+    con = sqlite3.connect(old)
+    con.executescript(dbmod.SCHEMA.replace("    path_key        TEXT,\n", ""))
+    con.execute("INSERT INTO tracks (path, folder, filename, ext, size, mtime, status, bpm, key) "
+                "VALUES (?, ?, ?, 'wav', ?, ?, 'ok', 120, '9:min')",
+                (str(f).casefold(), str(folder).casefold(), f.name.casefold(), os.stat(f).st_size, os.stat(f).st_mtime))
+    con.commit(); con.close()
+    lib2 = Library(Database(old), Settings(write_tags=False))                        # migration adds path_key
+    rep = lib2.scan([str(f)])
+    assert rep.unchanged == 1 and not rep.to_analyze                                  # nothing re-analysed
+    t2 = lib2.search(Query())[0]
+    assert t2["path"] == str(f) and t2["filename"] == "Westerland CRASH.wav"          # casing restored
+
+
+def test_queue_requeues_track_when_pool_breaks_during_submit(tmp_path, monkeypatch):
+    """Windows timing: a running analysis crashes and the pool reports itself broken on the *next* submit,
+    before the queue has seen the crashed future. The healthy track must go back to waiting and be analysed
+    with a fresh pool – not be marked as an error."""
+    import threading
+    from concurrent.futures import Future
+    from concurrent.futures.process import BrokenProcessPool
+    import keytool.analysis_queue as aq
+    from keytool.analysis_queue import AnalysisQueue, DONE
+    lib, ids = _queue_lib(tmp_path, ["a", "b"], workers=2)
+    result = dict(bpm=120.0, bpm_confidence=0.9, key=Key.parse("8A").code, key_confidence=0.8, duration=3.0)
+    pools = []
+
+    class FakePool:
+        def __init__(self, workers):
+            self.n = len(pools)
+            self.submits = 0
+            pools.append(self)
+
+        def submit(self, fn, path, *args):
+            self.submits += 1
+            f = Future()
+            if self.n == 0 and self.submits == 1:      # first analysis "crashes" a moment later
+                threading.Timer(0.3, lambda: f.set_exception(BrokenProcessPool("terminated abruptly"))).start()
+                return f
+            if self.n == 0:                            # pool already knows it is broken
+                raise BrokenProcessPool("A child process terminated abruptly")
+            f.set_result(dict(result))                 # later pools work
+            return f
+
+        def shutdown(self, wait=True, cancel_futures=False):
+            pass
+
+    monkeypatch.setattr(aq, "_make_pool", FakePool)
+    q = AnalysisQueue(lib)
+    q.add([ids["a"], ids["b"]], keep_tag_values=False)
+    assert q.wait_idle(30)
+    st = {i.track_id: i for i in q.items()}
+    q.shutdown()
+    assert st[ids["b"]].state == DONE and not st[ids["b"]].error        # was marked as error before
+    assert st[ids["a"]].state == DONE                                    # retried alone, then fine
+    assert lib.db.get_track(ids["b"])["status"] == "ok" and len(pools) >= 2
