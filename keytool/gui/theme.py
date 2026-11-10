@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QEvent, QObject
+from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QLineEdit
 
 from ..keys import Key
 
@@ -92,7 +93,30 @@ def resolve_theme(name: str) -> str:
         return "dark"
 
 
+SPIN_TEXT_INSET = 8      # + 1 px frame = the 9 px left/right padding of line edits
+
+
+class _SpinBoxInset(QObject):
+    """Style sheets cannot pad the text of a spin box's embedded editor (Qt places it edge to edge), so
+    number fields got their text glued to the left border. Give every spin box the same text inset as a
+    line edit when it is polished."""
+
+    def eventFilter(self, obj, ev):
+        if ev.type() == QEvent.Polish and isinstance(obj, QAbstractSpinBox):
+            le = obj.findChild(QLineEdit)
+            if le is not None:
+                le.setTextMargins(SPIN_TEXT_INSET, 0, SPIN_TEXT_INSET, 0)
+        return False
+
+
+_spin_inset: _SpinBoxInset | None = None
+
+
 def apply_theme(app: QApplication, name: str) -> dict:
+    global _spin_inset
+    if _spin_inset is None:
+        _spin_inset = _SpinBoxInset(app)
+        app.installEventFilter(_spin_inset)
     c = THEMES[resolve_theme(name)]
     app.setStyle("Fusion")
     family = load_fonts()
@@ -142,6 +166,11 @@ def apply_theme(app: QApplication, name: str) -> dict:
         QComboBox::down-arrow {{ image: url("{chevron}"); width: 12px; height: 12px; }}
         QComboBox QAbstractItemView {{ background: {c['tooltip']}; border: 1px solid {c['border']}; padding: 4px;
             selection-background-color: {c['select']}; selection-color: {c['text']}; outline: 0; }}
+        /* number fields: the spin box draws frame + padding exactly like a line edit; its embedded line edit
+           must not add a second border/padding (that made them taller and pushed the text to the edge) */
+        QAbstractSpinBox QLineEdit {{ border: none; padding: 0px; margin: 0px; background: transparent;
+            min-height: 0px; border-radius: 0px; }}
+        QAbstractSpinBox {{ max-height: 20px; }}
         QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{ width: 0px; border: none; }}
         QAbstractSpinBox::up-arrow, QAbstractSpinBox::down-arrow {{ width: 0px; height: 0px; }}
         QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QTextEdit:focus, QPlainTextEdit:focus {{
