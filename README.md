@@ -79,22 +79,16 @@ executables" → Run workflow.
   BPM, key or metadata. If tags are written during playback, the player releases the file briefly and continues at
   the same position.
 * **Karaoke-Version research** ("Search Karaoke-Version" in the toolbar or right-click "Find matching tracks on
-  Karaoke-Version"): choose keys on the Camelot wheel ("Add harmonic keys" adds the neighbours), set a BPM range,
-  search. It is prefilled with the current key/BPM filter or with the key and BPM (±3 %) of the selected track.
-  * One search per key (20 hits per page, "Load more results"), so every hit carries its key. The result list on
-    the website has no tempo; KeyTool reads tempo ("~" = variable), all keys (songs with key changes have several)
-    and duration from the song pages – throttled, and cached for two weeks. Can be turned off in the dialog.
-  * **Include ±1 semitone** (on by default): also searches the keys one semitone lower and higher – such tracks can
-    be transposed to fit on Karaoke-Version. The "Transp." column shows by how much (+1 / −1, empty = fits as is),
-    the tooltip the key afterwards. That is three requests per key instead of one.
-  * ✓ marks tracks that are already in your library (same title and artist).
-  * Double-click opens the song page, "Open search in browser" the same search on the website.
-  * Karaoke-Version's terms only forbid crawling for AI training, and robots.txt allows the search pages. KeyTool
-    only fetches what you ask for, identifies itself as "KeyTool" and pauses between requests.
-  * **Bot protection (since November 2026):** Karaoke-Version now only serves search results to real web browsers
-    (Fastly "Client Challenge"). KeyTool does not work around this: it recognises the challenge page, says so in
-    the dialog and offers "Open search in browser" with all chosen keys (including ±1 semitone) and the BPM range.
-    The MCP tool then returns `error: blocked_by_bot_protection` and the link `search_url`.
+  Karaoke-Version"): choose keys on the Camelot wheel ("Add harmonic keys" adds the neighbours, a click in the centre clears all keys – as in the main window), set a BPM range and
+  click "Search in browser". The dialog is prefilled with the current key/BPM filter or with the key and BPM (±3 %)
+  of the selected track, and shows which keys and which tempo range the search covers.
+  * Karaoke-Version only serves search results to real web browsers (bot protection, Fastly "Client Challenge",
+    since November 2026). KeyTool does not work around this and no longer fetches results itself: it composes one
+    search with all chosen keys and the BPM range and opens it in your default browser.
+  * **Include ±1 semitone** (on by default): the search also covers the keys one semitone lower and higher – such
+    tracks can be transposed to fit on Karaoke-Version.
+  * The MCP tool `search_karaoke_version` still tries the site directly; while the bot protection is active it
+    returns `error: blocked_by_bot_protection` and the link `search_url`.
 * **Import from Mixed In Key** ("Analyze ▾ → Import from Mixed In Key …"): reads the library of Mixed In Key 10/11
   (`%LOCALAPPDATA%\Mixed In Key\Mixed In Key\<version>\MIKStore.db`, found automatically) and takes over key, tempo
   and energy. Tracks are matched by file path, moved files by their unique file name. A preview is shown before the
