@@ -133,6 +133,10 @@ class Library:
             if (existing and existing["size"] == st.st_size and abs((existing["mtime"] or 0) - st.st_mtime) < 1
                     and existing["status"] == "ok" and not self.settings.reanalyze_existing):
                 rep.unchanged += 1
+                p = norm_path(path)
+                if existing["path"] != p:            # same file, letter case differs (e.g. old lower-case rows)
+                    self.db.update_track(existing["id"], path=p, folder=os.path.dirname(p),
+                                         filename=os.path.basename(p))
                 continue
             md = read_metadata(path)
             meta = dict(title=md.title, artist=md.artist, album=md.album, album_artist=md.album_artist,
