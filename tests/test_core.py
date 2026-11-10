@@ -879,3 +879,34 @@ def test_queue_survives_crashing_worker(tmp_path, monkeypatch):
     assert lib.db.get_track(ids["x CRASH"])["status"] == "error"
     assert "started" in events and "finished" in events
     q.shutdown()
+
+
+# ------------------------------------------------------------------ diagnostics (windowed exe has no console)
+def test_analysis_log_records_crashes_and_errors(tmp_path, monkeypatch):
+    """A native crash and a Python error in a worker both end up in analysis.log with their cause."""
+    from crashy import raising_worker, segfault_worker
+    from keytool.analysis_queue import AnalysisQueue, ERROR
+    data = tmp_path / "data"
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(data))          # inherited by the spawned workers
+    lib, ids = _queue_lib(tmp_path, ["ok1", "SEGV", "BADFILE"], workers=1)
+    log = data / "analysis.log"
+
+    lib.worker_fn = segfault_worker
+    q = AnalysisQueue(lib)
+    q.add([ids["SEGV"]], keep_tag_values=False)
+    assert q.wait_idle(120)
+    q.shutdown()
+    text = log.read_text(encoding="utf-8")
+    assert "Fatal Python error" in text or "Segmentation fault" in text      # faulthandler dump
+    assert "analysis process died; exit codes:" in text and "SEGV.wav" in text
+    assert "analysis.log" in lib.db.get_track(ids["SEGV"])["error"]
+
+    lib.worker_fn = raising_worker
+    q = AnalysisQueue(lib)
+    q.add([ids["BADFILE"], ids["ok1"]], keep_tag_values=False)
+    assert q.wait_idle(120)
+    st = {i.track_id: i.state for i in q.items()}
+    q.shutdown()
+    assert st[ids["BADFILE"]] == ERROR and lib.db.get_track(ids["ok1"])["status"] == "ok"
+    text = log.read_text(encoding="utf-8")
+    assert "analysis failed:" in text and "BADFILE.wav" in text and "simulated decode error" in text

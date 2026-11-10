@@ -21,7 +21,7 @@ from concurrent.futures.process import BrokenProcessPool
 from dataclasses import dataclass, field
 from typing import Callable
 
-from .library import CRASH_MESSAGE, Library, _make_pool
+from .library import CRASH_MESSAGE, Library, _make_pool, write_log
 
 WAITING, RUNNING, DONE, ERROR = "waiting", "running", "done", "error"
 _seq = itertools.count(1)
@@ -215,6 +215,8 @@ class AnalysisQueue:
                                 pool = _make_pool(full)
                             fut = pool.submit(self.lib.worker_fn, *args)
                         except Exception as e:     # pool could not start a process: report, don't hang
+                            import traceback
+                            write_log("could not start analysis process\n" + traceback.format_exc())
                             err = f"{type(e).__name__}: {e}"
                             self.lib.db.set_error(item.track_id, err)
                             self._finish(item, ERROR, err)
@@ -251,6 +253,18 @@ class AnalysisQueue:
                 if broken:
                     crashed = list(running.values())
                     running.clear()
+                    codes = []
+                    for p in list(getattr(pool, "_processes", {}).values()):
+                        try:
+                            p.join(timeout=0.5)
+                            if p.exitcode not in (None, 0):
+                                c = p.exitcode
+                                codes.append(f"{c} (0x{c & 0xFFFFFFFF:08X})")
+                        except Exception:
+                            pass
+                    write_log("analysis process died; exit codes: " + (", ".join(codes) or "unknown") +
+                              "; files: " + "; ".join(self.lib.db.get_track(i.track_id)["path"]
+                                                      for i in crashed if self.lib.db.get_track(i.track_id)))
                     pool.shutdown(wait=False, cancel_futures=True)
                     pool = None
                     with self._cv:

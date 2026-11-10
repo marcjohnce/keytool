@@ -30,3 +30,26 @@ def crashing_recording_worker(path, *args):
     if "CRASH" in os.path.basename(path):
         os._exit(3)
     return recording_worker(path, *args)
+
+
+def segfault_worker(path, *args):
+    """Native crash (segmentation fault / access violation) for files named *SEGV*."""
+    if "SEGV" in os.path.basename(path):
+        import ctypes
+        ctypes.string_at(0)
+    from keytool.library import _analyze_worker
+    return _analyze_worker(path, *args)
+
+
+def raising_worker(path, *args):
+    """Goes through the real worker, which must log the Python traceback, for files named *BADFILE*."""
+    from keytool.library import _analyze_worker
+    if "BADFILE" not in os.path.basename(path):
+        return _analyze_worker(path, *args)
+    import keytool.analysis as an
+    original = an.analyze_file
+    an.analyze_file = lambda *a, **k: (_ for _ in ()).throw(ValueError("simulated decode error"))
+    try:
+        return _analyze_worker(path, *args)
+    finally:
+        an.analyze_file = original

@@ -149,6 +149,10 @@ Alternativ läuft der Server per `python -m keytool --mcp-http` (bzw. `KeyTool-M
 
 GUI und MCP-Server nutzen dieselbe Datenbank (`%APPDATA%\KeyTool\library.sqlite3`) und können gleichzeitig laufen.
 
+**Fehlersuche:** Schlägt eine Analyse fehl oder stürzt ein Analyse-Prozess ab, steht die Ursache (Python-Traceback bzw.
+Absturzstelle und Exit-Code) in `%APPDATA%\KeyTool\analysis.log`. Die exe ohne Konsolenfenster schreibt dorthin
+auch Fehlermeldungen, die sonst unsichtbar blieben.
+
 | Tool | Zweck |
 |---|---|
 | `search_tracks` | Suche mit allen Filtern, Sortierung, Paging, Notation wählbar |

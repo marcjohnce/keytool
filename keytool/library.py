@@ -22,11 +22,36 @@ from .tags import EDITABLE_FIELDS, is_audio_file, parse_tag_bpm, parse_tag_key, 
 ProgressCB = Callable[[int, int, dict | None], None]   # (done, total, track_row)
 
 
-CRASH_MESSAGE = ("Analyse-Prozess abgestürzt (Datei beschädigt oder zu wenig Arbeitsspeicher) / "
-                 "analysis process crashed (corrupt file or out of memory)")
+CRASH_MESSAGE = ("Analyse-Prozess abgestürzt (Datei beschädigt oder zu wenig Arbeitsspeicher; Details in "
+                 "analysis.log im KeyTool-Datenordner) / analysis process crashed (corrupt file or out of memory; "
+                 "details in analysis.log in the KeyTool data folder)")
+
+_crash_log = None      # kept open in each worker so faulthandler can write native crash tracebacks
+
+
+def log_path() -> str:
+    from .config import data_dir
+    return str(data_dir() / "analysis.log")
+
+
+def write_log(text: str) -> None:
+    """Append a line to analysis.log (diagnostics for the windowed exe, where there is no console)."""
+    try:
+        with open(log_path(), "a", encoding="utf-8") as f:
+            f.write(time.strftime("%Y-%m-%d %H:%M:%S ") + f"[pid {os.getpid()}] " + text.rstrip() + "\n")
+    except Exception:
+        pass
 
 
 def _worker_init() -> None:
+    global _crash_log
+    # native crashes (access violation, segfault in a C extension) get their traceback written to the log
+    try:
+        import faulthandler
+        _crash_log = open(log_path(), "a", encoding="utf-8", buffering=1)
+        faulthandler.enable(_crash_log, all_threads=True)
+    except Exception:
+        pass
     # One BLAS/OpenMP/numba thread per worker: the pool already runs one process per core.
     # Oversubscription multiplies memory use and is a common cause of crashed workers.
     for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMBA_NUM_THREADS",
@@ -37,9 +62,13 @@ def _worker_init() -> None:
 def _analyze_worker(path: str, bpm_min: float, bpm_max: float, do_bpm: bool = True, do_key: bool = True,
                     key_method: str = "classic") -> dict:
     # Imported lazily so the GUI process starts fast and workers are self-contained
-    from .analysis import analyze_file
-
-    res = analyze_file(path, bpm_min, bpm_max, do_bpm, do_key, key_method).to_dict()
+    try:
+        from .analysis import analyze_file
+        res = analyze_file(path, bpm_min, bpm_max, do_bpm, do_key, key_method).to_dict()
+    except Exception:
+        import traceback
+        write_log(f"analysis failed: {path}\n{traceback.format_exc()}")
+        raise
     # only report what was actually analysed, so nothing else gets overwritten
     if not do_bpm:
         res.pop("bpm"); res.pop("bpm_confidence")
@@ -236,6 +265,7 @@ class Library:
             remaining = [t for t in remaining if t not in handled]
             if not broken:
                 break
+            write_log(f"analysis process died (pool of {n}); retrying {len(remaining)} file(s) with fewer workers")
             if n == 1 and remaining:
                 finish(remaining.pop(0), None, CRASH_MESSAGE)   # culprit found
                 n = full
