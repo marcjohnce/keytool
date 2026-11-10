@@ -17,6 +17,13 @@ from typing import Iterable
 
 NOTATIONS = ("camelot", "sharps", "flats", "openkey")
 
+# languages that name notes in solfège: syllables C..B, sharp suffix, flat suffix, minor, major
+_SOLFEGE = {
+    "fr": (("do", "ré", "mi", "fa", "sol", "la", "si"), " dièse", " bémol", "mineur", "majeur"),
+    "it": (("Do", "Re", "Mi", "Fa", "Sol", "La", "Si"), " diesis", " bemolle", "minore", "maggiore"),
+    "es": (("Do", "Re", "Mi", "Fa", "Sol", "La", "Si"), " sostenido", " bemol", "menor", "mayor"),
+}
+
 SHARP_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 FLAT_NAMES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"]
 
@@ -131,16 +138,11 @@ class Key:
             if self.minor:
                 name = name.lower()
             return f"{name}-{'Moll' if self.minor else 'Dur'}"
-        if lang in ("fr", "it"):
-            # solfège: do ré mi fa sol la si (fr, lower case) / Do Re Mi Fa Sol La Si (it)
-            letters = {"C": 0, "D": 1, "E": 2, "F": 3, "G": 4, "A": 5, "B": 6}
-            syll = (("do", "ré", "mi", "fa", "sol", "la", "si") if lang == "fr"
-                    else ("Do", "Re", "Mi", "Fa", "Sol", "La", "Si"))
-            acc = {"#": (" dièse" if lang == "fr" else " diesis"), "b": (" bémol" if lang == "fr" else " bemolle")}
-            base = syll[letters[name[0]]] + (acc[name[1]] if len(name) > 1 else "")
-            mode = (("mineur" if self.minor else "majeur") if lang == "fr"
-                    else ("minore" if self.minor else "maggiore"))
-            return f"{base} {mode}"
+        if lang in _SOLFEGE:
+            # solfège names: do ré mi … (fr, lower case) / Do Re Mi … (it, es)
+            syll, sharp, flat, minor, major = _SOLFEGE[lang]
+            base = syll["CDEFGAB".index(name[0])] + ({"#": sharp, "b": flat}[name[1]] if len(name) > 1 else "")
+            return f"{base} {minor if self.minor else major}"
         return f"{name} {'minor' if self.minor else 'major'}"
 
     # ------------------------------------------------------------------ harmony

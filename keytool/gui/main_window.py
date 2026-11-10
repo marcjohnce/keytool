@@ -58,6 +58,9 @@ class SortProxy(QSortFilterProxyModel):
 
 # =========================================================================== main window
 class MainWindow(QMainWindow, Translatable):
+    # default widths of the compact columns (widened if the header needs more room in the UI language)
+    NARROW_COLUMNS = {"fit": 44, "key": 62, "bpm": 60, "delta": 78, "energy": 80, "duration": 56, "year": 52}
+
     def __init__(self, library: Library):
         super().__init__()
         self._tr_init()
@@ -366,10 +369,13 @@ class MainWindow(QMainWindow, Translatable):
             self.update_progress()
         self.model.refresh_all()
         self.update_count()
-        # the "fits" column is as narrow as possible, but never narrower than its header in this language
+        # narrow columns are never narrower than their header in this language (e.g. "Tonalidad", "Energía");
+        # +26 px leaves room for the padding and the sort arrow
         fm = self.table.horizontalHeader().fontMetrics()
-        fit_col = TrackModel.COLUMNS.index("fit")
-        self.table.setColumnWidth(fit_col, max(44, fm.horizontalAdvance(tr("fit")) + 26))
+        for col, w in self.NARROW_COLUMNS.items():
+            i = TrackModel.COLUMNS.index(col)
+            header = self.model.headerData(i, Qt.Horizontal) or ""
+            self.table.setColumnWidth(i, max(w, fm.horizontalAdvance(header) + 26))
 
     # ------------------------------------------------------------------ data
     def build_query(self) -> Query:

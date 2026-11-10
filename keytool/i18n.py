@@ -8,10 +8,10 @@ from __future__ import annotations
 import importlib
 import time
 
-LANGUAGES = {"de": "Deutsch", "en": "English", "fr": "Français", "it": "Italiano"}
-DECIMAL_COMMA = {"de", "fr", "it"}                    # 124,5 instead of 124.5
-DATETIME_FORMATS = {"de": "%d.%m.%Y %H:%M", "fr": "%d/%m/%Y %H:%M", "it": "%d/%m/%Y %H:%M",
-                    "en": "%Y-%m-%d %H:%M"}
+LANGUAGES = {"de": "Deutsch", "en": "English", "es": "Español", "fr": "Français", "it": "Italiano"}
+DECIMAL_COMMA = {"de", "es", "fr", "it"}              # 124,5 instead of 124.5
+DATETIME_FORMATS = {"de": "%d.%m.%Y %H:%M", "es": "%d/%m/%Y %H:%M", "fr": "%d/%m/%Y %H:%M",
+                    "it": "%d/%m/%Y %H:%M", "en": "%Y-%m-%d %H:%M"}
 
 _T: dict[str, tuple[str, str]] = {
     # key: (de, en)
