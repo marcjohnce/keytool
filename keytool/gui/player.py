@@ -35,7 +35,7 @@ def tinted(icon, color: QColor, size: int = 20):
 
 
 BTN = 40                      # diameter of all round control buttons
-from .theme import CUE_COLOR   # all cue points are shown in red (Serato style)
+from .theme import CUE_COLOR   # all cue points are shown in one colour
 
 
 def fmt_time(ms: int | float | None) -> str:
