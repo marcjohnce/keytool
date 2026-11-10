@@ -112,3 +112,17 @@ def test_queue_opens_only_on_request(win):
     assert btn.property("busy") is False and win.a_queue.text() == "Warteschlange"
     win.a_queue.setChecked(True)                               # opening by hand still works
     assert win.queue_dock.isVisible()
+
+
+def test_toolbar_buttons_share_font_and_height(win):
+    """Regression: widgets built before the theme kept the system font, so the re-styled queue button
+    (Archivo) sat 1 px off its neighbours."""
+    from PySide6.QtWidgets import QWidget
+    from keytool.gui.theme import load_fonts
+    if load_fonts():
+        assert {w.font().family() for w in win.findChildren(QWidget)} == {"Archivo"}
+    btns = [win.toolbar.widgetForAction(a) for a in (win.a_details, win.a_queue, win.a_settings)]
+    btn = btns[1]
+    btn.setProperty("busy", True); btn.style().unpolish(btn); btn.style().polish(btn)
+    QApplication.processEvents()
+    assert len({b.sizeHint().height() for b in btns}) == 1

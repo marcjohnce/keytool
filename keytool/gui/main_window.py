@@ -75,6 +75,9 @@ class MainWindow(QMainWindow, Translatable):
         self.setAcceptDrops(True)
         self.resize(1480, 880)
 
+        # palette, style sheet and the bundled font must be active before any widget exists, otherwise
+        # widgets created earlier keep the system font (style-sheet fonts are resolved at creation time)
+        apply_theme(QApplication.instance(), self.s.theme)
         self._build_toolbar()
         self._build_central()
         self._build_statusbar()
