@@ -271,6 +271,8 @@ STRINGS: dict[str, str] = {
     "transpose_unavailable": "Transposición no disponible: falta el paquete 'pedalboard'",
     "transposing": "Transponiendo {st}: {pct} %",
     "next_track": "Pista siguiente",
+    "prev_cue": "Al punto cue anterior",
+    "next_cue": "Al punto cue siguiente",
     "cover": "Portada",
     "no_cover": "No se encontró portada (ni incrustada ni como cover.jpg/folder.jpg en la carpeta)",
     "volume": "Volumen",

@@ -267,6 +267,8 @@ STRINGS: dict[str, str] = {
     "transpose_unavailable": "Transposition indisponible : le paquet 'pedalboard' est manquant",
     "transposing": "Transposition {st} : {pct} %",
     "next_track": "Morceau suivant",
+    "prev_cue": "Au point de repère précédent",
+    "next_cue": "Au point de repère suivant",
     "cover": "Pochette",
     "no_cover": "Aucune pochette trouvée (ni intégrée, ni en cover.jpg/folder.jpg dans le dossier)",
     "volume": "Volume",

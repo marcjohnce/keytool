@@ -74,7 +74,9 @@ executables" → Run workflow.
   `transpose_cache`). The original file is never changed.
 * **Serato cues:** hot cues appear in the waveform as a blue line (#08599B) with a numbered flag, saved loops as a shaded
   range (🔒 = locked). Clicking a line or flag (or Alt+1…8) sets the playback position to the cue with millisecond
-  precision – also during playback and while the track is still loading. Tooltips show name and time. KeyTool reads
+  precision – also during playback and while the track is still loading. Tooltips show name and time.
+  The buttons left and right of play/pause jump to the previous / next cue point (in time order); they are
+  disabled when the track has no cue points. "Previous" within 0.5 s after a cue goes one cue further back. KeyTool reads
   the "Serato Markers2" tag (format description: Holzhaus/serato-tags) and never changes it – not even when writing
   BPM, key or metadata. If tags are written during playback, the player releases the file briefly and continues at
   the same position.
