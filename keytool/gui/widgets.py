@@ -464,21 +464,6 @@ class KeyFilter(QWidget):
             p.setPen(txt)
             box = QRectF(pt.x() - 30, pt.y() - 12, 60, 24)
             p.drawText(box, Qt.AlignCenter, text)
-        # selection outlines on top
-        for code in self._selected:
-            k = Key.from_code(code)
-            r_out, r_in = (mid, hole) if k.minor else (R, mid)
-            start = self._angle(k.camelot_number) - 15
-            outer = QRectF(c.x() - r_out + 2, c.y() - r_out + 2, 2 * r_out - 4, 2 * r_out - 4)
-            inner = QRectF(c.x() - r_in - 2, c.y() - r_in - 2, 2 * r_in + 4, 2 * r_in + 4)
-            path = QPainterPath()
-            path.arcMoveTo(outer, start + 1)
-            path.arcTo(outer, start + 1, 28)
-            path.arcTo(inner, start + 29, -28)
-            path.closeSubpath()
-            p.setBrush(Qt.NoBrush)
-            p.setPen(QPen(self.palette().color(self.foregroundRole()), 2.5))
-            p.drawPath(path)
         # centre: selection count / hint
         p.setPen(self.palette().color(self.foregroundRole()))
         font.setBold(True)
