@@ -129,13 +129,7 @@ def apply_theme(app: QApplication, name: str) -> dict:
         QToolButton:hover {{ background: {c['hover']}; border-color: {c['border']}; }}
         QToolButton::menu-indicator {{ image: none; width: 0; }}
         QToolBar QToolButton#tbPrimary {{ border-color: {c['border']}; background: {c['button']}; }}
-        QToolButton#seg, QToolButton#segFirst, QToolButton#segLast {{ border: 1px solid {c['border']}; background: transparent; }}
         QToolButton:checked {{ background: {c['invert_bg']}; color: {c['invert_text']}; border-color: {c['invert_bg']}; font-weight: 700; }}
-        QToolButton#seg {{ border-radius: 0; border-left: none; }}
-        QToolButton#segFirst {{ border-top-right-radius: 0; border-bottom-right-radius: 0; }}
-        QToolButton#segLast {{ border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none; }}
-        QToolButton#seg:checked, QToolButton#segFirst:checked, QToolButton#segLast:checked {{
-            background: {c['invert_bg']}; color: {c['invert_text']}; border-color: {c['invert_bg']}; }}
         QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QTextEdit, QPlainTextEdit {{
             background: {c['base']}; border: 1px solid {c['border']}; border-radius: 8px; padding: 6px 9px; min-height: 20px;
             selection-background-color: {c['accent']}; selection-color: {c['accent_text']}; }}

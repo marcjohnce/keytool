@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 from ..config import Settings
 from ..db import Query
 from ..i18n import set_language, tr
-from ..keys import NOTATIONS, Key
+from ..keys import Key
 from ..library import Library
 from ..tags import AUDIO_EXTENSIONS
 from ..analysis_queue import DONE, ERROR, RUNNING, WAITING, AnalysisQueue
@@ -137,30 +137,7 @@ class MainWindow(QMainWindow, Translatable):
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         tb.addWidget(spacer)
-        # notation as a segmented control
-        from PySide6.QtWidgets import QButtonGroup, QToolButton
-        seg = QWidget(); sl = QHBoxLayout(seg); sl.setContentsMargins(0, 0, 0, 0); sl.setSpacing(0)
-        self.notation_group = QButtonGroup(self); self.notation_group.setExclusive(True)
-        self.notation_buttons: dict[str, QToolButton] = {}
-        for i, n in enumerate(NOTATIONS):
-            b = QToolButton(); b.setCheckable(True)
-            b.setObjectName("segFirst" if i == 0 else "segLast" if i == len(NOTATIONS) - 1 else "seg")
-            b.clicked.connect(lambda _=False, n=n: self.set_notation(n))
-            self.notation_group.addButton(b); self.notation_buttons[n] = b
-            sl.addWidget(b)
-        self.t(seg.setToolTip, "notation")
-        tb.addWidget(seg)
-        gap(8)
-        self.lang_box = QComboBox()
-        self.lang_box.addItem("DE", "de")
-        self.lang_box.addItem("EN", "en")
-        self.lang_box.setCurrentIndex(self.lang_box.findData(self.s.language))
-        self.lang_box.currentIndexChanged.connect(lambda _: self.set_language(self.lang_box.currentData()))
-        tb.addWidget(self.lang_box)
-        self.theme_btn = QPushButton()
-        self.theme_btn.setFixedWidth(40)
-        self.theme_btn.clicked.connect(self.toggle_theme)
-        tb.addWidget(self.theme_btn)
+        # language, colour scheme and notation live in the settings dialog
         # right sidebar (metadata etc.) on/off
         self.a_details = QAction(self)
         self.a_details.setCheckable(True)
@@ -170,6 +147,7 @@ class MainWindow(QMainWindow, Translatable):
         self.t(self.a_details.setToolTip, "details_toggle_tip")
         self.a_details.toggled.connect(self.set_details_visible)
         tb.addAction(self.a_details)
+        tb.addAction(self.a_queue)              # analysis queue panel on/off, right of "Details"
         tb.addAction(self.a_settings)
 
     def _build_central(self):
@@ -340,10 +318,6 @@ class MainWindow(QMainWindow, Translatable):
         sb.addPermanentWidget(self.msg_lbl, 1)
         sb.addPermanentWidget(self.progress)
         sb.addPermanentWidget(self.cancel_btn)
-        from PySide6.QtWidgets import QToolButton
-        self.queue_btn = QToolButton(); self.queue_btn.setDefaultAction(self.a_queue)
-        self.queue_btn.setObjectName("tbPrimary")
-        sb.addPermanentWidget(self.queue_btn)
 
     # ------------------------------------------------------------------ appearance & language
     def apply_theme(self):
@@ -353,20 +327,11 @@ class MainWindow(QMainWindow, Translatable):
         self.f_keys.apply_colors(dark)
         if hasattr(self, "player"):
             self.player.set_dark(dark)
-        self.theme_btn.setText("☀" if dark else "☾")
-        self.theme_btn.setToolTip(tr("theme_light") if dark else tr("theme_dark"))
         self.model.refresh_all()
-
-    def toggle_theme(self):
-        self.s.theme = "light" if resolve_theme(self.s.theme) == "dark" else "dark"
-        self.s.save()
-        self.apply_theme()
 
     def set_notation(self, notation: str):
         self.s.notation = notation
         self.s.save()
-        if notation in self.notation_buttons:
-            self.notation_buttons[notation].setChecked(True)
         self.model.notation = notation
         self.f_keys.set_notation(notation)
         self.details.set_notation(notation)
@@ -382,14 +347,6 @@ class MainWindow(QMainWindow, Translatable):
     def retranslate(self):
         super().retranslate()
         self.setWindowTitle(tr("app_title"))
-        for n, b in self.notation_buttons.items():
-            b.setText(tr(f"n_{n}").split(" (")[0])
-            b.setToolTip(tr(f"n_{n}"))
-        self.lang_box.blockSignals(True)
-        self.lang_box.setCurrentIndex(self.lang_box.findData(tr.lang))
-        self.lang_box.blockSignals(False)
-        dark = resolve_theme(self.s.theme) == "dark"
-        self.theme_btn.setToolTip(tr("theme_light") if dark else tr("theme_dark"))
         self.f_keys.set_notation(self.s.notation)
         self.f_keywords.retranslate()
         self.details.retranslate()
