@@ -512,6 +512,14 @@ class CircleButton(QPushButton):
         elif g == "next":
             p.drawRect(QRectF(cx + 4.4 * u, cy - 6.5 * u, 2.6 * u, 13 * u))
             tri(cx - 6.5 * u, cy - 6.5 * u, cx - 6.5 * u, cy + 6.5 * u, cx + 4 * u, cy)
+        elif g in ("cue_prev", "cue_next"):
+            # measured from the user's reference (54 px circle): triangle 18 px high, tip 13 px from the centre,
+            # base 2 px past it, bar 4.5 px wide after a 3.5 px gap; the glyph sits slightly towards the tip
+            m = -1 if g == "cue_prev" else 1                  # direction the triangle points
+            tip, base, bar_in, bar_out, half = 9.63 * u, 1.48 * u, 4.0 * u, 7.41 * u, 6.67 * u
+            tri(cx + m * tip, cy, cx - m * base, cy - half, cx - m * base, cy + half)
+            x0, x1 = sorted((cx - m * bar_in, cx - m * bar_out))
+            p.drawRect(QRectF(x0, cy - half, x1 - x0, 2 * half))
         elif g in ("vol", "mute"):
             body = QPainterPath(QPointF(cx - 8 * u, cy - 3 * u))
             body.lineTo(cx - 4.5 * u, cy - 3 * u); body.lineTo(cx + 0.5 * u, cy - 7.5 * u)
@@ -617,6 +625,10 @@ class PlayerPanel(QWidget, Translatable):
         self.prev_btn.clicked.connect(self.previous)
         self.next_btn = CircleButton("next", BTN)
         self.next_btn.clicked.connect(lambda: self.next_requested.emit(self.is_playing()))
+        self.prev_cue_btn = CircleButton("cue_prev", BTN)
+        self.prev_cue_btn.clicked.connect(self.previous_cue)
+        self.next_cue_btn = CircleButton("cue_next", BTN)
+        self.next_cue_btn.clicked.connect(self.next_cue)
         self.stop_btn = CircleButton("stop", BTN)
         self.stop_btn.clicked.connect(self.stop)
         self.time = QLabel("0:00"); self.time.setObjectName("deckTime")
@@ -630,7 +642,7 @@ class PlayerPanel(QWidget, Translatable):
         self.volume.setValue(int(round(getattr(settings, "volume", 0.8) * 100)))
         self.volume.valueChanged.connect(self._volume)
         bar.setSpacing(10)
-        for wdg in (self.prev_btn, self.play_btn, self.next_btn, self.stop_btn):
+        for wdg in (self.prev_btn, self.prev_cue_btn, self.play_btn, self.next_cue_btn, self.next_btn, self.stop_btn):
             bar.addWidget(wdg, 0, Qt.AlignVCenter)
         bar.addSpacing(8); bar.addWidget(self.time, 0, Qt.AlignVCenter); bar.addStretch(1)
         bar.addWidget(self.mute_btn, 0, Qt.AlignVCenter); bar.addWidget(self.volume, 0, Qt.AlignVCenter)
@@ -722,6 +734,8 @@ class PlayerPanel(QWidget, Translatable):
         self.caption.setText(tr("deck_caption"))
         self.prev_btn.setToolTip(tr("prev_track") + " (Ctrl+←)")
         self.next_btn.setToolTip(tr("next_track") + " (Ctrl+→)")
+        self.prev_cue_btn.setToolTip(tr("prev_cue"))
+        self.next_cue_btn.setToolTip(tr("next_cue"))
         self.volume.setToolTip(tr("volume"))
         self._update_mute_icon()
         if self.row is None:
@@ -734,7 +748,8 @@ class PlayerPanel(QWidget, Translatable):
         # round buttons paint their own glyphs in the palette colours
         self.ic_vol = True
         self.play_btn.set_glyph("pause" if self.is_playing() else "play")
-        for b in (self.play_btn, self.prev_btn, self.next_btn, self.stop_btn, self.mute_btn):
+        for b in (self.play_btn, self.prev_btn, self.next_btn, self.stop_btn, self.mute_btn,
+                  self.prev_cue_btn, self.next_cue_btn):
             b.update()
         self._update_mute_icon()
 
@@ -828,6 +843,7 @@ class PlayerPanel(QWidget, Translatable):
             wdg.setEnabled(enabled and self.player is not None)
         self.cover.set_image(None)
         self.markers = None
+        self._update_cue_buttons()
         if enabled:
             self.cover.loading = True
             self.pool.start(_CoverJob(row["path"], self.cover_emitter))
@@ -922,6 +938,7 @@ class PlayerPanel(QWidget, Translatable):
         if path == self.path:
             self.markers = markers
             self.wave.set_markers(markers)
+            self._update_cue_buttons()
             self._update_title()
 
     def seek_ms(self, ms: int):
@@ -948,6 +965,37 @@ class PlayerPanel(QWidget, Translatable):
         cue = next((c for c in self.markers.cues if c.index + 1 == slot), None)
         if cue is not None:
             self.seek_ms(cue.position_ms)
+
+    # -- cue navigation
+    CUE_BACK_GRACE_MS = 500        # "previous cue" right after passing a cue goes one further back
+
+    def _cue_positions(self) -> list[int]:
+        return sorted({c.position_ms for c in self.markers.cues}) if self.markers else []
+
+    def _update_cue_buttons(self):
+        """Cue buttons work only when the loaded track has cue points."""
+        on = bool(self._cue_positions()) and self.player is not None and bool(getattr(self, "path", None))
+        self.prev_cue_btn.setEnabled(on)
+        self.next_cue_btn.setEnabled(on)
+
+    def _position_ms(self) -> int:
+        if self._pending is not None:
+            return self._pending[0]
+        return self.player.position() if self.player is not None else 0
+
+    def previous_cue(self):
+        """Jump to the nearest cue point before the playhead (none before it: stay)."""
+        pos = self._position_ms()
+        before = [c for c in self._cue_positions() if c < pos - self.CUE_BACK_GRACE_MS]
+        if before:
+            self.seek_ms(before[-1])
+
+    def next_cue(self):
+        """Jump to the nearest cue point after the playhead (none after it: stay)."""
+        pos = self._position_ms()
+        after = [c for c in self._cue_positions() if c > pos + 1]
+        if after:
+            self.seek_ms(after[0])
 
     def previous(self):
         """Like every player: restart the track if it is more than 3 s in, otherwise go to the previous one."""

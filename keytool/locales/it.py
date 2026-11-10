@@ -260,6 +260,8 @@ STRINGS: dict[str, str] = {
     "transpose_unavailable": "Trasposizione non disponibile: manca il pacchetto 'pedalboard'",
     "transposing": "Trasposizione {st}: {pct} %",
     "next_track": "Brano successivo",
+    "prev_cue": "Al punto cue precedente",
+    "next_cue": "Al punto cue successivo",
     "cover": "Copertina",
     "no_cover": "Nessuna copertina trovata (né incorporata né come cover.jpg/folder.jpg nella cartella)",
     "volume": "Volume",

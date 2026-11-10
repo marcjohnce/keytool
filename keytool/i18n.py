@@ -314,6 +314,8 @@ _T: dict[str, tuple[str, str]] = {
                               "Transposing unavailable: package 'pedalboard' is missing"),
     "transposing": ("Transponiere {st}: {pct} %", "Transposing {st}: {pct} %"),
     "next_track": ("Nächster Titel", "Next track"),
+    "prev_cue": ("Zum vorherigen Cue-Punkt", "To previous cue point"),
+    "next_cue": ("Zum nächsten Cue-Punkt", "To next cue point"),
     "cover": ("Cover", "Cover"),
     "no_cover": ("Kein Cover gefunden (weder in der Datei noch als cover.jpg/folder.jpg im Ordner)",
                  "No cover found (neither embedded nor as cover.jpg/folder.jpg in the folder)"),
