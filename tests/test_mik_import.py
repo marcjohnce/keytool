@@ -120,3 +120,26 @@ def test_rejects_other_sqlite(tmp_path):
     sqlite3.connect(p).execute("CREATE TABLE t (a)").connection.commit()
     with pytest.raises(ValueError):
         read_mik(str(p))
+
+
+def test_library_track_without_file_is_skipped(setup):
+    lib, ids, mik, files = setup
+    os.remove(files[1])                                               # t1 is in the library, but gone on disk
+    plan = plan_import(lib.db, read_mik(str(mik)))
+    assert ids["t1.wav"] not in plan.matched and len(plan.library_gone) == 1
+    assert plan.gone == 2                                             # plus the MIK-only song that never existed
+    res = apply_import(lib, plan, add_missing=True)
+    t1 = lib.db.get_track(ids["t1.wav"])
+    assert t1["key_source"] != "mik" and res.not_found == 2
+
+
+def test_files_vanishing_after_the_preview_are_skipped(setup):
+    lib, ids, mik, files = setup
+    plan = plan_import(lib.db, read_mik(str(mik)))
+    assert [s.file for s in plan.missing_existing] == [str(files[3])]
+    os.remove(files[3])                                               # MIK-only file, gone before the import
+    os.remove(files[0])                                               # matched library file, gone as well
+    res = apply_import(lib, plan, add_missing=True)
+    assert res.added == 0 and lib.db.get_track_by_path(str(files[3])) is None
+    assert lib.db.get_track(ids["t0.wav"])["key_source"] != "mik"
+    assert res.not_found == 1 + 2                                     # gone.wav + t3 + t0

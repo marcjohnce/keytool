@@ -102,7 +102,9 @@ executables" → Run workflow.
   (`%LOCALAPPDATA%\Mixed In Key\Mixed In Key\<version>\MIKStore.db`, found automatically) and takes over key, tempo
   and energy. Tracks are matched by file path, moved files by their unique file name. A preview is shown before the
   import; options: replace existing values or only fill empty fields (manual values are always kept), Mixed In Key
-  collections as keywords, add missing tracks. Imported values count like values from the tags: a later analysis
+  collections as keywords, add tracks that are not in the KeyTool library yet (optional, off by default). Tracks
+  whose file does not exist are ignored – songs known only to Mixed In Key as well as library entries – and this is
+  checked again when the import starts. Imported values count like values from the tags: a later analysis
   does not overwrite them, "Re-analyze" does. Mixed In Key itself is not changed (the database is copied before
   reading). Without the UI: `KeyTool-MCP.exe --import-mik [MIKStore.db] [--add-missing] [--fill-only] [--no-keywords]`.
 * **Analysis queue** ("Queue" in the toolbar, opens only when clicked; while analyses run or wait, the button is

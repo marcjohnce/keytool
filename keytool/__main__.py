@@ -48,7 +48,7 @@ def main() -> int:
         plan = plan_import(lib.db, read_mik(db_file))
         print(f"{db_file}: {len(plan.songs)} songs, {len(plan.matched)} in library "
               f"({plan.by_filename} by file name), {len(plan.missing_existing)} not in library, "
-              f"{len(plan.missing_gone)} files gone")
+              f"{plan.gone} files gone (skipped)")
         res = apply_import(lib, plan, add_missing="--add-missing" in args,
                            collections_as_keywords="--no-keywords" not in args, overwrite="--fill-only" not in args)
         print(res)
