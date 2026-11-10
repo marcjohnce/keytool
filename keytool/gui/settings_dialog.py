@@ -27,82 +27,219 @@ def mcp_config_snippet() -> str:
                                                   "env": {"KEYTOOL_DB": str(db_path())}}}}, indent=2)
 
 
+class ToggleSwitch(QCheckBox):
+    """On/off switch: amber track with the knob on the right when on, outlined track when off."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        from PySide6.QtCore import Qt
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedSize(46, 26)
+
+    def sizeHint(self):
+        from PySide6.QtCore import QSize
+        return QSize(46, 26)
+
+    def hitButton(self, pos):
+        return self.rect().contains(pos)
+
+    def paintEvent(self, _):
+        from PySide6.QtCore import QRectF, Qt
+        from PySide6.QtGui import QColor, QPainter, QPen
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        pal = self.palette()
+        on = self.isChecked()
+        accent = pal.color(pal.ColorRole.Link)
+        ink = pal.color(pal.ColorRole.Text)
+        line = pal.color(pal.ColorRole.Mid)
+        r = QRectF(1, 1, self.width() - 2, self.height() - 2)
+        if on:
+            p.setPen(Qt.NoPen); p.setBrush(accent if self.isEnabled() else line)
+        else:
+            p.setPen(QPen(line, 1.5)); p.setBrush(pal.color(pal.ColorRole.Base))
+        p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
+        d = r.height() - 6
+        x = r.right() - 3 - d if on else r.left() + 3
+        knob = QColor("#1A1206") if on and accent.lightness() > 140 else (QColor("#FFFFFF") if on else ink)
+        if not self.isEnabled():
+            knob.setAlpha(110)
+        p.setPen(Qt.NoPen); p.setBrush(knob)
+        p.drawEllipse(QRectF(x, r.top() + 3, d, d))
+        if self.hasFocus():
+            p.setPen(QPen(accent, 2)); p.setBrush(Qt.NoBrush)
+            p.drawRoundedRect(r.adjusted(-0.5, -0.5, 0.5, 0.5), r.height() / 2, r.height() / 2)
+
+
 class SettingsDialog(QDialog):
+    """Settings with a section list on the left and described rows on the right:
+    every setting shows what it does instead of hiding it in a tooltip."""
+
+    CONTROL_W = 260
+
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QListWidget, QScrollArea, QStackedWidget, QWidget
         self.s = settings
         self.setWindowTitle(tr("settings"))
-        self.setMinimumWidth(560)
-        lay = QVBoxLayout(self)
+        self.setObjectName("settingsDialog")
+        self.setMinimumSize(900, 620)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        body = QHBoxLayout(); body.setContentsMargins(0, 0, 0, 0); body.setSpacing(0)
+        root.addLayout(body, 1)
 
-        g = QGroupBox(tr("s_general"))
-        f = QFormLayout(g)
+        self.nav = QListWidget(); self.nav.setObjectName("settingsNav")
+        self.nav.setFixedWidth(210)
+        self.nav.setFocusPolicy(Qt.StrongFocus)
+        self.pages = QStackedWidget()
+        body.addWidget(self.nav)
+        body.addWidget(self.pages, 1)
+
+        def page(title_key: str, intro_key: str):
+            w = QWidget(); w.setObjectName("settingsPage")
+            v = QVBoxLayout(w); v.setContentsMargins(32, 26, 32, 26); v.setSpacing(0)
+            h = QLabel(tr(title_key)); h.setObjectName("settingsTitle")
+            i = QLabel(tr(intro_key)); i.setObjectName("dim"); i.setWordWrap(True)
+            v.addWidget(h); v.addSpacing(4); v.addWidget(i); v.addSpacing(18)
+            sc = QScrollArea(); sc.setWidgetResizable(True); sc.setWidget(w); sc.setFrameShape(QScrollArea.NoFrame)
+            self.pages.addWidget(sc)
+            self.nav.addItem(tr(title_key))
+            return v
+
+        def row(v, title: str, desc: str, control, align_top: bool = False):
+            r = QWidget(); r.setObjectName("settingsRow")
+            hl = QHBoxLayout(r); hl.setContentsMargins(0, 14, 0, 14); hl.setSpacing(28)
+            txt = QVBoxLayout(); txt.setSpacing(3)
+            t = QLabel(title); t.setObjectName("rowTitle"); t.setWordWrap(True)
+            txt.addWidget(t)
+            if desc:
+                d = QLabel(desc); d.setObjectName("dim"); d.setWordWrap(True)
+                txt.addWidget(d)
+            txt.addStretch(1)
+            hl.addLayout(txt, 1)
+            box = QHBoxLayout(); box.setSpacing(8)
+            if isinstance(control, (list, tuple)):
+                for c in control:
+                    box.addWidget(c) if not isinstance(c, str) else box.addWidget(QLabel(c))
+            else:
+                box.addWidget(control)
+            if isinstance(control, QCheckBox):
+                box.addStretch(1)                       # switches sit left-aligned with the other controls
+            holder = QWidget(); holder.setFixedWidth(self.CONTROL_W); holder.setLayout(box)
+            box.setContentsMargins(0, 0, 0, 0)
+            hl.addWidget(holder, 0, Qt.AlignTop if align_top else Qt.AlignVCenter)
+            if isinstance(control, QCheckBox):           # clicking the text toggles the switch too
+                t.mousePressEvent = lambda _e, c=control: c.toggle()
+                control.setAccessibleName(title)
+            v.addWidget(r)
+            return r
+
+        def check(value: bool) -> QCheckBox:
+            c = ToggleSwitch(); c.setChecked(value)
+            return c
+
+        # ---------------- display
+        v = page("sp_display", "sp_display_intro")
         self.lang = QComboBox()
         for code, name in LANGUAGES.items():
             self.lang.addItem(name, code)
         self.lang.setCurrentIndex(self.lang.findData(settings.language))
-        f.addRow(tr("language"), self.lang)
+        row(v, tr("language"), tr("sd_language"), self.lang)
         self.theme = QComboBox()
         for code, key in (("dark", "theme_dark"), ("light", "theme_light"), ("system", "theme_system")):
             self.theme.addItem(tr(key), code)
         self.theme.setCurrentIndex(self.theme.findData(settings.theme))
-        f.addRow(tr("s_theme"), self.theme)
+        row(v, tr("s_color_scheme"), tr("sd_theme"), self.theme)
         self.notation = QComboBox()
         for n in NOTATIONS:
             self.notation.addItem(tr(f"n_{n}"), n)
         self.notation.setCurrentIndex(self.notation.findData(settings.notation))
-        f.addRow(tr("notation"), self.notation)
-        lay.addWidget(g)
+        row(v, tr("notation"), tr("sd_notation"), self.notation)
+        v.addStretch(1)
 
-        g = QGroupBox(tr("s_analysis"))
-        f = QFormLayout(g)
-        row = QHBoxLayout()
-        self.bmin = QDoubleSpinBox(); self.bmin.setRange(30, 300); self.bmin.setValue(settings.bpm_min)
-        self.bmax = QDoubleSpinBox(); self.bmax.setRange(40, 400); self.bmax.setValue(settings.bpm_max)
-        row.addWidget(self.bmin); row.addWidget(QLabel("–")); row.addWidget(self.bmax)
-        lbl = QLabel(tr("s_bpm_range")); lbl.setToolTip(tr("s_bpm_range_tip"))
-        f.addRow(lbl, row)
+        # ---------------- analysis
+        v = page("s_analysis", "sp_analysis_intro")
+        self.bmin = QDoubleSpinBox(); self.bmin.setRange(30, 300); self.bmin.setDecimals(0); self.bmin.setValue(settings.bpm_min)
+        self.bmax = QDoubleSpinBox(); self.bmax.setRange(40, 400); self.bmax.setDecimals(0); self.bmax.setValue(settings.bpm_max)
+        row(v, tr("s_bpm_range_short"), tr("s_bpm_range_tip"), [self.bmin, tr("to"), self.bmax, "BPM"])
         self.key_method = QComboBox()
         self.key_method.addItem(tr("key_method_classic"), "classic")
         self.key_method.addItem(tr("key_method_fast"), "fast")
         self.key_method.setCurrentIndex(max(0, self.key_method.findData(settings.key_method)))
-        km_lbl = QLabel(tr("s_key_method")); km_lbl.setToolTip(tr("s_key_method_tip"))
-        self.key_method.setToolTip(tr("s_key_method_tip"))
-        f.addRow(km_lbl, self.key_method)
+        row(v, tr("s_key_method"), tr("sd_key_method"), self.key_method)
         self.workers = QSpinBox(); self.workers.setRange(0, 64); self.workers.setValue(settings.workers)
-        f.addRow(tr("s_workers"), self.workers)
-        self.write_edits = QCheckBox(tr("s_write_edits")); self.write_edits.setChecked(settings.write_edits)
-        f.addRow(self.write_edits)
-        self.use_tags = QCheckBox(tr("s_use_tags")); self.use_tags.setChecked(settings.use_existing_tags)
-        self.use_tags.setToolTip(tr("s_use_tags_tip"))
-        f.addRow(self.use_tags)
-        self.write_tags = QCheckBox(tr("s_write_tags").replace("&", "&&")); self.write_tags.setChecked(settings.write_tags)
-        f.addRow(self.write_tags)
+        self.workers.setSpecialValueText(tr("auto"))
+        auto_n = Settings(workers=0).worker_count()
+        row(v, tr("s_workers_short"), tr("sd_workers", n=auto_n), self.workers)
+        self.use_tags = check(settings.use_existing_tags)
+        row(v, tr("s_use_tags_short"), tr("s_use_tags_tip"), self.use_tags)
+        self.reanalyze = check(settings.reanalyze_existing)
+        row(v, tr("s_reanalyze_short"), tr("sd_reanalyze"), self.reanalyze)
+        v.addStretch(1)
+
+        # ---------------- files & tags
+        v = page("sp_files", "sp_files_intro")
+        self.write_tags = check(settings.write_tags)
+        row(v, tr("s_write_tags_short"), tr("sd_write_tags"), self.write_tags)
         self.tag_notation = QComboBox()
         for n in NOTATIONS:
             self.tag_notation.addItem(tr(f"n_{n}"), n)
         self.tag_notation.setCurrentIndex(self.tag_notation.findData(settings.tag_key_notation))
-        f.addRow(tr("s_tag_notation"), self.tag_notation)
-        self.reanalyze = QCheckBox(tr("s_reanalyze")); self.reanalyze.setChecked(settings.reanalyze_existing)
-        f.addRow(self.reanalyze)
-        lay.addWidget(g)
+        row(v, tr("s_tag_notation"), tr("sd_tag_notation"), self.tag_notation)
+        self.write_tags.toggled.connect(self.tag_notation.setEnabled)
+        self.tag_notation.setEnabled(settings.write_tags)
+        self.write_edits = check(settings.write_edits)
+        row(v, tr("s_write_edits_short"), tr("sd_write_edits"), self.write_edits)
+        v.addStretch(1)
 
-        g = QGroupBox(tr("s_mcp"))
-        v = QVBoxLayout(g)
-        info = QLabel(tr("s_mcp_info")); info.setWordWrap(True)
-        v.addWidget(info)
+        # ---------------- MCP
+        v = page("s_mcp", "sp_mcp_intro")
+        cp = QPushButton(tr("s_copy_config"))
+        row(v, tr("s_mcp_stdio"), tr("s_mcp_info"), cp)
         self.snippet = QPlainTextEdit(mcp_config_snippet()); self.snippet.setReadOnly(True)
-        self.snippet.setMinimumHeight(150)
+        self.snippet.setObjectName("codeBlock")
+        self.snippet.setMinimumHeight(180)
         v.addWidget(self.snippet)
-        cp = QPushButton(tr("copy"))
-        cp.clicked.connect(lambda: QApplication.clipboard().setText(self.snippet.toPlainText()))
-        v.addWidget(cp)
-        lay.addWidget(g)
+        cp.clicked.connect(lambda: self._copy(self.snippet.toPlainText(), cp))
+        from PySide6.QtWidgets import QLineEdit
+        url = QLineEdit("http://127.0.0.1:8000/mcp"); url.setReadOnly(True)
+        row(v, tr("s_mcp_http"), tr("sd_mcp_http"), url)
+        dbp = str(db_path())
+        db_btn = QPushButton(tr("s_open_folder"))
+        db_btn.clicked.connect(lambda: self._open_folder(dbp))
+        r = row(v, tr("s_database"), tr("sd_database") + "\n" + dbp, db_btn)
+        r.findChildren(QLabel)[-1].setTextInteractionFlags(Qt.TextSelectableByMouse)
+        v.addStretch(1)
 
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        bb.accepted.connect(self.accept)
-        bb.rejected.connect(self.reject)
-        lay.addWidget(bb)
+        self.nav.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.nav.setCurrentRow(0)
+
+        # ---------------- footer
+        foot = QWidget(); foot.setObjectName("settingsFooter")
+        fl = QHBoxLayout(foot); fl.setContentsMargins(24, 12, 24, 12)
+        fl.addStretch(1)
+        cancel = QPushButton(tr("cancel")); cancel.clicked.connect(self.reject)
+        save = QPushButton(tr("save_settings")); save.setObjectName("primary"); save.setDefault(True)
+        save.clicked.connect(self.accept)
+        fl.addWidget(cancel); fl.addWidget(save)
+        root.addWidget(foot)
+
+    def _copy(self, text: str, btn) -> None:
+        from PySide6.QtCore import QTimer
+        QApplication.clipboard().setText(text)
+        old = btn.text()
+        btn.setText(tr("copied"))
+        QTimer.singleShot(1500, lambda: btn.setText(old))
+
+    @staticmethod
+    def _open_folder(path: str) -> None:
+        import os
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(path)))
 
     def apply(self) -> None:
         s = self.s

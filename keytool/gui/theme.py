@@ -66,6 +66,15 @@ def styled_font(base, *, size: float | None = None, weight: int | None = None, w
     return f
 
 
+def _resource(name: str) -> str:
+    """Absolute path of a bundled resource, with forward slashes for use in style sheets."""
+    try:
+        from importlib.resources import files
+        return str(files("keytool").joinpath("resources", name)).replace("\\", "/")
+    except Exception:
+        return ""
+
+
 def colors(name: str) -> dict:
     return THEMES[resolve_theme(name)]
 
@@ -110,6 +119,7 @@ def apply_theme(app: QApplication, name: str) -> dict:
     for role in (QPalette.WindowText, QPalette.Text, QPalette.ButtonText):
         p.setColor(QPalette.Disabled, role, QColor(c["dim"]))
     app.setPalette(p)
+    chevron = _resource(f"chevron-{resolve_theme(name)}.svg")
     app.setStyleSheet(f"""
         QWidget {{ font-size: 10pt; }}
         QMainWindow, QDialog {{ background: {c['window']}; }}
@@ -129,6 +139,12 @@ def apply_theme(app: QApplication, name: str) -> dict:
         QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QTextEdit, QPlainTextEdit {{
             background: {c['base']}; border: 1px solid {c['border']}; border-radius: 8px; padding: 6px 9px; min-height: 20px;
             selection-background-color: {c['accent']}; selection-color: {c['accent_text']}; }}
+        QComboBox {{ padding-right: 28px; }}
+        QComboBox::drop-down {{ subcontrol-origin: padding; subcontrol-position: center right; width: 26px;
+            border: none; background: transparent; }}
+        QComboBox::down-arrow {{ image: url("{chevron}"); width: 12px; height: 12px; }}
+        QComboBox QAbstractItemView {{ background: {c['tooltip']}; border: 1px solid {c['border']}; padding: 4px;
+            selection-background-color: {c['select']}; selection-color: {c['text']}; outline: 0; }}
         QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{ width: 0px; border: none; }}
         QAbstractSpinBox::up-arrow, QAbstractSpinBox::down-arrow {{ width: 0px; height: 0px; }}
         QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QTextEdit:focus, QPlainTextEdit:focus {{
@@ -181,6 +197,21 @@ def apply_theme(app: QApplication, name: str) -> dict:
         QMenu::item:selected {{ background: {c['select']}; }}
         QToolTip {{ background: {c['tooltip']}; color: {c['text']}; border: 1px solid {c['border']}; padding: 4px; }}
         QDockWidget::title {{ background: {c['deck']}; padding: 6px 12px; }}
+        /* ---- settings dialog */
+        QListWidget#settingsNav {{ background: {c['deck']}; border: none; border-right: 1px solid {c['border']};
+            border-radius: 0; padding: 18px 10px; outline: 0; font-size: 10.5pt; }}
+        QListWidget#settingsNav::item {{ padding: 9px 12px; border-radius: 8px; margin: 1px 0; }}
+        QListWidget#settingsNav::item:hover {{ background: {c['hover']}; }}
+        QListWidget#settingsNav::item:selected {{ background: {c['select']}; color: {c['text']}; font-weight: 700; }}
+        QWidget#settingsPage {{ background: {c['window']}; }}
+        QLabel#settingsTitle {{ font-size: 16pt; font-weight: 800; }}
+        QLabel#rowTitle {{ font-size: 10.5pt; font-weight: 600; }}
+        QWidget#settingsRow {{ border-top: 1px solid {c['border']}; }}
+        QWidget#settingsRow QLabel {{ border: none; }}
+        QWidget#settingsFooter {{ background: {c['deck']}; border-top: 1px solid {c['border']}; }}
+        QWidget#settingsFooter QPushButton {{ min-width: 110px; }}
+        QPlainTextEdit#codeBlock {{ font-family: "Cascadia Mono", Consolas, "DejaVu Sans Mono", monospace; font-size: 9pt;
+            background: {c['deck']}; margin-bottom: 4px; }}
         /* ---- deck (player): the reference everything else is compared to */
         #playerPanel {{ background: {c['deck']}; border: none; border-bottom: 1px solid {c['border']}; }}
         #playerPanel QLabel#deckTitle {{ font-size: 21pt; font-weight: 800; }}
