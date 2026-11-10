@@ -250,6 +250,13 @@ class MainWindow(QMainWindow, Translatable):
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.table_menu)
         self.table.selectionModel().selectionChanged.connect(self.selection_changed)
+        # rich tooltip (cover, title, artist, album, year) on the title/artist/album columns
+        from .track_tip import TrackTipFilter
+        self.track_tip = TrackTipFilter(
+            self.table,
+            lambda idx: self.model.rows[self.proxy.mapToSource(idx).row()],
+            lambda idx: TrackModel.COLUMNS[idx.column()], self)
+        self.track_tip.tip.set_dark(resolve_theme(self.s.theme) == "dark")
         self.drop_hint = QLabel(); self.drop_hint.setObjectName("dropHint"); self.drop_hint.setAlignment(Qt.AlignCenter)
         self.t(self.drop_hint.setText, "drop_hint")
         self.center = QStackedWidget()
@@ -339,6 +346,8 @@ class MainWindow(QMainWindow, Translatable):
         self.f_keys.apply_colors(dark)
         if hasattr(self, "player"):
             self.player.set_dark(dark)
+        if hasattr(self, "track_tip"):
+            self.track_tip.tip.set_dark(dark)
         self.model.refresh_all()
 
     def set_notation(self, notation: str):

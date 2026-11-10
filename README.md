@@ -55,6 +55,9 @@ executables" → Run workflow.
   and have not changed are skipped. Analysis runs in parallel on several CPU cores.
 * **Search:** the "Search everything" field (Ctrl+F) searches title, artist, album, file name, genre, year and
   keywords. All filters on the left can be combined.
+* **Track tooltip:** resting the mouse on the title, artist or album of a track shows a card with the cover
+  artwork, title, artist, album and year (a record in the key's colour if there is no artwork). Covers are read in
+  the background and cached.
 * **Key filter:** the coloured segments are the Camelot wheel; the labels follow the chosen notation.
 * **Keywords:** select tracks (multiple selection possible), type on the right, separate several with commas.
   Double-clicking a keyword filters by it. Right-click in the filter list: rename/remove.
