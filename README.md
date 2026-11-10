@@ -56,6 +56,10 @@ executables" → Run workflow.
 * **Search:** the "Search everything" field (Ctrl+F) searches title, artist, album, file name, genre, year and
   keywords. All filters on the left can be combined.
 * **Key filter:** the coloured segments are the Camelot wheel; the labels follow the chosen notation.
+  Click toggles a key; right-click selects the key with its harmonic neighbours (replacing the selection);
+  a click in the centre clears it. With **Shift**, click toggles the key together with the keys one semitone higher
+  and lower, and right-click toggles those three keys each with their harmonic neighbours (the rest of the selection
+  stays). The same wheel is used in the Karaoke-Version dialog.
 * **Keywords:** select tracks (multiple selection possible), type on the right, separate several with commas.
   Double-clicking a keyword filters by it. Right-click in the filter list: rename/remove.
 * **Edit details:** change fields on the right and press "Save" (Ctrl+S) or "Discard". With several tracks selected,

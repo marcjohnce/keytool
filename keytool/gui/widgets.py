@@ -530,12 +530,26 @@ class KeyFilter(QWidget):
             if self._in_centre(pos) and self._selected:
                 self.clear()
             return
-        if e.button() == Qt.RightButton:
+        key = Key.from_code(code)
+        shift = bool(e.modifiers() & Qt.ShiftModifier)
+        if e.button() == Qt.RightButton and not shift:
             # key + harmonic neighbours (Camelot +-1, relative major/minor)
-            self.set_selected([k.code for k in Key.from_code(code).compatible()])
-        elif e.button() == Qt.LeftButton:
+            self.set_selected([k.code for k in key.compatible()])
+        elif e.button() in (Qt.LeftButton, Qt.RightButton):
+            if not shift:
+                group = {code}
+            else:
+                # Shift: the key and the keys 1 semitone higher/lower; with right-click each with its
+                # harmonic neighbours. Toggled as a group: on if the clicked key was off, else off.
+                keys = [key, key.transpose(1), key.transpose(-1)]
+                if e.button() == Qt.RightButton:
+                    keys = [n for k in keys for n in k.compatible()]
+                group = {k.code for k in keys}
             sel = set(self._selected)
-            sel.symmetric_difference_update({code})
+            if code in sel:
+                sel -= group
+            else:
+                sel |= group
             self.set_selected(sorted(sel))
 
 

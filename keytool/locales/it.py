@@ -92,7 +92,7 @@ STRINGS: dict[str, str] = {
     "harmonic": "Compatibili con la selezione",
     "harmonic_tip": "Mostra i brani compatibili con la tonalità selezionata sulla ruota Camelot (±6 % BPM)",
     "all_keys": "Tutte",
-    "wheel_hint": "Clic: attiva/disattiva tonalità · Clic destro: con le vicine armoniche · Centro: azzera",
+    "wheel_hint": 'Clic: attiva/disattiva tonalità · Clic destro: con le vicine armoniche · con Maiusc: anche ±1 semitono · Centro: azzera',
     "no_keywords": "Ancora nessuna parola chiave",
     "details": "Dettagli",
     "no_selection": "Nessun brano selezionato",

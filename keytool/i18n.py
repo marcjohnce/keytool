@@ -108,8 +108,8 @@ _T: dict[str, tuple[str, str]] = {
     "harmonic_tip": ("Zeigt Titel, die nach dem Camelot-Rad zur gewählten Tonart passen (±6 % BPM)",
                      "Shows tracks that fit the selected key on the Camelot wheel (±6 % BPM)"),
     "all_keys": ("Alle", "All"),
-    "wheel_hint": ("Klick: Tonart an/aus · Rechtsklick: inkl. harmonischer Nachbarn · Mitte: zurücksetzen",
-                   "Click: toggle key · Right-click: with harmonic neighbours · Centre: reset"),
+    "wheel_hint": ("Klick: Tonart an/aus · Rechtsklick: inkl. harmonischer Nachbarn · mit Shift: zusätzlich ±1 Halbton · Mitte: zurücksetzen",
+                   "Click: toggle key · Right-click: with harmonic neighbours · with Shift: also ±1 semitone · Centre: reset"),
     "no_keywords": ("Noch keine Schlüsselwörter", "No keywords yet"),
     # details
     "details": ("Details", "Details"),
