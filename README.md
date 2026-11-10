@@ -18,7 +18,7 @@ die Bibliothek zugreifen.
 | DJ-Extras | „Harmonisch passend“: Titel, die nach dem Camelot-Rad zur Auswahl passen (±6 % BPM); BPM halbieren/verdoppeln |
 | Nur Fehlendes analysieren | Steht nur die Tonart in den Tags, wird nur die BPM analysiert (etwa 20× schneller als die volle Analyse); steht nur die BPM drin, nur die Tonart; stehen beide drin, gar nichts |
 | Tags | BPM & Tonart werden nach der Analyse **automatisch in die Datei geschrieben** (ID3 TBPM/TKEY, Vorbis BPM/INITIALKEY, MP4 tmpo/initialkey) – abschaltbar |
-| Detailansicht | Titel, Interpret, Album, Genre, Kommentar, Tonart, Energy (1–10) und Tempo bearbeiten – einzeln oder für viele Titel gleichzeitig; Dateityp, Bitrate, Dateigröße, Dauer und Pfad werden angezeigt. Änderungen werden in die Datei-Tags geschrieben (abschaltbar) |
+| Detailansicht | Titel, Interpret, Album, Jahr, Genre, Kommentar, Tonart, Energy (1–10) und Tempo bearbeiten – einzeln oder für viele Titel gleichzeitig; Dateityp, Bitrate, Dateigröße, Dauer und Pfad werden angezeigt. Änderungen werden in die Datei-Tags geschrieben (abschaltbar) |
 | Manuelle Korrektur | BPM/Tonart überschreiben; manuelle Werte bleiben bei einer erneuten Analyse erhalten |
 | Recherche | Titel bei **Karaoke-Version** (karaoke-version.de) nach Tonart(en) und BPM-Bereich suchen; Treffer direkt in KeyTool mit Tonart(en), Tempo, Dauer, Preis und Markierung, ob der Titel schon in der Bibliothek ist |
 | Player (Deck) | Deck über die volle Breite: großer Titel, Tonart-Chip in Camelot-Farbe, Tempo in großer Schrift, Transponier-Knöpfe mit Zieltonart (z. B. „+1 3A“); Cover (eingebettet oder cover.jpg/folder.jpg im Ordner, sonst Platzhalter), vorheriger/nächster Titel, Play/Pause, Stopp, automatisches Weiterspielen; Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
@@ -157,7 +157,7 @@ GUI und MCP-Server nutzen dieselbe Datenbank (`%APPDATA%\KeyTool\library.sqlite3
 | `library_stats` | Anzahl, Status, BPM-Spanne, Tonart-Verteilung |
 | `convert_key`, `list_all_keys` | Notationen umrechnen |
 | `list_keywords`, `add_keywords`, `remove_keywords`, `set_keywords`, `rename_keyword` | Schlüsselwörter |
-| `update_metadata` | Titel, Interpret, Album, Genre, Kommentar, Energy ändern (ein oder mehrere Titel) |
+| `update_metadata` | Titel, Interpret, Album, Jahr, Genre, Kommentar, Energy ändern (ein oder mehrere Titel) |
 | `set_bpm`, `set_key`, `write_tags` | Manuelle Korrektur und Tags schreiben |
 | `analyze_paths`, `reanalyze_tracks`, `get_job_status`, `cancel_job` | Dateien/Ordner einlesen und analysieren (Hintergrund-Job) |
 | `search_karaoke_version` | Karaoke-Version nach Tonart(en)/BPM durchsuchen, optional mit Tempo/Tonarten/Dauer je Treffer |

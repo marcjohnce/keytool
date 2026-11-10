@@ -296,12 +296,19 @@ class Library:
             self._write_tags_safe(track_id)
 
     def update_metadata(self, track_ids: Iterable[int], changes: dict, write: bool | None = None) -> dict:
-        """Edit title/artist/album/genre/comment/energy for one or many tracks and (optionally) write them
+        """Edit title/artist/album/year/genre/comment/energy for one or many tracks and (optionally) write them
         into the files. Returns {track_id: error message} for files that could not be written."""
         changes = {k: v for k, v in changes.items() if k in EDITABLE_FIELDS}
         if "energy" in changes:
             e = changes["energy"]
             changes["energy"] = int(e) if e not in (None, "", 0) and 1 <= int(e) <= 10 else None
+        if "year" in changes:
+            y = changes["year"]
+            try:
+                y = int(str(y).strip()[:4]) if y not in (None, "", 0) else None
+            except ValueError:
+                y = None
+            changes["year"] = y if y and 1 <= y <= 9999 else None
         for k in ("title", "artist", "album", "genre", "comment"):
             if k in changes:
                 changes[k] = (changes[k] or "").strip()
@@ -318,6 +325,8 @@ class Library:
                 tag_vals = dict(changes)
                 if "energy" in tag_vals:
                     tag_vals["energy"] = tag_vals["energy"] or ""
+                if "year" in tag_vals:
+                    tag_vals["year"] = tag_vals["year"] or ""
                 write_metadata(t["path"], **tag_vals)
                 st = os.stat(t["path"])
                 self.db.update_track(tid, size=st.st_size, mtime=st.st_mtime)

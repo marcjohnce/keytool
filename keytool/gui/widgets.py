@@ -663,6 +663,11 @@ class DetailPanel(QWidget, Translatable):
             self.edits[f] = e
             lbl = QLabel(); self.t(lbl.setText, f)
             fm.addRow(lbl, e)
+        from PySide6.QtGui import QIntValidator
+        self.year = QLineEdit(); self.year.setValidator(QIntValidator(0, 9999, self.year)); self.year.setMaxLength(4)
+        self.year.setFixedWidth(90)
+        self.year.textEdited.connect(lambda _: self._mark("year"))
+        lbl = QLabel(); self.t(lbl.setText, "year"); fm.addRow(lbl, self.year)
         self.genre = QComboBox(); self.genre.setEditable(True); self.genre.setInsertPolicy(QComboBox.NoInsert)
         self.genre.lineEdit().textEdited.connect(lambda _: self._mark("genre"))
         self.genre.activated.connect(lambda _: self._mark("genre"))
@@ -809,6 +814,9 @@ class DetailPanel(QWidget, Translatable):
         for f in self.dirty:
             if f in self.TEXT_FIELDS:
                 out[f] = self.edits[f].text().strip()
+            elif f == "year":
+                t = self.year.text().strip()
+                out[f] = int(t) if t.isdigit() and int(t) > 0 else None
             elif f == "genre":
                 out[f] = self.genre.currentText().strip()
             elif f == "comment":
@@ -877,7 +885,7 @@ class DetailPanel(QWidget, Translatable):
             self.sub.setText("")
             for e in self.edits.values():
                 self._set_text(e, "")
-            self.genre.setEditText(""); self.comment.setPlainText("")
+            self.genre.setEditText(""); self.comment.setPlainText(""); self._set_text(self.year, "")
             self.key.setCurrentIndex(0); self.energy.setValue(0); self.bpm.setValue(0)
             self.key_info.setText(""); self.bpm_info.setText("")
             self.kw_list.clear()
@@ -894,6 +902,8 @@ class DetailPanel(QWidget, Translatable):
             self.sub.setText("")
         for f, e in self.edits.items():
             self._set_text(e, _common(rows, f))
+        y = _common(rows, "year")
+        self._set_text(self.year, y if y is MIXED else (str(y) if y else ""))
         g = _common(rows, "genre")
         self.genre.setEditText("" if g is MIXED else (g or ""))
         self.genre.lineEdit().setPlaceholderText(tr("mixed_values") if g is MIXED else "")

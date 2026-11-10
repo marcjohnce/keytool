@@ -457,10 +457,15 @@ def test_edit_metadata_roundtrip(tmp_path, ext):
     t = lib.search(Query())[0]
     assert t["bitrate"] and t["bitrate"] > 0 and t["size"] > 0
     errs = lib.update_metadata([t["id"]], dict(title="Neu", artist="Künstlerin", album="Platte", genre="Deep House",
-                                               comment="Zeile 1\nZeile 2", energy=7))
+                                               comment="Zeile 1\nZeile 2", energy=7, year=1999))
     assert errs == {}
     md = read_metadata(str(f))
     assert (md.title, md.artist, md.album, md.genre, md.energy) == ("Neu", "Künstlerin", "Platte", "Deep House", 7)
+    assert md.year == 1999 and lib.db.get_track(t["id"])["year"] == 1999
+    lib.update_metadata([t["id"]], dict(year="2004"))           # text input from the detail field
+    assert read_metadata(str(f)).year == 2004
+    lib.update_metadata([t["id"]], dict(year=None))             # empty field removes the year
+    assert read_metadata(str(f)).year is None and lib.db.get_track(t["id"])["year"] is None
     assert md.comment.replace("\r", "") == "Zeile 1\nZeile 2"
     r = lib.db.get_track(t["id"])
     assert (r["title"], r["energy"], r["comment"]) == ("Neu", 7, "Zeile 1\nZeile 2")
