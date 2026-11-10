@@ -199,7 +199,7 @@ class TrackModel(QAbstractTableModel):
             return None
         if role == Qt.DisplayRole:
             if col == "bpm":
-                return fmt_number(v) if v else ""
+                return str(int(v + 0.5)) if v else ""          # rounded half up; exact value in the tooltip
             if col == "key":
                 k = Key.from_code(v)
                 return k.format(self.notation) if k else ""

@@ -48,3 +48,14 @@ def test_model_deck_columns():
     assert m.index(2, delta).data(SORT_ROLE) == pytest.approx(39.76, abs=0.01)
     m.set_deck(None, None, None)
     assert m.index(1, delta).data(Qt.DisplayRole) == ""
+
+
+def test_bpm_shown_rounded_with_exact_tooltip():
+    QApplication.instance() or QApplication([])
+    m = TrackModel()
+    m.set_rows([dict(id=1, title="a", bpm=124.5, path="a"), dict(id=2, title="b", bpm=127.49, path="b"),
+                dict(id=3, title="c", bpm=None, path="c")])
+    col = m.COLUMNS.index("bpm")
+    assert [m.data(m.index(i, col)) for i in range(3)] == ["125", "127", ""]
+    assert m.data(m.index(1, col), Qt.ToolTipRole).startswith("127.49 BPM")
+    assert m.data(m.index(1, col), SORT_ROLE) == 127.49                     # sorting keeps the exact value
