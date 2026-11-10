@@ -89,7 +89,7 @@ def search_tracks(
     bpm_max: float | None = None,
     keys: list[str] | None = None,
     keywords: list[str] | None = None,
-    keywords_mode: str = "all",
+    keywords_mode: str = "any",
     status: str | None = None,
     folder: str | None = None,
     order_by: str = "artist",
@@ -102,7 +102,7 @@ def search_tracks(
 
     text: free text over title, artist, album, filename, genre, year and keywords.
     title/artist/album: substring match. keys: list of keys in any notation (matches any of them).
-    keywords: user keywords; keywords_mode 'all' (track must have every keyword) or 'any'.
+    keywords: user keywords; keywords_mode 'any' (default: at least one keyword, OR) or 'all' (every keyword, AND).
     status: 'ok', 'pending' or 'error'. folder: only tracks below this folder.
     order_by: title|artist|album|year|bpm|key|duration|added_at|filename|genre.
     notation for the returned key: camelot|sharps|flats|openkey.

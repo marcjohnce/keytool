@@ -538,8 +538,8 @@ class KeywordFilter(QWidget, Translatable):
         lay.setContentsMargins(0, 0, 0, 0)
         row = QHBoxLayout()
         self.mode = QComboBox()
+        self.mode.addItem("", "any")        # default: keywords are combined with OR
         self.mode.addItem("", "all")
-        self.mode.addItem("", "any")
         self.mode.currentIndexChanged.connect(lambda _: self.changed.emit())
         row.addWidget(self.mode)
         lay.addLayout(row)
@@ -557,8 +557,8 @@ class KeywordFilter(QWidget, Translatable):
 
     def retranslate(self):
         super().retranslate()
-        self.mode.setItemText(0, tr("match_all"))
-        self.mode.setItemText(1, tr("match_any"))
+        self.mode.setItemText(0, tr("match_any"))
+        self.mode.setItemText(1, tr("match_all"))
 
     def _menu(self, pos):
         from PySide6.QtWidgets import QMenu

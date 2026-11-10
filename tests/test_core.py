@@ -128,7 +128,8 @@ def test_search_and_keywords(library):
     db.add_keywords(ids, ["Warmup", "Peak"])
     db.add_keywords(ids[:1], ["Vocal"])
     assert len(lib.search(Query(keywords=["warmup"]))) == 2
-    assert len(lib.search(Query(keywords=["peak", "vocal"]))) == 1
+    assert len(lib.search(Query(keywords=["peak", "vocal"]))) == 2                     # default: OR
+    assert len(lib.search(Query(keywords=["peak", "vocal"], keywords_mode="all"))) == 1
     assert len(lib.search(Query(keywords=["peak", "vocal"], keywords_mode="any"))) == 2
     assert len(lib.search(Query(text="vocal"))) == 1
     db.remove_keywords(ids[:1], ["vocal"])

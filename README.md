@@ -13,7 +13,7 @@ die Bibliothek zugreifen.
 | Einlesen | Einzelne Dateien, ganze Ordnerstrukturen (rekursiv), **Drag & Drop aus dem Windows Explorer** |
 | Analyse | BPM mit Nachkommastelle und Oktavkorrektur, Tonart (24 Dur/Moll), Sicherheitswert je Ergebnis |
 | Notationen | **Camelot** (8A), **Kreuze** (F#m), **Bs** (Gbm), zusätzlich Open Key (1m) |
-| Suche | Freitext + Titel, Interpret, Album, Jahr von/bis, BPM von/bis, Tonarten (Mehrfachauswahl), Schlüsselwörter (alle/mindestens eins) |
+| Suche | Freitext + Titel, Interpret, Album, Jahr von/bis, BPM von/bis, Tonarten (Mehrfachauswahl), Schlüsselwörter (standardmäßig mit „oder“ verknüpft, umschaltbar auf „und“) |
 | Schlüsselwörter | Pro Titel oder für viele Titel gleichzeitig; umbenennen und überall entfernen |
 | DJ-Extras | „Harmonisch passend“: Titel, die nach dem Camelot-Rad zur Auswahl passen (±6 % BPM); BPM halbieren/verdoppeln |
 | Nur Fehlendes analysieren | Steht nur die Tonart in den Tags, wird nur die BPM analysiert (etwa 20× schneller als die volle Analyse); steht nur die BPM drin, nur die Tonart; stehen beide drin, gar nichts |

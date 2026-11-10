@@ -82,7 +82,7 @@ class Query:
     bpm_max: float | None = None
     keys: list[str] = field(default_factory=list)       # canonical key codes
     keywords: list[str] = field(default_factory=list)
-    keywords_mode: str = "all"        # all | any
+    keywords_mode: str = "any"        # any (OR, default) | all (AND)
     status: str | None = None         # pending | ok | error
     folder: str | None = None         # restrict to folder (recursive)
     order_by: str = "artist"
