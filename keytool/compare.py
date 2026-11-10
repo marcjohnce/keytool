@@ -34,14 +34,14 @@ def relation(a: str | None, b: str | None) -> str:
     if not ka or not kb:
         return "–"
     if ka == kb:
-        return "gleich"
+        return "same"
     if ka.camelot_number == kb.camelot_number:
-        return "Paralleltonart (relativ)"
+        return "relative major/minor"
     if ka.minor == kb.minor and (ka.camelot_number - kb.camelot_number) % 12 in (1, 11):
-        return "Quinte (Camelot ±1)"
+        return "fifth (Camelot ±1)"
     if ka.pc == kb.pc:
-        return "gleicher Grundton, Dur/Moll"
-    return "andere"
+        return "same tonic, major/minor"
+    return "other"
 
 
 def sample_files(paths: list[str], limit: int) -> list[str]:
@@ -57,11 +57,11 @@ def run(paths: list[str], limit: int = 25, workers: int | None = None, out=print
     from .config import Settings
     files = sample_files(paths, limit)
     if not files:
-        out("Keine Audiodateien gefunden.")
+        out("No audio files found.")
         return {}
     n_workers = workers or Settings.load().worker_count()
-    out(f"Vergleiche {len(files)} Titel mit beiden Verfahren ({n_workers} parallel) …\n")
-    out(f"{'Datei':42s} {'Tag':>5s} {'klassisch':>9s} {'schnell':>8s}  {'Zeit klass./schnell':>20s}  Unterschied")
+    out(f"Comparing {len(files)} tracks with both methods ({n_workers} in parallel) …\n")
+    out(f"{'File':42s} {'Tag':>5s} {'classic':>9s} {'fast':>8s}  {'time classic/fast':>20s}  Difference")
     rows = []
     ctx = multiprocessing.get_context("spawn")
     with ProcessPoolExecutor(max_workers=min(n_workers, len(files)), mp_context=ctx) as ex:
@@ -70,7 +70,7 @@ def run(paths: list[str], limit: int = 25, workers: int | None = None, out=print
             try:
                 r = fut.result()
             except Exception as e:
-                out(f"{os.path.basename(futs[fut])[:42]:42s}  Fehler: {e}")
+                out(f"{os.path.basename(futs[fut])[:42]:42s}  Error: {e}")
                 continue
             rows.append(r)
             cam = lambda c: Key.from_code(c).camelot() if c else "–"
@@ -85,23 +85,23 @@ def run(paths: list[str], limit: int = 25, workers: int | None = None, out=print
     c_tag = sum(r["classic"] == r["tag"] for r in tagged)
     f_tag = sum(r["fast"] == r["tag"] for r in tagged)
     tc, tf = sum(r["t_classic"] for r in rows), sum(r["t_fast"] for r in rows)
-    out("\n— Zusammenfassung —")
-    out(f"Gleiches Ergebnis klassisch/schnell: {same}/{n} ({same / n:.0%})")
+    out("\n— Summary —")
+    out(f"Same result classic/fast: {same}/{n} ({same / n:.0%})")
     diffs = [relation(r["classic"], r["fast"]) for r in rows if r["classic"] != r["fast"]]
     if diffs:
         from collections import Counter
-        out("Art der Abweichungen: " + ", ".join(f"{k}: {v}" for k, v in Counter(diffs).most_common()))
+        out("Kind of differences: " + ", ".join(f"{k}: {v}" for k, v in Counter(diffs).most_common()))
     if tagged:
-        out(f"Übereinstimmung mit vorhandenen Tonart-Tags ({len(tagged)} Titel): "
-            f"klassisch {c_tag}/{len(tagged)} ({c_tag / len(tagged):.0%}), schnell {f_tag}/{len(tagged)} ({f_tag / len(tagged):.0%})")
-    out(f"Rechenzeit Tonart: klassisch {tc / n:.1f} s/Titel, schnell {tf / n:.1f} s/Titel → {tc / max(tf, 1e-9):.1f}× schneller")
+        out(f"Agreement with existing key tags ({len(tagged)} tracks): "
+            f"classic {c_tag}/{len(tagged)} ({c_tag / len(tagged):.0%}), fast {f_tag}/{len(tagged)} ({f_tag / len(tagged):.0%})")
+    out(f"Key detection time: classic {tc / n:.1f} s/track, fast {tf / n:.1f} s/track → {tc / max(tf, 1e-9):.1f}× faster")
     good = (same / n >= 0.9) and (not tagged or f_tag >= c_tag - max(1, round(0.03 * len(tagged))))
     out("")
     if good:
-        out("Empfehlung: Das schnelle Verfahren liefert hier praktisch dieselben Ergebnisse. Aktivieren mit")
-        out("  Einstellungen → Analyse → Tonart-Verfahren: Schnell   oder   --set-key-method fast")
+        out("Recommendation: the fast method gives practically the same results here. Turn it on with")
+        out("  Settings → Analysis → Key detection method: Fast   or   --set-key-method fast")
     else:
-        out("Empfehlung: Beim klassischen Verfahren bleiben – die Ergebnisse weichen hier spürbar ab.")
+        out("Recommendation: stay with the classic method – the results differ noticeably here.")
     return dict(n=n, same=same, tagged=len(tagged), classic_tag=c_tag, fast_tag=f_tag,
                 t_classic=tc / n, t_fast=tf / n, recommend_fast=good)
 
@@ -116,7 +116,7 @@ def main(argv: list[str]) -> int:
         elif not a.startswith("--"):
             paths.append(a)
     if not paths:
-        print("Aufruf: python -m keytool --compare-key ORDNER_ODER_DATEI [...] [--limit 25]")
+        print("Usage: python -m keytool --compare-key FOLDER_OR_FILE [...] [--limit 25]")
         return 2
     run(paths, limit)
     return 0

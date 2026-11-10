@@ -1,4 +1,4 @@
-"""Very small translation layer.
+"""Very small translation layer (English is the default UI language).
 
 German and English live side by side in _T below; further languages are in keytool/locales/<code>.py
 (dict STRINGS) and fall back to English for any key they lack.
@@ -367,7 +367,7 @@ def strings_for(lang: str) -> dict[str, str]:
 
 class Translator:
     def __init__(self, lang: str = "de"):
-        self.lang = lang if lang in LANGUAGES else "de"
+        self.lang = lang if lang in LANGUAGES else "en"
 
     def __call__(self, key: str, **kw) -> str:
         pair = _T.get(key)
@@ -384,7 +384,7 @@ tr = Translator()
 
 
 def set_language(lang: str) -> None:
-    tr.lang = lang if lang in LANGUAGES else "de"
+    tr.lang = lang if lang in LANGUAGES else "en"
 
 
 def fmt_number(value: float, decimals: int = 1) -> str:

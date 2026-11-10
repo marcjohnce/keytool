@@ -22,9 +22,8 @@ from .tags import EDITABLE_FIELDS, is_audio_file, parse_tag_bpm, parse_tag_key, 
 ProgressCB = Callable[[int, int, dict | None], None]   # (done, total, track_row)
 
 
-CRASH_MESSAGE = ("Analyse-Prozess abgestürzt (Datei beschädigt oder zu wenig Arbeitsspeicher; Details in "
-                 "analysis.log im KeyTool-Datenordner) / analysis process crashed (corrupt file or out of memory; "
-                 "details in analysis.log in the KeyTool data folder)")
+CRASH_MESSAGE = ("Analysis process crashed (corrupt file or out of memory; details in analysis.log in the "
+                 "KeyTool data folder)")
 
 _crash_log = None      # kept open in each worker so faulthandler can write native crash tracebacks
 

@@ -1,6 +1,6 @@
 @echo off
-REM Erstellt dist\KeyTool\KeyTool.exe und dist\KeyTool\KeyTool-MCP.exe
-REM Voraussetzung: Python 3.10 - 3.13 (64 Bit) von python.org
+REM Builds dist\KeyTool\KeyTool.exe and dist\KeyTool\KeyTool-MCP.exe
+REM Requires Python 3.10 - 3.13 (64 bit) from python.org
 setlocal
 cd /d "%~dp0"
 if not exist .venv (
@@ -11,11 +11,11 @@ python -m pip install --upgrade pip || goto :error
 python -m pip install -r requirements.txt pyinstaller || goto :error
 pyinstaller packaging\KeyTool.spec --noconfirm --clean || goto :error
 echo.
-echo Fertig: dist\KeyTool\KeyTool.exe
-echo MCP-Server: dist\KeyTool\KeyTool-MCP.exe
+echo Done: dist\KeyTool\KeyTool.exe
+echo MCP server: dist\KeyTool\KeyTool-MCP.exe
 pause
 exit /b 0
 :error
-echo Build fehlgeschlagen.
+echo Build failed.
 pause
 exit /b 1

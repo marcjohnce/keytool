@@ -32,8 +32,8 @@ def test_languages_and_fallback(monkeypatch):
         assert tr("add_files") == "Add files"
         set_language("it")
         assert tr("tracks_count", shown=3, total=9) == "3 di 9 brani"
-        set_language("xx")                                   # unknown code -> German
-        assert tr.lang == "de"
+        set_language("xx")                                   # unknown code -> English
+        assert tr.lang == "en"
     finally:
         set_language("de")
 

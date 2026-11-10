@@ -31,10 +31,10 @@ def main() -> int:
         i = args.index("--set-key-method")
         method = args[i + 1] if i + 1 < len(args) else ""
         if method not in KEY_METHODS:
-            print(f"Erlaubt: {', '.join(KEY_METHODS)}")
+            print(f"Allowed: {', '.join(KEY_METHODS)}")
             return 2
         s = Settings.load(); s.key_method = method; s.save()
-        print(f"Tonart-Verfahren: {method}")
+        print(f"Key detection method: {method}")
         return 0
     if "--import-mik" in args:
         from .library import Library
@@ -42,7 +42,7 @@ def main() -> int:
         files = [a for a in args if not a.startswith("--")]
         db_file = files[0] if files else next(iter(default_db_paths()), None)
         if not db_file:
-            print("Keine Mixed-In-Key-Bibliothek gefunden / no Mixed In Key library found (MIKStore.db)")
+            print("No Mixed In Key library found (MIKStore.db)")
             return 2
         lib = Library()
         plan = plan_import(lib.db, read_mik(db_file))

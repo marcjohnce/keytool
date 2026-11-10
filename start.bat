@@ -1,7 +1,7 @@
 @echo off
-REM Startet KeyTool direkt aus dem Quellcode.
-REM Beim ersten Start wird eine virtuelle Umgebung eingerichtet; wenn sich requirements.txt
-REM geaendert hat (neue Funktionen/Pakete), werden die Pakete automatisch nachinstalliert.
+REM Starts KeyTool directly from the source code.
+REM The first start sets up a virtual environment; whenever requirements.txt has changed
+REM (new features/packages), the packages are installed again automatically.
 setlocal
 cd /d "%~dp0"
 if not exist .venv (
@@ -10,7 +10,7 @@ if not exist .venv (
 call .venv\Scripts\activate.bat || goto :error
 fc /b requirements.txt .venv\requirements.installed >nul 2>&1
 if errorlevel 1 (
-    echo Installiere bzw. aktualisiere Pakete ...
+    echo Installing / updating packages ...
     python -m pip install --upgrade pip
     python -m pip install -r requirements.txt || goto :error
     copy /y requirements.txt .venv\requirements.installed >nul
@@ -18,6 +18,6 @@ if errorlevel 1 (
 start "" pythonw -m keytool %*
 exit /b 0
 :error
-echo Installation fehlgeschlagen.
+echo Installation failed.
 pause
 exit /b 1

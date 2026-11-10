@@ -30,7 +30,7 @@ def db_path() -> Path:
 
 @dataclass
 class Settings:
-    language: str = "de"            # de | en
+    language: str = "en"            # en | de | es | fr | it
     theme: str = "dark"             # dark | light | system
     notation: str = "camelot"       # camelot | sharps | flats | openkey
     bpm_min: float = 70.0

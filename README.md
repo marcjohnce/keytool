@@ -1,234 +1,234 @@
-# KeyTool – Tonart- & BPM-Analyse mit Musikbibliothek und MCP-Server
+# KeyTool – key & BPM analysis with a music library and MCP server
 
-KeyTool analysiert Audiodateien (MP3, WAV, FLAC, OGG, M4A), erkennt **Tempo (BPM)** und **Tonart** und legt alles
-in einer durchsuchbaren Bibliothek ab. Du kannst nach Titel, Interpret, Album, Jahr, BPM, Tonart und eigenen
-**Schlüsselwörtern** suchen und filtern. Über den eingebauten **MCP-Server** kann z. B. Claude Desktop direkt auf
-die Bibliothek zugreifen.
+KeyTool analyses audio files (MP3, WAV, FLAC, OGG, M4A), detects **tempo (BPM)** and **key** and keeps everything in
+a searchable library. You can search and filter by title, artist, album, year, BPM, key and your own **keywords**.
+Through the built-in **MCP server**, Claude Desktop and similar apps can work with the library directly.
 
-## Funktionen
+## Features
 
-| Bereich | Umfang |
+| Area | Scope |
 |---|---|
-| Formate | MP3, WAV, FLAC, OGG (Vorbis/Opus), M4A/AAC/ALAC – Dekodierung über FFmpeg (in PyAV enthalten) |
-| Einlesen | Einzelne Dateien, ganze Ordnerstrukturen (rekursiv), **Drag & Drop aus dem Windows Explorer** |
-| Analyse | BPM mit Nachkommastelle und Oktavkorrektur, Tonart (24 Dur/Moll), Sicherheitswert je Ergebnis |
-| Notationen | **Camelot** (8A), **Kreuze** (F#m), **Bs** (Gbm), zusätzlich Open Key (1m) |
-| Suche | Freitext + Titel, Interpret, Album, Jahr von/bis, BPM von/bis, Tonarten (Mehrfachauswahl), Schlüsselwörter (standardmäßig mit „oder“ verknüpft, umschaltbar auf „und“) |
-| Schlüsselwörter | Pro Titel oder für viele Titel gleichzeitig; umbenennen und überall entfernen |
-| DJ-Extras | „Harmonisch passend“: Titel, die nach dem Camelot-Rad zur Auswahl passen (±6 % BPM); BPM halbieren/verdoppeln |
-| Nur Fehlendes analysieren | Steht nur die Tonart in den Tags, wird nur die BPM analysiert (etwa 20× schneller als die volle Analyse); steht nur die BPM drin, nur die Tonart; stehen beide drin, gar nichts |
-| Tags | BPM & Tonart werden nach der Analyse **automatisch in die Datei geschrieben** (ID3 TBPM/TKEY, Vorbis BPM/INITIALKEY, MP4 tmpo/initialkey) – abschaltbar |
-| Detailansicht | Seitenleiste rechts, ein-/ausblendbar über „Details“ in der Werkzeugleiste oder Strg+I (wird gemerkt). Titel, Interpret, Album, Album-Interpret (ALBUMARTIST, nur hier sichtbar), Jahr, Genre, Kommentar, Tonart, Energy (1–10) und Tempo bearbeiten – einzeln oder für viele Titel gleichzeitig; Dateityp, Bitrate, Dateigröße, Dauer und Pfad werden angezeigt. Änderungen werden in die Datei-Tags geschrieben (abschaltbar) |
-| Manuelle Korrektur | BPM/Tonart überschreiben; manuelle Werte bleiben bei einer erneuten Analyse erhalten |
-| Recherche | Titel bei **Karaoke-Version** (karaoke-version.de) nach Tonart(en) und BPM-Bereich suchen; Treffer direkt in KeyTool mit Tonart(en), Tempo, Dauer, Preis und Markierung, ob der Titel schon in der Bibliothek ist |
-| Player (Deck) | Deck über die volle Breite: großer Titel, Tonart-Chip in Camelot-Farbe, Tempo in großer Schrift, Transponier-Knöpfe mit Zieltonart (z. B. „+1 3A“); Cover (eingebettet oder cover.jpg/folder.jpg im Ordner, sonst Platzhalter), vorheriger/nächster Titel, Play/Pause, Stopp, automatisches Weiterspielen; Wiedergabe des ausgewählten Titels über das Standard-Ausgabegerät des Systems (folgt Gerätewechseln, z. B. Kopfhörer), Lautstärke, Stumm |
-| Transponieren | Wiedergabe um einen Halbton höher (+1) oder tiefer (−1) bei unverändertem Tempo (Rubber Band über pedalboard); Positionen und Cue-Punkte bleiben gültig |
-| Serato-Cues | Vorhandene Serato-DJ-Hot-Cues (Farbe, Name) und gespeicherte Loops werden aus den Dateien gelesen (MP3, WAV, FLAC, M4A; OGG soweit möglich) und in der Wellenform angezeigt; Klick auf ein Cue-Fähnchen oder Alt+1…8 springt hin |
-| Wellenform | Übersicht des ausgewählten Titels über der Trackliste, gefärbt nach Frequenzbändern (Bass blau, Mitten bernstein, Höhen weiß), Klicken/Ziehen zum Spulen, Taktmarken aus der BPM |
-| Passt zum Deck | Spalte „Passt“ (● gleiche Tonart, ◐ harmonischer Nachbar ±1 oder Dur/Moll, ○ passt nicht, inkl. Transposition) und „zum Deck“ (Tempo-Abweichung in %, über ±6 % gedämpft); beide sortierbar |
-| Oberfläche | Deutsch, Englisch, Spanisch, Französisch, Italienisch (in den Einstellungen; Zahlen, Datum und Tonartnamen wie „La menor“ / „la mineur“ / „La minore“ passend zur Sprache), heller und dunkler Modus (oder System), Umschalten ohne Neustart; Schrift Archivo (SIL OFL, mitgeliefert), Farbe nur für Tonarten, Bernstein für Wiedergabe |
-| MCP-Server | Vollzugriff: suchen, Details, Schlüsselwörter, Werte setzen, Tags schreiben, Ordner einlesen & analysieren |
+| Formats | MP3, WAV, FLAC, OGG (Vorbis/Opus), M4A/AAC/ALAC – decoded with FFmpeg (included in PyAV) |
+| Import | Single files, whole folder trees (recursive), **drag & drop from Windows Explorer** |
+| Analysis | BPM with one decimal and octave correction, key (24 major/minor), confidence for each result |
+| Notations | **Camelot** (8A), **sharps** (F#m), **flats** (Gbm), plus Open Key (1m) |
+| Search | Free text + title, artist, album, year from/to, BPM from/to, keys (multiple), keywords (combined with "or" by default, switchable to "and") |
+| Keywords | Per track or for many tracks at once; rename and remove everywhere |
+| DJ extras | "Harmonic match": tracks that fit the selection on the Camelot wheel (±6 % BPM); halve/double BPM |
+| Analyse only what is missing | If only the key is in the tags, only the BPM is analysed (about 20× faster than a full analysis); if only the BPM is there, only the key; if both are there, nothing |
+| Tags | BPM & key are **written into the file automatically** after analysis (ID3 TBPM/TKEY, Vorbis BPM/INITIALKEY, MP4 tmpo/initialkey) – can be turned off |
+| Details | Right-hand sidebar, shown/hidden with "Details" in the toolbar or Ctrl+I (remembered). Edit title, artist, album, album artist (ALBUMARTIST, only shown here), year, genre, comment, key, energy (1–10) and tempo – for one track or many at once; file type, bitrate, file size, duration and path are shown. Changes are written into the file tags (can be turned off) |
+| Manual correction | Override BPM/key; manual values are kept when a track is analysed again |
+| Research | Search **Karaoke-Version** (karaoke-version.de) by key(s) and BPM range (see the note on bot protection below) |
+| Player (deck) | Full-width deck: large title, key chip in its Camelot colour, large tempo, transpose buttons with the target key (e.g. "+1 3A"); cover (embedded or cover.jpg/folder.jpg in the folder, otherwise a placeholder), previous/next track, play/pause, stop, continuous play; plays through the system's default output device (follows device changes, e.g. headphones), volume, mute |
+| Transpose | Play one semitone higher (+1) or lower (−1) at the original tempo (Rubber Band via pedalboard); positions and cue points stay valid |
+| Serato cues | Existing Serato DJ hot cues (colour, name) and saved loops are read from the files (MP3, WAV, FLAC, M4A; OGG where possible) and shown in the waveform; clicking a cue flag or Alt+1…8 jumps to it |
+| Waveform | Overview of the deck track, coloured by frequency band (bass blue, mids amber, highs white), click/drag to seek, bar ticks from the BPM |
+| Fits the deck | "Fits" column (● same key, ◐ harmonic neighbour ±1 or relative major/minor, ○ does not fit, transposition included) and "vs. deck" (tempo difference in %, dimmed beyond ±6 %); both sortable |
+| User interface | English, German, Spanish, French, Italian (in the settings; numbers, dates and key names such as "a-Moll" / "La menor" / "la mineur" follow the language), light and dark mode (or system), switch without restarting; Archivo typeface (SIL OFL, bundled), colour only for keys, amber for playback |
+| MCP server | Full access: search, details, keywords, set values, write tags, import & analyse folders |
 
-## Installation & Start (Windows)
+## Installation & start (Windows)
 
-**Variante A – aus dem Quellcode:**
-1. Python 3.10–3.13 (64 Bit) von python.org installieren (Haken bei „Add to PATH“).
-2. `start.bat` doppelklicken. Beim ersten Start wird eine virtuelle Umgebung eingerichtet (dauert ein paar Minuten).
-   Kommen in einer neuen Version Pakete hinzu, installiert `start.bat` sie beim nächsten Start automatisch nach.
+**Option A – from the source code:**
+1. Install Python 3.10–3.13 (64 bit) from python.org (tick "Add to PATH").
+2. Double-click `start.bat`. The first start sets up a virtual environment (takes a few minutes).
+   When a new version adds packages, `start.bat` installs them automatically on the next start.
 
-**Variante B – eigene .exe bauen:**
-1. `build_exe.bat` doppelklicken.
-2. Ergebnis: `dist\KeyTool\KeyTool.exe` (Oberfläche) und `dist\KeyTool\KeyTool-MCP.exe` (MCP-Server).
-   Den ganzen Ordner `dist\KeyTool` kannst du an einen beliebigen Ort kopieren.
+**Option B – build your own .exe:**
+1. Double-click `build_exe.bat`.
+2. Result: `dist\KeyTool\KeyTool.exe` (app) and `dist\KeyTool\KeyTool-MCP.exe` (MCP server).
+   You can copy the whole `dist\KeyTool` folder anywhere.
 
-Ein separates FFmpeg ist nicht nötig.
+A separate FFmpeg installation is not needed.
 
-## Bedienung
+## Usage
 
-* **Dateien/Ordner einlesen:** Toolbar oder einfach aus dem Explorer ins Fenster ziehen. Bereits analysierte,
-  unveränderte Dateien werden übersprungen. Die Analyse läuft parallel auf mehreren CPU-Kernen.
-* **Suchen:** Das Feld „Alles durchsuchen“ (Strg+F) sucht in Titel, Interpret, Album, Dateiname, Genre, Jahr und
-  Schlüsselwörtern. Alle Filter links lassen sich kombinieren.
-* **Tonart-Filter:** Die farbigen Felder entsprechen dem Camelot-Rad; die Beschriftung folgt der gewählten Notation.
-* **Schlüsselwörter:** Titel auswählen (Mehrfachauswahl möglich), rechts eingeben, mehrere mit Komma trennen.
-  Ein Doppelklick auf ein Schlüsselwort filtert danach. Rechtsklick in der Filterliste: umbenennen/entfernen.
-* **Details bearbeiten:** rechts Felder ändern und „Speichern“ (Strg+S) oder „Verwerfen“. Bei mehreren
-  ausgewählten Titeln zeigen unterschiedliche Werte „(verschiedene Werte)“; übernommen werden nur die Felder,
-  die du änderst. Wechselst du mit ungespeicherten Änderungen den Titel, fragt KeyTool nach. Energy wird als
-  `TXXX:EnergyLevel` (MP3/WAV), `ENERGYLEVEL` (FLAC/OGG) bzw. `EnergyLevel` (M4A) gespeichert; Mixed-In-Key-
-  Kommentare wie „8A - Energy 6“ werden beim Einlesen erkannt.
-* **Abspielen:** Doppelklick (oder Enter) lädt einen Titel ins Deck und spielt ihn ab; einfaches Auswählen zeigt
-  nur die Details. Leertaste startet/pausiert, Klicken oder Ziehen in der Wellenform spult. Wird der Titel im Deck
-  neu analysiert oder bearbeitet, zeigt das Deck sofort die neuen Werte. ⏮/⏭ (Strg+←/→ oder Medientasten)
-  springen vom Titel im Deck zum vorherigen/nächsten in der aktuellen Sortierung und Filterung; ⏮ startet nach den ersten 3 Sekunden
-  erst den Titel neu. Am Titelende geht es mit dem nächsten weiter, am Listenende hält der Player an. Ein Klick
-  aufs Cover zeigt es groß.
-* **Transponieren:** Im Player „−1 / 0 / +1“ wählen. Der Titel spielt weiter, während im Hintergrund die
-  transponierte Fassung berechnet wird (auf allen CPU-Kernen; Fortschritt neben der Zeitanzeige), dann wird
-  nahtlos an derselben Stelle umgeschaltet. Das Tempo bleibt exakt gleich, die Anzeige zeigt die neue Tonart
-  (z. B. „8A → 3A (+1)“). Die Einstellung gilt auch für die nächsten Titel; berechnete Fassungen werden
-  zwischengespeichert (die letzten 12, im Datenordner unter `transpose_cache`). Die Originaldatei wird nie verändert.
-* **Serato-Cues:** Hot Cues erscheinen in der Wellenform als rote Linie mit nummeriertem Fähnchen, gespeicherte
-  Loops als hinterlegter Bereich (🔒 = gesperrt). Ein Klick auf Linie oder Fähnchen (oder Alt+1…8) setzt die Wiedergabeposition millisekundengenau auf den Cue – auch
-  während der Wiedergabe und während der Titel noch lädt. Tooltips zeigen Name und Zeit. Gelesen wird der Tag „Serato Markers2“ (Formatbeschreibung: Holzhaus/serato-tags);
-  KeyTool ändert diese Daten nie – auch nicht beim Schreiben von BPM, Tonart oder Metadaten. Werden während der Wiedergabe Tags in die
-  Datei geschrieben, gibt der Player die Datei kurz frei und spielt an derselben Stelle weiter.
-* **Recherche bei Karaoke-Version** (🔎 in der Toolbar oder Rechtsklick „Passende Titel bei Karaoke-Version
-  suchen“): Tonarten im Camelot-Rad wählen („Harmonisch erweitern“ fügt die Nachbarn hinzu), BPM-Bereich setzen,
-  suchen. Vorbelegt wird mit dem aktuellen Tonart-/BPM-Filter oder mit Tonart und BPM (±3 %) des ausgewählten Titels.
-  * Gesucht wird einmal je Tonart (20 Treffer pro Seite, „Weitere Treffer laden“), damit jeder Treffer seine
-    Tonart hat. Die Trefferliste der Seite enthält kein Tempo; KeyTool liest Tempo („~“ = variabel), alle Tonarten
-    (Songs mit Tonartwechsel haben mehrere) und Dauer von den Song-Seiten nach – gedrosselt, und für zwei Wochen
-    zwischengespeichert. Abschaltbar im Dialog.
-  * **±1 Halbton einbeziehen** (Standard an): sucht zusätzlich die Tonarten einen Halbton tiefer und höher – solche
-    Titel lassen sich auf Karaoke-Version passend transponieren. Die Spalte „Transp.“ zeigt, um wie viel (+1 / −1,
-    leer = passt direkt), der Tooltip die Tonart danach. Pro Tonart sind das drei statt einer Anfrage.
-  * ✓ markiert Titel, die (gleicher Titel und Interpret) schon in deiner Bibliothek sind.
-  * Doppelklick öffnet die Song-Seite, „Suche im Browser öffnen“ die gleiche Suche auf der Website.
-  * Die AGB von Karaoke-Version untersagen Crawling nur für KI-Training, die robots.txt erlaubt die Suchseiten.
-    KeyTool ruft nur ab, was du anforderst, identifiziert sich als „KeyTool“ und hält Pausen zwischen Anfragen ein.
-  * **Bot-Schutz (seit November 2026):** Karaoke-Version liefert Suchergebnisse nur noch an echte Webbrowser
-    (Fastly „Client Challenge“). KeyTool umgeht das nicht: es erkennt die Prüfseite, sagt das im Dialog und bietet
-    „Suche im Browser öffnen“ mit allen gewählten Tonarten (inkl. ±1 Halbton) und dem BPM-Bereich an. Der
-    MCP-Befehl liefert dann `error: blocked_by_bot_protection` und den Link `search_url`.
-* **Import aus Mixed In Key** („Analysieren ▾ → Aus Mixed In Key importieren …“): liest die Bibliothek von
-  Mixed In Key 10/11 (`%LOCALAPPDATA%\Mixed In Key\Mixed In Key\<Version>\MIKStore.db`, wird automatisch
-  gefunden) und übernimmt Tonart, Tempo und Energy. Zuordnung über den Dateipfad, bei verschobenen Dateien über
-  den eindeutigen Dateinamen. Vorschau vor dem Import; Optionen: vorhandene Werte ersetzen oder nur leere Felder
-  füllen (manuelle Werte bleiben immer), Mixed-In-Key-Sammlungen als Schlüsselwörter, fehlende Titel hinzufügen.
-  Importierte Werte gelten wie Werte aus den Tags: eine spätere Analyse überschreibt sie nicht, „Erneut
-  analysieren“ schon. Mixed In Key selbst wird nicht verändert (die Datenbank wird vor dem Lesen kopiert).
-  Ohne Oberfläche: `KeyTool-MCP.exe --import-mik [MIKStore.db] [--add-missing] [--fill-only] [--no-keywords]`.
-* **Analyse-Warteschlange** („Warteschlange“ in der Werkzeugleiste, öffnet sich nur auf Klick; solange Analysen
-  laufen oder warten, ist der Knopf in Bernstein hervorgehoben und zeigt die Anzahl): Alle Analysen – Import, „Ausstehende analysieren“,
-  „Erneut analysieren“ – landen in einer Warteschlange, die von oben nach unten abgearbeitet wird (bei mehreren
-  parallelen Analysen starten immer die obersten wartenden Titel; mit „Parallele Analysen = 1“ streng nacheinander).
-  * **Jetzt analysieren** (Rechtsklick in der Liste oder in der Warteschlange) setzt Titel an die Spitze.
-  * **Aus Warteschlange entfernen** nimmt wartende Titel heraus; ihr Status wird auf den Stand vor dem Einreihen
-    zurückgesetzt. „Wartende entfernen“ leert die Warteschlange, laufende Analysen werden noch beendet.
-  * Doppelklick zeigt den Titel in der Liste; fertige Einträge lassen sich ausblenden.
-* **Zuletzt analysiert:** Für jede Datei wird der Zeitpunkt der letzten *erfolgreichen* Analyse gespeichert und in
-  Liste (Spalte „Zuletzt analysiert“) und Details angezeigt; fehlgeschlagene Analysen ändern ihn nicht.
-* **Titel in andere Programme ziehen:** Ausgewählte Titel (auch mehrere) aus der Liste per Drag & Drop in einen
-  Browser (z. B. Upload-Feld), einen Audioplayer, den Explorer oder DJ-Software ziehen – übergeben werden die
-  Originaldateien. Zurück ins KeyTool-Fenster gezogen passiert nichts.
-* **Kontextmenü der Tabelle:** abspielen, ins Deck laden, nach Interpret / Album / Tonart filtern, erneut analysieren, Tags schreiben, im Explorer anzeigen, aus der Bibliothek entfernen
-  (die Dateien selbst werden nie gelöscht).
-* **Einstellungen:** Sprache, Darstellung, Notation, BPM-Bereich, automatisches Tag-Schreiben und welche Notation in
-  den Tonart-Tag geschrieben wird (Standard: Kreuze, z. B. „F#m“ – kompatibel mit Rekordbox/Serato/Traktor).
+* **Import files/folders:** toolbar, or drag them from Explorer into the window. Files that were already analysed
+  and have not changed are skipped. Analysis runs in parallel on several CPU cores.
+* **Search:** the "Search everything" field (Ctrl+F) searches title, artist, album, file name, genre, year and
+  keywords. All filters on the left can be combined.
+* **Key filter:** the coloured segments are the Camelot wheel; the labels follow the chosen notation.
+* **Keywords:** select tracks (multiple selection possible), type on the right, separate several with commas.
+  Double-clicking a keyword filters by it. Right-click in the filter list: rename/remove.
+* **Edit details:** change fields on the right and press "Save" (Ctrl+S) or "Discard". With several tracks selected,
+  differing values show "(multiple values)"; only the fields you change are applied. If you switch tracks with
+  unsaved changes, KeyTool asks. Energy is stored as `TXXX:EnergyLevel` (MP3/WAV), `ENERGYLEVEL` (FLAC/OGG) or
+  `EnergyLevel` (M4A); Mixed In Key comments such as "8A - Energy 6" are recognised on import.
+* **Play:** double-click (or Enter) loads a track into the deck and plays it; a single click only shows the details.
+  Space starts/pauses, clicking or dragging in the waveform seeks. If the deck track is analysed again or edited,
+  the deck shows the new values right away. ⏮/⏭ (Ctrl+←/→ or media keys) go from the deck track to the
+  previous/next one in the current sort order and filter; after the first 3 seconds ⏮ restarts the track first.
+  At the end of a track the next one plays; at the end of the list the player stops. Clicking the cover enlarges it.
+* **Transpose:** choose "−1 / 0 / +1" in the player. The track keeps playing while the transposed version is
+  computed in the background (on all CPU cores; progress next to the time), then playback switches seamlessly at
+  the same position. The tempo stays exactly the same; the display shows the new key (e.g. "8A → 3A (+1)"). The
+  setting also applies to the next tracks; computed versions are cached (the last 12, in the data folder under
+  `transpose_cache`). The original file is never changed.
+* **Serato cues:** hot cues appear in the waveform as a red line with a numbered flag, saved loops as a shaded
+  range (🔒 = locked). Clicking a line or flag (or Alt+1…8) sets the playback position to the cue with millisecond
+  precision – also during playback and while the track is still loading. Tooltips show name and time. KeyTool reads
+  the "Serato Markers2" tag (format description: Holzhaus/serato-tags) and never changes it – not even when writing
+  BPM, key or metadata. If tags are written during playback, the player releases the file briefly and continues at
+  the same position.
+* **Karaoke-Version research** ("Search Karaoke-Version" in the toolbar or right-click "Find matching tracks on
+  Karaoke-Version"): choose keys on the Camelot wheel ("Add harmonic keys" adds the neighbours), set a BPM range,
+  search. It is prefilled with the current key/BPM filter or with the key and BPM (±3 %) of the selected track.
+  * One search per key (20 hits per page, "Load more results"), so every hit carries its key. The result list on
+    the website has no tempo; KeyTool reads tempo ("~" = variable), all keys (songs with key changes have several)
+    and duration from the song pages – throttled, and cached for two weeks. Can be turned off in the dialog.
+  * **Include ±1 semitone** (on by default): also searches the keys one semitone lower and higher – such tracks can
+    be transposed to fit on Karaoke-Version. The "Transp." column shows by how much (+1 / −1, empty = fits as is),
+    the tooltip the key afterwards. That is three requests per key instead of one.
+  * ✓ marks tracks that are already in your library (same title and artist).
+  * Double-click opens the song page, "Open search in browser" the same search on the website.
+  * Karaoke-Version's terms only forbid crawling for AI training, and robots.txt allows the search pages. KeyTool
+    only fetches what you ask for, identifies itself as "KeyTool" and pauses between requests.
+  * **Bot protection (since November 2026):** Karaoke-Version now only serves search results to real web browsers
+    (Fastly "Client Challenge"). KeyTool does not work around this: it recognises the challenge page, says so in
+    the dialog and offers "Open search in browser" with all chosen keys (including ±1 semitone) and the BPM range.
+    The MCP tool then returns `error: blocked_by_bot_protection` and the link `search_url`.
+* **Import from Mixed In Key** ("Analyze ▾ → Import from Mixed In Key …"): reads the library of Mixed In Key 10/11
+  (`%LOCALAPPDATA%\Mixed In Key\Mixed In Key\<version>\MIKStore.db`, found automatically) and takes over key, tempo
+  and energy. Tracks are matched by file path, moved files by their unique file name. A preview is shown before the
+  import; options: replace existing values or only fill empty fields (manual values are always kept), Mixed In Key
+  collections as keywords, add missing tracks. Imported values count like values from the tags: a later analysis
+  does not overwrite them, "Re-analyze" does. Mixed In Key itself is not changed (the database is copied before
+  reading). Without the UI: `KeyTool-MCP.exe --import-mik [MIKStore.db] [--add-missing] [--fill-only] [--no-keywords]`.
+* **Analysis queue** ("Queue" in the toolbar, opens only when clicked; while analyses run or wait, the button is
+  highlighted in amber and shows the count): all analyses – import, "Analyze pending", "Re-analyze" – go into a
+  queue that is worked through from top to bottom (with several parallel analyses the topmost waiting tracks always
+  start first; with "Parallel analyses = 1" strictly one after another).
+  * **Analyse now** (right-click in the list or in the queue) moves tracks to the top.
+  * **Remove from queue** takes waiting tracks out; their status returns to what it was before they were queued.
+    "Remove waiting" empties the queue; running analyses still finish.
+  * Double-click shows the track in the list; finished entries can be hidden.
+* **Last analysed:** for every file the time of the last *successful* analysis is stored and shown in the list
+  (column "Last analysed") and the details; failed analyses do not change it.
+* **Drag tracks into other apps:** drag selected tracks (also several) from the list into a browser (e.g. an
+  upload field), an audio player, Explorer or DJ software – the original files are passed on. Dragging them back
+  into the KeyTool window does nothing.
+* **Context menu of the list:** play, load into deck, filter by artist / album / key, re-analyse, write tags, show
+  in Explorer, remove from library (the files themselves are never deleted).
+* **Settings:** language, colour scheme, notation, BPM range, analysis method, automatic tag writing and which
+  notation goes into the key tag (default: sharps, e.g. "F#m" – compatible with rekordbox/Serato/Traktor), MCP.
 
-### Analyse beschleunigen
+### Faster analysis
 
-* **Schnelles Tonart-Verfahren** (Einstellungen → Analyse → Tonart-Verfahren: *Schnell*): Die Trennung von
-  Schlagzeug und harmonischem Anteil – rund 90 % der Rechenzeit – läuft auf dem Constant-Q-Spektrum statt auf dem
-  vollen Spektrum. Etwa 4–5× schneller; in den Tests identische Ergebnisse. Vorher an eigenen Titeln prüfen:
+* **Fast key method** (Settings → Analysis → Key detection method: *Fast*): separating drums from the harmonic part
+  – about 90 % of the computing time – runs on the constant-Q spectrum instead of the full spectrum. About 4–5×
+  faster; identical results in the tests. Check it on your own tracks first:
 
   ```
-  python -m keytool --compare-key D:\Musik --limit 25      (aus dem Quellcode)
-  KeyTool-MCP.exe --compare-key D:\Musik --limit 25        (.exe-Version)
+  python -m keytool --compare-key D:\Music --limit 25      (from the source code)
+  KeyTool-MCP.exe --compare-key D:\Music --limit 25        (.exe version)
   ```
 
-  Der Befehl analysiert eine über die Ordner verteilte Stichprobe mit beiden Verfahren, zeigt Abweichungen
-  (Paralleltonart, Quinte, …), vergleicht beide mit vorhandenen Tonart-Tags (z. B. aus Mixed In Key) und gibt eine
-  Empfehlung. Umschalten auch per `--set-key-method fast` bzw. `classic`.
-* **Parallele Analysen:** automatisch bis zu 16 (ein Kern bleibt frei, ca. 1 GB RAM je Analyse); manuell in den
-  Einstellungen.
-* Titel mit BPM und Tonart in den Tags werden nicht analysiert, fehlt nur ein Wert, wird nur dieser berechnet.
+  The command analyses a sample spread over the folders with both methods, shows differences (relative key,
+  fifth, …), compares both with existing key tags (e.g. from Mixed In Key) and gives a recommendation. You can
+  also switch with `--set-key-method fast` or `classic`.
+* **Parallel analyses:** automatically up to 16 (one core stays free, about 1 GB RAM per analysis); manually in the
+  settings.
+* Tracks with BPM and key in their tags are not analysed; if only one value is missing, only that one is computed.
 
-### Hinweise zur Genauigkeit
+### Notes on accuracy
 
-* **BPM:** Onset-Analyse, Beat-Tracking und eine robuste Regression über alle Beats; bei Musik mit klarem Puls sehr
-  zuverlässig. Halbe/doppelte Tempi werden in den eingestellten **BPM-Bereich** (Standard 70–180) gefaltet. Für
-  Drum'n'Bass z. B. 85–175 oder 87–180 einstellen, für HipHop 60–120.
-* **Tonart:** Harmonische Trennung (Schlagzeug wird ausgeblendet), Stimmungs-Korrektur (z. B. 432 Hz),
-  Constant-Q-Chromagramm und ein Ensemble aus drei Tonart-Profilen (Krumhansl, Temperley, Shaath/KeyFinder).
-  Wie bei allen Tools dieser Art (Mixed In Key, Rekordbox, KeyFinder) kommt es bei modaler oder atonaler Musik
-  gelegentlich zu Verwechslungen mit der Paralleltonart oder der Quinte. Ein niedriger Sicherheitswert ist ein
-  Hinweis zum Nachprüfen; Werte lassen sich manuell korrigieren.
+* **BPM:** onset analysis, beat tracking and a robust regression over all beats; very reliable for music with a
+  clear pulse. Half/double tempi are folded into the configured **BPM range** (default 70–180). For drum'n'bass set
+  e.g. 85–175 or 87–180, for hip-hop 60–120.
+* **Key:** harmonic separation (drums are removed), tuning correction (e.g. 432 Hz), constant-Q chromagram and an
+  ensemble of three key profiles (Krumhansl, Temperley, Shaath/KeyFinder). As with all tools of this kind (Mixed In
+  Key, rekordbox, KeyFinder), modal or atonal music is occasionally confused with the relative key or the fifth. A
+  low confidence is a hint to double-check; values can be corrected manually.
 
-## MCP-Server
+## MCP server
 
-Für Claude Desktop in `%APPDATA%\Claude\claude_desktop_config.json` eintragen
-(den passenden Eintrag zeigt dir auch **Einstellungen → MCP-Server** zum Kopieren an):
+For Claude Desktop, add this to `%APPDATA%\Claude\claude_desktop_config.json`
+(**Settings → MCP server** shows the matching entry to copy):
 
 ```json
 {
   "mcpServers": {
     "keytool": {
-      "command": "C:\\Programme\\KeyTool\\KeyTool-MCP.exe"
+      "command": "C:\\Program Files\\KeyTool\\KeyTool-MCP.exe"
     }
   }
 }
 ```
 
-Aus dem Quellcode: `"command": "C:\\Pfad\\zu\\KeyTool\\.venv\\Scripts\\python.exe", "args": ["-m", "keytool", "--mcp"]`.
-Alternativ läuft der Server per `python -m keytool --mcp-http` (bzw. `KeyTool-MCP.exe --mcp-http`) über Streamable HTTP unter `http://127.0.0.1:8000/mcp` – nur lokal erreichbar.
+From the source code: `"command": "C:\\path\\to\\KeyTool\\.venv\\Scripts\\python.exe", "args": ["-m", "keytool", "--mcp"]`.
+Alternatively the server runs with `python -m keytool --mcp-http` (or `KeyTool-MCP.exe --mcp-http`) over streamable
+HTTP at `http://127.0.0.1:8000/mcp` – reachable only locally.
 
-GUI und MCP-Server nutzen dieselbe Datenbank (`%APPDATA%\KeyTool\library.sqlite3`) und können gleichzeitig laufen.
+The app and the MCP server share the same database (`%APPDATA%\KeyTool\library.sqlite3`) and can run at the same
+time.
 
-**Weitere Sprachen:** Texte für Deutsch und Englisch stehen in `keytool/i18n.py`, weitere Sprachen je in
-`keytool/locales/<code>.py` (es, fr, it). Eine neue Sprache = neue Datei + Eintrag in `LANGUAGES`; fehlende Texte
-erscheinen auf Englisch, `tests/test_i18n.py` meldet Lücken und abweichende Platzhalter.
+**More languages:** the English and German texts are in `keytool/i18n.py`, further languages each in
+`keytool/locales/<code>.py` (es, fr, it). A new language = a new file + an entry in `LANGUAGES`; missing texts
+appear in English, and `tests/test_i18n.py` reports gaps and placeholders that differ.
 
-**Fehlersuche:** Schlägt eine Analyse fehl oder stürzt ein Analyse-Prozess ab, steht die Ursache (Python-Traceback bzw.
-Absturzstelle und Exit-Code) in `%APPDATA%\KeyTool\analysis.log`. Die exe ohne Konsolenfenster schreibt dorthin
-auch Fehlermeldungen, die sonst unsichtbar blieben.
+**Troubleshooting:** if an analysis fails or an analysis process crashes, the cause (Python traceback, or crash
+location and exit code) is in `%APPDATA%\KeyTool\analysis.log`. The .exe without a console window also writes
+error messages there that would otherwise stay invisible.
 
-| Tool | Zweck |
+| Tool | Purpose |
 |---|---|
-| `search_tracks` | Suche mit allen Filtern, Sortierung, Paging, Notation wählbar |
-| `get_track` | Alle Details eines Titels (per ID oder Pfad) |
-| `compatible_tracks` | Harmonisch passende Titel (Camelot-Nachbarn, BPM-Toleranz) |
-| `library_stats` | Anzahl, Status, BPM-Spanne, Tonart-Verteilung |
-| `convert_key`, `list_all_keys` | Notationen umrechnen |
-| `list_keywords`, `add_keywords`, `remove_keywords`, `set_keywords`, `rename_keyword` | Schlüsselwörter |
-| `import_mixed_in_key` | Tonart, Tempo, Energy und Sammlungen aus Mixed In Key übernehmen (mit `dry_run` nur Vorschau) |
-| `update_metadata` | Titel, Interpret, Album, Album-Interpret, Jahr, Genre, Kommentar, Energy ändern (ein oder mehrere Titel) |
-| `set_bpm`, `set_key`, `write_tags` | Manuelle Korrektur und Tags schreiben |
-| `analyze_paths`, `reanalyze_tracks`, `get_job_status`, `cancel_job` | Dateien/Ordner einlesen und analysieren (Hintergrund-Job) |
-| `search_karaoke_version` | Karaoke-Version nach Tonart(en)/BPM durchsuchen, optional mit Tempo/Tonarten/Dauer je Treffer und ±1 Halbton (`include_semitones`) |
-| `remove_tracks`, `remove_missing_files` | Einträge aus der Bibliothek entfernen (Dateien bleiben erhalten) |
+| `search_tracks` | Search with all filters, sorting, paging, choice of notation |
+| `get_track` | All details of a track (by ID or path) |
+| `compatible_tracks` | Harmonically matching tracks (Camelot neighbours, BPM tolerance) |
+| `library_stats` | Count, status, BPM range, key distribution |
+| `convert_key`, `list_all_keys` | Convert notations |
+| `list_keywords`, `add_keywords`, `remove_keywords`, `set_keywords`, `rename_keyword` | Keywords |
+| `import_mixed_in_key` | Take over key, tempo, energy and collections from Mixed In Key (`dry_run` for a preview only) |
+| `update_metadata` | Change title, artist, album, album artist, year, genre, comment, energy (one or more tracks) |
+| `set_bpm`, `set_key`, `write_tags` | Manual correction and writing tags |
+| `analyze_paths`, `reanalyze_tracks`, `get_job_status`, `cancel_job` | Import and analyse files/folders (background job) |
+| `search_karaoke_version` | Search Karaoke-Version by key(s)/BPM, optionally with tempo/keys/duration per hit and ±1 semitone (`include_semitones`) |
+| `remove_tracks`, `remove_missing_files` | Remove entries from the library (the files are kept) |
 
-Beispiele für Anfragen an Claude: „Lies `D:\Musik\Neu` ein“, „Welche Tracks in 8A zwischen 120 und 126 BPM habe ich?“,
-„Gib allen Titeln von Interpret X das Schlüsselwort Warmup“, „Was passt harmonisch zu Track 42?“
+Example requests to Claude: "Import `D:\Music\New`", "Which tracks in 8A between 120 and 126 BPM do I have?",
+"Give all tracks by artist X the keyword Warmup", "What fits harmonically with track 42?"
 
-## Kommandozeile
+## Command line
 
 ```
-python -m keytool                     # Oberfläche
-python -m keytool --analyze D:\Musik  # einlesen & analysieren ohne Oberfläche
-python -m keytool --mcp               # MCP-Server (stdio)
-python -m keytool --compare-key D:\Musik [--limit 25]   # Tonart-Verfahren vergleichen
-python -m keytool --set-key-method fast|classic        # Tonart-Verfahren wählen
+python -m keytool                     # app
+python -m keytool --analyze D:\Music  # import & analyse without the UI
+python -m keytool --mcp               # MCP server (stdio)
+python -m keytool --compare-key D:\Music [--limit 25]   # compare the key detection methods
+python -m keytool --set-key-method fast|classic        # choose the key detection method
+python -m keytool --import-mik [MIKStore.db] [--add-missing] [--fill-only] [--no-keywords]   # Mixed In Key import
 ```
 
-Umgebungsvariablen: `KEYTOOL_DATA_DIR` (Ordner für Einstellungen + Datenbank), `KEYTOOL_DB` (Datenbankdatei).
+Environment variables: `KEYTOOL_DATA_DIR` (folder for settings + database), `KEYTOOL_DB` (database file).
 
-## Projektstruktur
+## Project structure
 
 ```
 keytool/
-  analysis.py       BPM- und Tonart-Erkennung (klassisch / schnell)
-  analysis_queue.py Analyse-Warteschlange (Reihenfolge, „Jetzt analysieren“, absturzsicher)
-  compare.py        Vergleich der Tonart-Verfahren an eigenen Titeln
-  keys.py           Tonart-Modell, Notationen, Camelot-Rad
-  tags.py           Metadaten lesen, BPM/Tonart in Tags schreiben
-  db.py             SQLite-Bibliothek & Suche
-  library.py        Einlesen, parallele Analyse, Tag-Schreiben
-  mcp_server.py     MCP-Server
-  research.py       Suche & Parser für Karaoke-Version
-  serato.py         Serato-Cues/-Loops lesen (Serato Markers2)
-  transpose.py      Transponieren ±1 Halbton bei Originaltempo (pedalboard/Rubber Band)
-  waveform.py       Wellenform-Berechnung (3 Frequenzbänder) mit Cache
-  i18n.py           Deutsch/Englisch
-  gui/              Qt-Oberfläche (Hauptfenster, Camelot-Rad, Player, Details, Themes)
-packaging/          PyInstaller-Spezifikation, Starter, Icon
-tests/              Tests mit synthetisch erzeugten Audiodateien in allen Formaten
+  analysis.py       BPM and key detection (classic / fast)
+  analysis_queue.py Analysis queue (order, "Analyse now", crash-safe)
+  compare.py        Compare the key detection methods on your own tracks
+  keys.py           Key model, notations, Camelot wheel
+  tags.py           Read metadata, write BPM/key and edits into tags
+  db.py             SQLite library & search
+  library.py        Import, parallel analysis, tag writing, analysis.log
+  mik_import.py     Import from Mixed In Key (MIKStore.db)
+  mcp_server.py     MCP server
+  research.py       Search & parser for Karaoke-Version
+  serato.py         Read Serato cues/loops (Serato Markers2)
+  transpose.py      Transpose ±1 semitone at the original tempo (pedalboard/Rubber Band)
+  waveform.py       Waveform computation (3 frequency bands) with cache
+  i18n.py           UI texts (English, German) and formatting of numbers/dates
+  locales/          Further UI languages (es, fr, it)
+  gui/              Qt user interface (main window, deck, Camelot wheel, details, dialogs, themes)
+packaging/          PyInstaller spec, launchers, icon
+tests/              Tests with synthetic audio files in all formats
 ```
 
-Tests: `pip install pytest` und `python -m pytest tests`.
+Tests: `pip install pytest` and `python -m pytest tests`.
 
-## Lizenzhinweis
+## Licence note
 
-Das Transponieren nutzt [pedalboard](https://github.com/spotify/pedalboard) (GPLv3) mit der Rubber-Band-Bibliothek.
-Für die private Nutzung ist das unproblematisch; wer KeyTool samt pedalboard weitergibt, muss die GPLv3 beachten.
+Transposing uses [pedalboard](https://github.com/spotify/pedalboard) (GPLv3) with the Rubber Band library. That is
+fine for private use; anyone who distributes KeyTool together with pedalboard has to observe the GPLv3.

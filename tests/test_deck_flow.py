@@ -99,6 +99,7 @@ def test_context_menu_filters(win):
 
 def test_queue_opens_only_on_request(win):
     import time
+    from keytool.i18n import tr
     btn = win.toolbar.widgetForAction(win.a_queue)
     win.enqueue([r["id"] for r in win.model.rows], keep_tag_values=False)
     assert not win.queue_dock.isVisible()                      # no automatic opening
@@ -109,7 +110,7 @@ def test_queue_opens_only_on_request(win):
     for _ in range(20):
         QApplication.processEvents(); time.sleep(0.02)
     assert not win.queue.is_busy()
-    assert btn.property("busy") is False and win.a_queue.text() == "Warteschlange"
+    assert btn.property("busy") is False and win.a_queue.text() == tr("queue")
     win.a_queue.setChecked(True)                               # opening by hand still works
     assert win.queue_dock.isVisible()
 

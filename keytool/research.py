@@ -280,7 +280,7 @@ class KaraokeVersionClient:
         except urllib.error.HTTPError as e:
             raise KVError(f"Karaoke-Version: HTTP {e.code}") from e
         except (urllib.error.URLError, TimeoutError, OSError) as e:
-            raise KVError(f"Karaoke-Version nicht erreichbar / not reachable: {getattr(e, 'reason', e)}") from e
+            raise KVError(f"Karaoke-Version not reachable: {getattr(e, 'reason', e)}") from e
 
     def get(self, url: str) -> str:
         with self._lock:                       # one request at a time, spaced out

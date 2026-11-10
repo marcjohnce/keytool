@@ -771,15 +771,15 @@ def test_key_method_setting_reaches_the_worker(tmp_path, monkeypatch):
 
 def test_compare_tool(tmp_path):
     from keytool.compare import relation, run
-    assert relation(Key.parse("8A").code, Key.parse("8B").code).startswith("Parallel")
-    assert relation(Key.parse("8A").code, Key.parse("9A").code).startswith("Quinte")
-    assert relation(Key.parse("Am").code, Key.parse("A").code).startswith("gleicher Grundton")
+    assert relation(Key.parse("8A").code, Key.parse("8B").code).startswith("relative")
+    assert relation(Key.parse("8A").code, Key.parse("9A").code).startswith("fifth")
+    assert relation(Key.parse("Am").code, Key.parse("A").code).startswith("same tonic")
     for i, (pc, mn) in enumerate(((9, True), (0, False), (7, True))):
         _write_wav(tmp_path / f"t{i}.wav", make_track(120, pc, mn, seconds=20, seed=i))
     lines = []
     res = run([str(tmp_path)], limit=2, workers=2, out=lines.append)
     assert res["n"] == 2 and res["same"] == 2 and res["recommend_fast"]
-    assert any("schneller" in l for l in lines)
+    assert any("faster" in l for l in lines)
 
 
 def test_set_key_method_cli(tmp_path, monkeypatch):
