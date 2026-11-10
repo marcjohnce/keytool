@@ -72,7 +72,7 @@ executables" → Run workflow.
   the same position. The tempo stays exactly the same; the display shows the new key (e.g. "8A → 3A (+1)"). The
   setting also applies to the next tracks; computed versions are cached (the last 12, in the data folder under
   `transpose_cache`). The original file is never changed.
-* **Serato cues:** hot cues appear in the waveform as a red line with a numbered flag, saved loops as a shaded
+* **Serato cues:** hot cues appear in the waveform as a blue line (#08599B) with a numbered flag, saved loops as a shaded
   range (🔒 = locked). Clicking a line or flag (or Alt+1…8) sets the playback position to the cue with millisecond
   precision – also during playback and while the track is still loading. Tooltips show name and time. KeyTool reads
   the "Serato Markers2" tag (format description: Holzhaus/serato-tags) and never changes it – not even when writing

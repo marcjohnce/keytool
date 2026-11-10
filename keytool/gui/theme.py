@@ -24,7 +24,7 @@ THEMES = {
     ),
 }
 
-CUE_COLOR = "#D9443E"          # Serato-style red for all cue points
+CUE_COLOR = "#08599B"          # blue for all cue points (flag text is white)
 FONT_FAMILY = "Archivo"
 _font_loaded: bool | None = None
 
