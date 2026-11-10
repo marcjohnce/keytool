@@ -1,0 +1,111 @@
+# Builds KeyTool.exe (app) and KeyTool-MCP.exe (MCP server) on Windows.
+#
+#   push / pull request to main  -> tests, build, smoke test, zip as workflow artifact
+#   tag v*  (e.g. v1.1.0)        -> the same, plus a GitHub release with the zip attached
+#   manual run                   -> Actions tab -> "Build Windows executables" -> Run workflow
+name: Build Windows executables
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  test:
+    name: Tests
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen      # no display on the runner
+        run: python -m pytest -q tests
+
+  build:
+    name: Build executables
+    needs: test
+    runs-on: windows-latest
+    timeout-minutes: 45
+    outputs:
+      archive: ${{ steps.name.outputs.archive }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller packaging/KeyTool.spec --noconfirm --clean
+
+      - name: Smoke test the built executables
+        run: python packaging/smoke_test.py dist/KeyTool
+
+      - name: Archive name
+        id: name
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then version="$GITHUB_REF_NAME"; else version="${GITHUB_SHA::7}"; fi
+          echo "archive=KeyTool-${version}-windows-x64" >> "$GITHUB_OUTPUT"
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/KeyTool -DestinationPath "${{ steps.name.outputs.archive }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.name.outputs.archive }}
+          path: ${{ steps.name.outputs.archive }}.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: GitHub release
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write                     # create the release and upload the zip
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.archive }}
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ needs.build.outputs.archive }}.zip
+          generate_release_notes: true

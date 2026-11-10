@@ -42,6 +42,13 @@ Through the built-in **MCP server**, Claude Desktop and similar apps can work wi
 
 A separate FFmpeg installation is not needed.
 
+**Option C – GitHub Actions:** `.github/workflows/build.yml` builds both executables on a Windows runner for every
+push and pull request to `main`: tests → PyInstaller → smoke test (`packaging/smoke_test.py` analyses a synthetic
+track with the built `KeyTool-MCP.exe` and checks BPM and key) → zip as a workflow artifact
+(`KeyTool-<commit>-windows-x64.zip`, kept 30 days). Pushing a tag such as `v1.1.0` also creates a GitHub release
+with `KeyTool-v1.1.0-windows-x64.zip` attached. It can also be started by hand under Actions → "Build Windows
+executables" → Run workflow.
+
 ## Usage
 
 * **Import files/folders:** toolbar, or drag them from Explorer into the window. Files that were already analysed
@@ -222,7 +229,8 @@ keytool/
   i18n.py           UI texts (English, German) and formatting of numbers/dates
   locales/          Further UI languages (es, fr, it)
   gui/              Qt user interface (main window, deck, Camelot wheel, details, dialogs, themes)
-packaging/          PyInstaller spec, launchers, icon
+packaging/          PyInstaller spec, launchers, icon, smoke test for the built .exe
+.github/workflows/  CI: tests, Windows build, release
 tests/              Tests with synthetic audio files in all formats
 ```
 
