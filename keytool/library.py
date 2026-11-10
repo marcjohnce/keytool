@@ -136,7 +136,8 @@ class Library:
                 rep.unchanged += 1
                 continue
             md = read_metadata(path)
-            meta = dict(title=md.title, artist=md.artist, album=md.album, year=md.year, genre=md.genre,
+            meta = dict(title=md.title, artist=md.artist, album=md.album, album_artist=md.album_artist,
+                        year=md.year, genre=md.genre,
                         duration=md.duration, tag_bpm=md.tag_bpm, tag_key=md.tag_key, comment=md.comment,
                         energy=md.energy, bitrate=md.bitrate)
             tid = self.db.upsert_file(path, st.st_size, st.st_mtime, meta)
@@ -339,7 +340,7 @@ class Library:
             except ValueError:
                 y = None
             changes["year"] = y if y and 1 <= y <= 9999 else None
-        for k in ("title", "artist", "album", "genre", "comment"):
+        for k in ("title", "artist", "album", "album_artist", "genre", "comment"):
             if k in changes:
                 changes[k] = (changes[k] or "").strip()
         if not changes:
@@ -364,6 +365,22 @@ class Library:
                 errors[tid] = f"{type(e).__name__}: {e}"
                 self.db.update_track(tid, error=f"Tag write failed: {e}"[:500])
         return errors
+
+    def fill_album_artist(self, rows: list[dict]) -> bool:
+        """Libraries scanned before album-artist support have NULL there: read it from the file once,
+        without rescanning or re-analysing. Returns True if any row was updated (rows are changed in place)."""
+        changed = False
+        for r in rows:
+            if r.get("album_artist") is not None:
+                continue
+            try:
+                value = read_metadata(r["path"]).album_artist if os.path.exists(r["path"]) else ""
+            except Exception:
+                value = ""
+            self.db.update_track(r["id"], album_artist=value)
+            r["album_artist"] = value
+            changed = True
+        return changed
 
     def reset_manual(self, track_ids: Iterable[int]) -> None:
         for tid in track_ids:

@@ -463,6 +463,12 @@ def test_edit_metadata_roundtrip(tmp_path, ext):
     md = read_metadata(str(f))
     assert (md.title, md.artist, md.album, md.genre, md.energy) == ("Neu", "Künstlerin", "Platte", "Deep House", 7)
     assert md.year == 1999 and lib.db.get_track(t["id"])["year"] == 1999
+    lib.update_metadata([t["id"]], dict(album_artist="Various Artists"))
+    assert read_metadata(str(f)).album_artist == "Various Artists"
+    assert lib.db.get_track(t["id"])["album_artist"] == "Various Artists"
+    assert read_metadata(str(f)).artist == "Künstlerin"              # track artist untouched
+    lib.update_metadata([t["id"]], dict(album_artist=""))
+    assert read_metadata(str(f)).album_artist == ""
     lib.update_metadata([t["id"]], dict(year="2004"))           # text input from the detail field
     assert read_metadata(str(f)).year == 2004
     lib.update_metadata([t["id"]], dict(year=None))             # empty field removes the year
@@ -910,3 +916,24 @@ def test_analysis_log_records_crashes_and_errors(tmp_path, monkeypatch):
     assert st[ids["BADFILE"]] == ERROR and lib.db.get_track(ids["ok1"])["status"] == "ok"
     text = log.read_text(encoding="utf-8")
     assert "analysis failed:" in text and "BADFILE.wav" in text and "simulated decode error" in text
+
+
+def test_album_artist_lazy_fill_for_old_libraries(tmp_path):
+    """Tracks scanned before album-artist support (NULL) get it from the file on first view, without rescan."""
+    from mutagen.id3 import ID3, TPE2
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg needed")
+    raw = tmp_path / "r.wav"
+    _write_wav(raw, make_track(120, 0, False, seconds=5))
+    f = tmp_path / "comp.mp3"
+    _encode(raw, f)
+    t = ID3(f); t.add(TPE2(encoding=3, text="Various Artists")); t.save(f)
+    lib = Library(Database(tmp_path / "lib.sqlite3"), Settings(write_tags=False))
+    lib.scan([str(f)])
+    tid = lib.search(Query())[0]["id"]
+    assert lib.db.get_track(tid)["album_artist"] == "Various Artists"      # new scans read it directly
+    lib.db.update_track(tid, album_artist=None)                            # simulate an old library
+    rows = [lib.db.get_track(tid)]
+    assert lib.fill_album_artist(rows) and rows[0]["album_artist"] == "Various Artists"
+    assert lib.db.get_track(tid)["album_artist"] == "Various Artists"
+    assert not lib.fill_album_artist(rows)                                 # only once

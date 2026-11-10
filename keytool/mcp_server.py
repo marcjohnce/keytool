@@ -269,12 +269,13 @@ def set_key(track_id: int, key: str | None, write_tags: bool | None = None) -> d
 @mcp.tool()
 def update_metadata(track_ids: list[int], title: str | None = None, artist: str | None = None,
                     album: str | None = None, genre: str | None = None, comment: str | None = None,
-                    energy: int | None = None, year: int | None = None, write_tags: bool | None = None) -> dict:
-    """Edit title, artist, album, year (0 clears), genre, comment and/or energy (1-10, 0 clears) of one or
-    more tracks.
+                    energy: int | None = None, year: int | None = None, album_artist: str | None = None,
+                    write_tags: bool | None = None) -> dict:
+    """Edit title, artist, album, album_artist, year (0 clears), genre, comment and/or energy (1-10, 0 clears)
+    of one or more tracks.
     Only the given fields are changed. write_tags: also write them into the files (default: app setting)."""
     changes = {k: v for k, v in dict(title=title, artist=artist, album=album, genre=genre, comment=comment,
-                                     energy=energy, year=year).items() if v is not None}
+                                     energy=energy, year=year, album_artist=album_artist).items() if v is not None}
     if not changes:
         raise ValueError("No field given")
     if "energy" in changes and not 0 <= int(changes["energy"]) <= 10:

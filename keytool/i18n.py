@@ -8,6 +8,7 @@ _T: dict[str, tuple[str, str]] = {
     # redesign: deck + fit columns
     "deck": ("Deck", "Deck"),
     "load_deck": ("Ins Deck laden", "Load into deck"),
+    "album_artist": ("Album-Interpret", "Album artist"),
     "filter_artist": ("Nach Interpret filtern", "Filter by artist"),
     "filter_album": ("Nach Album filtern", "Filter by album"),
     "filter_key": ("Nach Tonart filtern", "Filter by key"),
@@ -145,9 +146,9 @@ _T: dict[str, tuple[str, str]] = {
                       "Results go into the BPM and key tags so DJ software sees them directly."),
     "sd_tag_notation": ("Schreibweise im Tonart-Tag. Kreuze (z. B. F#m) versteht fast jede Software.",
                         "Notation of the key tag. Sharps (e.g. F#m) are understood by almost any software."),
-    "sd_write_edits": ("Gilt für Änderungen in der Seitenleiste: Titel, Interpret, Album, Jahr, Genre, Kommentar, "
+    "sd_write_edits": ("Gilt für Änderungen in der Seitenleiste: Titel, Interpret, Album, Album-Interpret, Jahr, Genre, Kommentar, "
                        "Energy. Aus: Änderungen bleiben nur in KeyTool.",
-                       "Applies to edits in the sidebar: title, artist, album, year, genre, comment, energy. Off: "
+                       "Applies to edits in the sidebar: title, artist, album, album artist, year, genre, comment, energy. Off: "
                        "changes stay in KeyTool only."),
     "s_write_edits_short": ("Bearbeitete Metadaten in die Dateien schreiben", "Write edited metadata into the files"),
     "s_write_tags_short": ("BPM und Tonart nach der Analyse schreiben", "Write BPM and key after analysis"),

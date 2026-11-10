@@ -13,6 +13,7 @@ class Metadata:
     title: str = ""
     artist: str = ""
     album: str = ""
+    album_artist: str = ""             # ID3 TPE2 / MP4 aART / Vorbis ALBUMARTIST
     year: int | None = None
     genre: str = ""
     tag_bpm: str = ""
@@ -109,6 +110,7 @@ def read_metadata(path: str) -> Metadata:
                 md.title = _first(tags.get("TIT2"))
                 md.artist = _first(tags.get("TPE1")) or _first(tags.get("TPE2"))
                 md.album = _first(tags.get("TALB"))
+                md.album_artist = _first(tags.get("TPE2"))
                 md.year = _year(_first(tags.get("TDRC")) or _first(tags.get("TYER")) or _first(tags.get("TDOR")))
                 md.genre = _first(tags.get("TCON"))
                 md.tag_bpm = _first(tags.get("TBPM"))
@@ -122,6 +124,7 @@ def read_metadata(path: str) -> Metadata:
                 md.title = _first(tags.get("\xa9nam"))
                 md.artist = _first(tags.get("\xa9ART")) or _first(tags.get("aART"))
                 md.album = _first(tags.get("\xa9alb"))
+                md.album_artist = _first(tags.get("aART"))
                 md.year = _year(_first(tags.get("\xa9day")))
                 md.genre = _first(tags.get("\xa9gen"))
                 md.tag_bpm = _first(tags.get("tmpo"))
@@ -142,6 +145,7 @@ def read_metadata(path: str) -> Metadata:
                 md.title = g("title")
                 md.artist = g("artist", "albumartist")
                 md.album = g("album")
+                md.album_artist = g("albumartist", "album artist", "album_artist")
                 md.year = _year(g("date", "year", "originaldate"))
                 md.genre = g("genre")
                 md.tag_bpm = g("bpm", "tbpm")
@@ -181,11 +185,12 @@ def _fill_from_container(path: str, md: Metadata) -> None:
     md.title = md.title or meta.get("title", "").strip()
     md.artist = md.artist or (meta.get("artist") or meta.get("album_artist") or "").strip()
     md.album = md.album or meta.get("album", "").strip()
+    md.album_artist = md.album_artist or (meta.get("album_artist") or meta.get("albumartist") or "").strip()
     md.year = md.year or _year(meta.get("date") or meta.get("year") or "")
     md.genre = md.genre or meta.get("genre", "").strip()
 
 
-EDITABLE_FIELDS = ("title", "artist", "album", "year", "genre", "comment", "energy")
+EDITABLE_FIELDS = ("title", "artist", "album", "album_artist", "year", "genre", "comment", "energy")
 
 
 def write_bpm_key(path: str, bpm: float | None, key_text: str | None) -> None:
@@ -195,13 +200,14 @@ def write_bpm_key(path: str, bpm: float | None, key_text: str | None) -> None:
 
 def write_metadata(path: str, title: str | None = None, artist: str | None = None, album: str | None = None,
                    genre: str | None = None, comment: str | None = None, energy: int | None | str = None,
-                   bpm: float | None = None, key_text: str | None = None, year: int | None | str = None) -> None:
+                   bpm: float | None = None, key_text: str | None = None, year: int | None | str = None,
+                   album_artist: str | None = None) -> None:
     """Write the given fields into the file's native tags (ID3 / Vorbis comments / MP4 atoms).
 
     None = leave the field untouched, "" = remove it (energy / year: 0 or "" removes it).
     """
     import mutagen
-    from mutagen.id3 import ID3, COMM, TALB, TBPM, TCON, TDRC, TIT2, TKEY, TPE1, TXXX, ID3NoHeaderError
+    from mutagen.id3 import ID3, COMM, TALB, TBPM, TCON, TDRC, TIT2, TKEY, TPE1, TPE2, TXXX, ID3NoHeaderError
 
     ext = os.path.splitext(path)[1].lower()
     bpm_txt = str(int(round(bpm))) if bpm else None
@@ -210,6 +216,7 @@ def write_metadata(path: str, title: str | None = None, artist: str | None = Non
 
     def id3_apply(tags):
         for frame_id, cls, val in (("TIT2", TIT2, title), ("TPE1", TPE1, artist), ("TALB", TALB, album),
+                                   ("TPE2", TPE2, album_artist),
                                    ("TCON", TCON, genre), ("TBPM", TBPM, bpm_txt), ("TKEY", TKEY, key_text)):
             if val is None:
                 continue
@@ -268,7 +275,7 @@ def write_metadata(path: str, title: str | None = None, artist: str | None = Non
             else:
                 t[atom] = [MP4FreeForm(val.encode("utf-8"))] if free else [val]
 
-        put("\xa9nam", title); put("\xa9ART", artist); put("\xa9alb", album)
+        put("\xa9nam", title); put("\xa9ART", artist); put("\xa9alb", album); put("aART", album_artist)
         put("\xa9gen", genre); put("\xa9cmt", comment); put("\xa9day", year_txt)
         put("----:com.apple.iTunes:initialkey", key_text, free=True)
         put("----:com.apple.iTunes:EnergyLevel", energy_txt, free=True)
@@ -286,7 +293,11 @@ def write_metadata(path: str, title: str | None = None, artist: str | None = Non
     if year_txt is not None:
         for k in [k for k in f.tags.keys() if k.upper() == "YEAR"]:
             del f.tags[k]
-    for name, val in (("TITLE", title), ("ARTIST", artist), ("ALBUM", album), ("GENRE", genre), ("DATE", year_txt),
+    if album_artist is not None:      # spelling variants other programs use
+        for k in [k for k in f.tags.keys() if k.upper() in ("ALBUM ARTIST", "ALBUM_ARTIST")]:
+            del f.tags[k]
+    for name, val in (("TITLE", title), ("ARTIST", artist), ("ALBUM", album), ("ALBUMARTIST", album_artist),
+                      ("GENRE", genre), ("DATE", year_txt),
                       ("COMMENT", comment), ("ENERGYLEVEL", energy_txt), ("BPM", bpm_txt), ("INITIALKEY", key_text)):
         if val is None:
             continue

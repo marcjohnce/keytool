@@ -618,7 +618,7 @@ class DetailPanel(QWidget, Translatable):
     keyword_removed = Signal(str)
     keyword_clicked = Signal(str)
 
-    TEXT_FIELDS = ("title", "artist", "album")
+    TEXT_FIELDS = ("title", "artist", "album", "album_artist")
 
     def __init__(self, parent=None):
         super().__init__(parent)

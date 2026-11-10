@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS tracks (
     title           TEXT DEFAULT '',
     artist          TEXT DEFAULT '',
     album           TEXT DEFAULT '',
+    album_artist    TEXT,
     year            INTEGER,
     genre           TEXT DEFAULT '',
     duration        REAL,
@@ -57,7 +58,7 @@ CREATE INDEX IF NOT EXISTS ix_keywords_kw ON keywords(keyword COLLATE NOCASE);
 """
 
 TRACK_COLUMNS = [
-    "id", "path", "folder", "filename", "ext", "size", "mtime", "title", "artist", "album", "year",
+    "id", "path", "folder", "filename", "ext", "size", "mtime", "title", "artist", "album", "album_artist", "year",
     "genre", "duration", "bpm", "bpm_confidence", "key", "key_confidence", "bpm_manual", "key_manual",
     "tag_bpm", "tag_key", "bpm_source", "key_source", "comment", "energy", "bitrate", "status", "error", "added_at", "analyzed_at", "analyzed_ok_at",
 ]
@@ -102,7 +103,8 @@ class Database:
         cols = {r[1] for r in c.execute("PRAGMA table_info(tracks)")}
         for col, decl in (("bpm_source", "TEXT DEFAULT ''"), ("key_source", "TEXT DEFAULT ''"),
                           ("comment", "TEXT DEFAULT ''"), ("energy", "INTEGER"), ("bitrate", "INTEGER"),
-                          ("analyzed_ok_at", "REAL")):
+                          ("analyzed_ok_at", "REAL"),
+                          ("album_artist", "TEXT")):      # NULL = not read yet (filled lazily from the file)
             if col not in cols:
                 c.execute(f"ALTER TABLE tracks ADD COLUMN {col} {decl}")
 

@@ -432,6 +432,8 @@ class MainWindow(QMainWindow, Translatable):
 
     def selection_changed(self, *_):
         rows = self.selected_rows()
+        if rows and len(rows) <= 200:
+            self.lib.fill_album_artist(rows)           # older libraries: read the album artist once
         old_ids = [r["id"] for r in self.details.rows]
         if self.details.has_unsaved() and old_ids != [r["id"] for r in rows]:
             ch = self.details.changes()
