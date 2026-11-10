@@ -45,9 +45,18 @@ def test_dialog_explains_and_offers_browser(tmp_path, monkeypatch):
     from keytool.library import Library
     lib = Library(Database(tmp_path / "lib.sqlite3"), Settings())
     dlg = ResearchDialog(lib.settings, lib, [], None, None)
-    dlg.worker.stop()
     gen = dlg.worker.gen
     dlg._blocked(gen, "https://www.karaoke-version.de/custombackingtrack/karaoke.html?chordkey=22")
     assert tr("kv_blocked") in dlg.status.text() and tr("kv_no_results") not in dlg.status.text()
     assert dlg.web_url.endswith("chordkey=22") and dlg.web_btn.isEnabled()
     assert dlg.web_btn.objectName() == "primary"
+    _close(dlg)
+
+
+def _close(dlg):
+    """Close like a user would: stop the worker thread and let Qt delete the dialog before Python exits."""
+    from PySide6.QtWidgets import QApplication
+    dlg.done(0)
+    dlg.worker._t.join(timeout=5)
+    dlg.deleteLater()
+    QApplication.processEvents()

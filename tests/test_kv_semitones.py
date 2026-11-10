@@ -54,4 +54,13 @@ def test_dialog_queries_neighbours_and_shows_shift(tmp_path, monkeypatch):
     dlg.semitones.setChecked(False)                                              # option off: chosen keys only
     dlg.new_search()
     assert seen[-1] == ["8A"] and dlg.table.isColumnHidden(col)
-    dlg.worker.stop()
+    _close(dlg)
+
+
+def _close(dlg):
+    """Close like a user would: stop the worker thread and let Qt delete the dialog before Python exits."""
+    from PySide6.QtWidgets import QApplication
+    dlg.done(0)
+    dlg.worker._t.join(timeout=5)
+    dlg.deleteLater()
+    QApplication.processEvents()
