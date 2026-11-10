@@ -119,6 +119,33 @@ def search_tracks(
 
 
 @mcp.tool()
+def import_mixed_in_key(db_path: str | None = None, add_missing: bool = False, collections_as_keywords: bool = True,
+                        overwrite: bool = True, dry_run: bool = False) -> dict:
+    """Import key, tempo, energy and collections from a Mixed In Key 10/11 library (MIKStore.db).
+    db_path: default = newest installed Mixed In Key version. Tracks are matched by file path (or a unique file
+    name). overwrite=False only fills empty values; manual values are never replaced. collections_as_keywords:
+    MIK collections become KeyTool keywords. add_missing: add files only known to MIK to the library.
+    dry_run: only report what would happen. Mixed In Key's own database is never modified."""
+    from .mik_import import apply_import, default_db_paths, plan_import, read_mik
+    db_file = db_path or next(iter(default_db_paths()), None)
+    if not db_file:
+        raise ValueError("No Mixed In Key library (MIKStore.db) found; pass db_path")
+    L = lib()
+    plan = plan_import(L.db, read_mik(db_file))
+    report = dict(db_path=db_file, songs=len(plan.songs), matched=len(plan.matched),
+                  matched_by_file_name=plan.by_filename, not_in_library=len(plan.missing_existing),
+                  files_gone=len(plan.missing_gone),
+                  collections=sorted({c for s in plan.songs for c in s.collections}))
+    if dry_run:
+        return report
+    res = apply_import(L, plan, add_missing=add_missing, collections_as_keywords=collections_as_keywords,
+                       overwrite=overwrite)
+    report.update(updated=res.updated, added=res.added, keyword_assignments=res.keywords,
+                  skipped_manual=res.skipped_manual)
+    return report
+
+
+@mcp.tool()
 def get_track(track_id: int | None = None, path: str | None = None, notation: str = "camelot") -> dict:
     """Full details of one track by id or file path."""
     _check_notation(notation)

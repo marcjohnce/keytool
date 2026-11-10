@@ -84,6 +84,14 @@ Ein separates FFmpeg ist nicht nötig.
   * Doppelklick öffnet die Song-Seite, „Suche im Browser öffnen“ die gleiche Suche auf der Website.
   * Die AGB von Karaoke-Version untersagen Crawling nur für KI-Training, die robots.txt erlaubt die Suchseiten.
     KeyTool ruft nur ab, was du anforderst, identifiziert sich als „KeyTool“ und hält Pausen zwischen Anfragen ein.
+* **Import aus Mixed In Key** („Analysieren ▾ → Aus Mixed In Key importieren …“): liest die Bibliothek von
+  Mixed In Key 10/11 (`%LOCALAPPDATA%\Mixed In Key\Mixed In Key\<Version>\MIKStore.db`, wird automatisch
+  gefunden) und übernimmt Tonart, Tempo und Energy. Zuordnung über den Dateipfad, bei verschobenen Dateien über
+  den eindeutigen Dateinamen. Vorschau vor dem Import; Optionen: vorhandene Werte ersetzen oder nur leere Felder
+  füllen (manuelle Werte bleiben immer), Mixed-In-Key-Sammlungen als Schlüsselwörter, fehlende Titel hinzufügen.
+  Importierte Werte gelten wie Werte aus den Tags: eine spätere Analyse überschreibt sie nicht, „Erneut
+  analysieren“ schon. Mixed In Key selbst wird nicht verändert (die Datenbank wird vor dem Lesen kopiert).
+  Ohne Oberfläche: `KeyTool-MCP.exe --import-mik [MIKStore.db] [--add-missing] [--fill-only] [--no-keywords]`.
 * **Analyse-Warteschlange** („Warteschlange“ in der Werkzeugleiste, öffnet sich nur auf Klick; solange Analysen
   laufen oder warten, ist der Knopf in Bernstein hervorgehoben und zeigt die Anzahl): Alle Analysen – Import, „Ausstehende analysieren“,
   „Erneut analysieren“ – landen in einer Warteschlange, die von oben nach unten abgearbeitet wird (bei mehreren
@@ -167,6 +175,7 @@ auch Fehlermeldungen, die sonst unsichtbar blieben.
 | `library_stats` | Anzahl, Status, BPM-Spanne, Tonart-Verteilung |
 | `convert_key`, `list_all_keys` | Notationen umrechnen |
 | `list_keywords`, `add_keywords`, `remove_keywords`, `set_keywords`, `rename_keyword` | Schlüsselwörter |
+| `import_mixed_in_key` | Tonart, Tempo, Energy und Sammlungen aus Mixed In Key übernehmen (mit `dry_run` nur Vorschau) |
 | `update_metadata` | Titel, Interpret, Album, Album-Interpret, Jahr, Genre, Kommentar, Energy ändern (ein oder mehrere Titel) |
 | `set_bpm`, `set_key`, `write_tags` | Manuelle Korrektur und Tags schreiben |
 | `analyze_paths`, `reanalyze_tracks`, `get_job_status`, `cancel_job` | Dateien/Ordner einlesen und analysieren (Hintergrund-Job) |

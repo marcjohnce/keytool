@@ -177,7 +177,8 @@ class Library:
         def needs(field: str) -> bool:
             if t[f"{field}_manual"] and t[field]:
                 return False
-            return not (keep_tag_values and t[f"{field}_source"] == "tags" and t[field])
+            # values from the file tags or imported from Mixed In Key count as known results
+            return not (keep_tag_values and t[f"{field}_source"] in ("tags", "mik") and t[field])
         return needs("bpm"), needs("key")
 
     def submit_args(self, t: dict, keep_tag_values: bool = True) -> tuple | None:

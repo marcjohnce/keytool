@@ -69,6 +69,9 @@ class MainWindow(QMainWindow, Translatable):
         self._scan_backlog: list[list[str]] = []
         self._batch_done = 0
         self.queue_bridge = QueueBridge()
+        from .mik_dialog import MikBridge
+        self.mik_bridge = MikBridge()
+        self.mik_bridge.done.connect(self._mik_done)
         self.queue_bridge.changed.connect(self.on_queue_event)
         self.queue = AnalysisQueue(library, on_change=self.queue_bridge.changed.emit)
         self.harmonic_ids: list[int] | None = None
@@ -131,6 +134,9 @@ class MainWindow(QMainWindow, Translatable):
         am = QMenu(self.analyze_btn)
         for a in (self.a_pending, self.a_reanalyze, self.a_tags):
             am.addAction(a)
+        am.addSeparator()
+        self.a_mik = self._act("mik_import", self.import_mik)
+        am.addAction(self.a_mik)
         self.analyze_btn.setMenu(am)
         self.t(lambda s: self.analyze_btn.setText(s + "  ▾"), "analysis_menu")
         tb.addWidget(self.analyze_btn)
@@ -497,6 +503,39 @@ class MainWindow(QMainWindow, Translatable):
         if self.s.show_details != on:
             self.s.show_details = on
             self.s.save()
+
+    # ------------------------------------------------------------------ Mixed In Key import
+    def import_mik(self):
+        from .mik_dialog import MikImportDialog
+        dlg = MikImportDialog(self.lib, self)
+        if not dlg.exec() or dlg.plan is None:
+            return
+        plan, opts = dlg.plan, dlg.options()
+        import threading
+        from ..mik_import import apply_import
+        self.msg_lbl.setText(tr("mik_running"))
+        self.progress.setRange(0, 0); self.progress.show()
+        self.a_mik.setEnabled(False)
+
+        def work():
+            try:
+                res, err = apply_import(self.lib, plan, **opts), None
+            except Exception as e:                      # report instead of losing it in a thread
+                res, err = None, f"{type(e).__name__}: {e}"
+            self.mik_bridge.done.emit((res, err))
+        threading.Thread(target=work, daemon=True, name="mik-import").start()
+
+    def _mik_done(self, payload):
+        res, err = payload
+        self.progress.hide(); self.progress.setRange(0, 1)
+        self.a_mik.setEnabled(True)
+        if err:
+            self.msg_lbl.setText(tr("mik_error", e=err))
+            QMessageBox.warning(self, tr("mik_title"), tr("mik_error", e=err))
+            return
+        self.msg_lbl.setText(tr("mik_done", updated=res.updated, added=res.added, keywords=res.keywords))
+        self.refresh_keywords()
+        self.refresh()
 
     def update_deck(self):
         """The loaded track is the reference for the 'fits' and 'vs. deck' columns."""

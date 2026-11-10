@@ -6,6 +6,8 @@
     python -m keytool --analyze PATH [PATH ...]  -> console import/analysis
     python -m keytool --compare-key PATH [--limit 25] -> compare classic vs fast key detection
     python -m keytool --set-key-method fast|classic   -> choose the key detection method
+    python -m keytool --import-mik [MIKStore.db] [--add-missing] [--fill-only] [--no-keywords]
+                                   -> import key/tempo/energy/collections from Mixed In Key
 """
 from __future__ import annotations
 
@@ -33,6 +35,23 @@ def main() -> int:
             return 2
         s = Settings.load(); s.key_method = method; s.save()
         print(f"Tonart-Verfahren: {method}")
+        return 0
+    if "--import-mik" in args:
+        from .library import Library
+        from .mik_import import apply_import, default_db_paths, plan_import, read_mik
+        files = [a for a in args if not a.startswith("--")]
+        db_file = files[0] if files else next(iter(default_db_paths()), None)
+        if not db_file:
+            print("Keine Mixed-In-Key-Bibliothek gefunden / no Mixed In Key library found (MIKStore.db)")
+            return 2
+        lib = Library()
+        plan = plan_import(lib.db, read_mik(db_file))
+        print(f"{db_file}: {len(plan.songs)} songs, {len(plan.matched)} in library "
+              f"({plan.by_filename} by file name), {len(plan.missing_existing)} not in library, "
+              f"{len(plan.missing_gone)} files gone")
+        res = apply_import(lib, plan, add_missing="--add-missing" in args,
+                           collections_as_keywords="--no-keywords" not in args, overwrite="--fill-only" not in args)
+        print(res)
         return 0
     if "--mcp" in args or "--mcp-http" in args:
         from .mcp_server import run

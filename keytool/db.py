@@ -179,9 +179,10 @@ class Database:
         now = time.time()
         upd: dict[str, Any] = dict(status="ok", error="", analyzed_at=now, analyzed_ok_at=now)  # last successful run
         # fields missing from the result were not analysed (e.g. BPM-only analysis) and stay untouched
-        if "bpm" in result and not t["bpm_manual"] and not (keep_tag_values and t["bpm_source"] == "tags" and t["bpm"]):
+        kept = ("tags", "mik")      # from the file tags / imported from Mixed In Key
+        if "bpm" in result and not t["bpm_manual"] and not (keep_tag_values and t["bpm_source"] in kept and t["bpm"]):
             upd.update(bpm=result.get("bpm"), bpm_confidence=result.get("bpm_confidence"), bpm_source="analysis")
-        if "key" in result and not t["key_manual"] and not (keep_tag_values and t["key_source"] == "tags" and t["key"]):
+        if "key" in result and not t["key_manual"] and not (keep_tag_values and t["key_source"] in kept and t["key"]):
             upd.update(key=result.get("key"), key_confidence=result.get("key_confidence"), key_source="analysis")
         if result.get("duration") and not t["duration"]:
             upd["duration"] = result["duration"]

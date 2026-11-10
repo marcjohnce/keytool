@@ -44,6 +44,8 @@ def source_text(r: dict, field: str) -> str:
         return tr("manual")
     if r.get(f"{field}_source") == "tags":
         return tr("from_tags")
+    if r.get(f"{field}_source") == "mik":
+        return tr("from_mik")
     conf = r.get(f"{field}_confidence")
     return f"{tr('auto')} · {tr('confidence')} {int((conf or 0) * 100)} %"
 
