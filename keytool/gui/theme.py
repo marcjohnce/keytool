@@ -24,7 +24,8 @@ THEMES = {
     ),
 }
 
-CUE_COLOR = "#08599B"          # blue for all cue points (flag text is white)
+CUE_COLOR = "#DC32FF"          # magenta for all cue points
+CUE_TEXT_COLOR = "#FFFFFF"     # number on the cue flag
 FONT_FAMILY = "Archivo"
 _font_loaded: bool | None = None
 

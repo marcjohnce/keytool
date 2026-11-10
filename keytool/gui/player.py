@@ -35,7 +35,8 @@ def tinted(icon, color: QColor, size: int = 20):
 
 
 BTN = 40                      # diameter of all round control buttons
-from .theme import CUE_COLOR   # all cue points are shown in one colour
+from .theme import CUE_COLOR, CUE_TEXT_COLOR   # all cue points are shown in one colour
+CUE_FLAG_GROW = 2             # px added to the width and height of the cue flags
 
 
 def fmt_time(ms: int | float | None) -> str:
@@ -336,14 +337,14 @@ class WaveformView(QWidget):
                 p.setPen(QPen(line, 2))
                 p.drawLine(QPointF(x, 2), QPointF(x, h - 2))
                 label = str(cue.index + 1)
-                fw = max(16, fm.horizontalAdvance(label) + 8)
-                rect = QRectF(x - 1, 2, fw, fm.height() + 2)
+                fw = max(16, fm.horizontalAdvance(label) + 8) + CUE_FLAG_GROW
+                rect = QRectF(x - 1, 2, fw, fm.height() + 2 + CUE_FLAG_GROW)
                 p.setPen(Qt.NoPen)
                 p.setBrush(col)
                 p.setRenderHint(QPainter.Antialiasing, True)
                 p.drawRoundedRect(rect, 3, 3)
                 p.setRenderHint(QPainter.Antialiasing, False)
-                p.setPen(QColor("#ffffff") if col.lightness() < 150 else QColor("#111111"))
+                p.setPen(QColor(CUE_TEXT_COLOR))
                 p.drawText(rect, Qt.AlignCenter, label)
                 self._flag_rects.append((rect, cue))
             p.setFont(self.font())
