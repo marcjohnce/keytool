@@ -161,6 +161,15 @@ class MainWindow(QMainWindow, Translatable):
         self.theme_btn.setFixedWidth(40)
         self.theme_btn.clicked.connect(self.toggle_theme)
         tb.addWidget(self.theme_btn)
+        # right sidebar (metadata etc.) on/off
+        self.a_details = QAction(self)
+        self.a_details.setCheckable(True)
+        self.a_details.setChecked(bool(getattr(self.s, "show_details", True)))
+        self.a_details.setShortcut(QKeySequence("Ctrl+I"))
+        self.t(self.a_details.setText, "details_toggle")
+        self.t(self.a_details.setToolTip, "details_toggle_tip")
+        self.a_details.toggled.connect(self.set_details_visible)
+        tb.addAction(self.a_details)
         tb.addAction(self.a_settings)
 
     def _build_central(self):
@@ -293,6 +302,7 @@ class MainWindow(QMainWindow, Translatable):
         self.details.setObjectName("inspectorBody")
         self.details.setAttribute(Qt.WA_StyledBackground, True)
         dscroll = QScrollArea(); dscroll.setObjectName("inspector"); dscroll.setWidgetResizable(True)
+        self.details_scroll = dscroll
         dscroll.setWidget(self.details)
         dscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         dscroll.setMinimumWidth(330)
@@ -304,6 +314,7 @@ class MainWindow(QMainWindow, Translatable):
         rv.addWidget(self.player, 0)
         rv.addWidget(split, 1)
         self.setCentralWidget(root)
+        self.details_scroll.setVisible(self.a_details.isChecked())
 
     def _build_queue_dock(self):
         from PySide6.QtWidgets import QDockWidget
@@ -506,6 +517,14 @@ class MainWindow(QMainWindow, Translatable):
         row = next((r for r in rows if r["id"] == cur_id), rows[0] if rows else None)
         if row:
             self.player.set_track(row, autoplay=autoplay)
+
+    def set_details_visible(self, on: bool):
+        """Show/hide the right sidebar; the track list takes the freed space. Remembered across starts."""
+        if hasattr(self, "details_scroll"):
+            self.details_scroll.setVisible(on)
+        if self.s.show_details != on:
+            self.s.show_details = on
+            self.s.save()
 
     def update_deck(self):
         """The loaded track is the reference for the 'fits' and 'vs. deck' columns."""
