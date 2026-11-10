@@ -903,7 +903,10 @@ def test_analysis_log_records_crashes_and_errors(tmp_path, monkeypatch):
     assert q.wait_idle(120)
     q.shutdown()
     text = log.read_text(encoding="utf-8")
-    assert "Fatal Python error" in text or "Segmentation fault" in text      # faulthandler dump
+    # faulthandler dump: "Fatal Python error: Segmentation fault" (POSIX) or
+    # "Windows fatal exception: access violation" (Windows)
+    assert any(s in text for s in ("Fatal Python error", "Segmentation fault", "Windows fatal exception",
+                                   "access violation"))
     assert "analysis process died; exit codes:" in text and "SEGV.wav" in text
     assert "analysis.log" in lib.db.get_track(ids["SEGV"])["error"]
 
