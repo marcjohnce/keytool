@@ -331,6 +331,39 @@ class TrackDelegate(QStyledItemDelegate):
         painter.restore()
 
 
+class KeyChipDelegate(QStyledItemDelegate):
+    """Draws the cell text on a rounded chip in the Camelot colour of `code_for(index)` (style sheets
+    override plain background roles, so the colour has to be painted)."""
+
+    def __init__(self, code_for, dark_for, parent=None):
+        super().__init__(parent)
+        self.code_for, self.dark_for = code_for, dark_for
+
+    def paint(self, painter, option, index):
+        from PySide6.QtCore import QRectF
+        from .theme import CHIP_TEXT
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        text = opt.text
+        opt.text = ""
+        w = opt.widget
+        (w.style() if w else QApplication.style()).drawControl(QStyle.CE_ItemViewItem, opt, painter, w)
+        bg = camelot_color(self.code_for(index), self.dark_for())
+        if bg is None or not text:
+            return
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        f = painter.font(); f.setBold(True); painter.setFont(f)
+        r = QRectF(option.rect)
+        wch = min(r.width() - 8, max(40, painter.fontMetrics().horizontalAdvance(text) + 14))
+        chip = QRectF(r.center().x() - wch / 2, r.center().y() - 10, wch, 20)
+        painter.setPen(Qt.NoPen); painter.setBrush(bg)
+        painter.drawRoundedRect(chip, 6, 6)
+        painter.setPen(CHIP_TEXT)
+        painter.drawText(chip, Qt.AlignCenter, text)
+        painter.restore()
+
+
 # =========================================================================== key filter
 class KeyFilter(QWidget):
     """Clickable Camelot wheel: outer ring = major (B), inner ring = minor (A), 12B at the top.

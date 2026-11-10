@@ -80,6 +80,9 @@ Ein separates FFmpeg ist nicht nötig.
     Tonart hat. Die Trefferliste der Seite enthält kein Tempo; KeyTool liest Tempo („~“ = variabel), alle Tonarten
     (Songs mit Tonartwechsel haben mehrere) und Dauer von den Song-Seiten nach – gedrosselt, und für zwei Wochen
     zwischengespeichert. Abschaltbar im Dialog.
+  * **±1 Halbton einbeziehen** (Standard an): sucht zusätzlich die Tonarten einen Halbton tiefer und höher – solche
+    Titel lassen sich auf Karaoke-Version passend transponieren. Die Spalte „Transp.“ zeigt, um wie viel (+1 / −1,
+    leer = passt direkt), der Tooltip die Tonart danach. Pro Tonart sind das drei statt einer Anfrage.
   * ✓ markiert Titel, die (gleicher Titel und Interpret) schon in deiner Bibliothek sind.
   * Doppelklick öffnet die Song-Seite, „Suche im Browser öffnen“ die gleiche Suche auf der Website.
   * Die AGB von Karaoke-Version untersagen Crawling nur für KI-Training, die robots.txt erlaubt die Suchseiten.
@@ -179,7 +182,7 @@ auch Fehlermeldungen, die sonst unsichtbar blieben.
 | `update_metadata` | Titel, Interpret, Album, Album-Interpret, Jahr, Genre, Kommentar, Energy ändern (ein oder mehrere Titel) |
 | `set_bpm`, `set_key`, `write_tags` | Manuelle Korrektur und Tags schreiben |
 | `analyze_paths`, `reanalyze_tracks`, `get_job_status`, `cancel_job` | Dateien/Ordner einlesen und analysieren (Hintergrund-Job) |
-| `search_karaoke_version` | Karaoke-Version nach Tonart(en)/BPM durchsuchen, optional mit Tempo/Tonarten/Dauer je Treffer |
+| `search_karaoke_version` | Karaoke-Version nach Tonart(en)/BPM durchsuchen, optional mit Tempo/Tonarten/Dauer je Treffer und ±1 Halbton (`include_semitones`) |
 | `remove_tracks`, `remove_missing_files` | Einträge aus der Bibliothek entfernen (Dateien bleiben erhalten) |
 
 Beispiele für Anfragen an Claude: „Lies `D:\Musik\Neu` ein“, „Welche Tracks in 8A zwischen 120 und 126 BPM habe ich?“,

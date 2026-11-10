@@ -212,14 +212,16 @@ _kv_client = None
 @mcp.tool()
 def search_karaoke_version(keys: list[str] | None = None, bpm_min: float | None = None,
                            bpm_max: float | None = None, page: int = 1, with_details: bool = False,
-                           notation: str = "camelot") -> dict:
+                           notation: str = "camelot", include_semitones: bool = False) -> dict:
     """Search karaoke-version.de (custom backing tracks) by key(s) in any notation and/or a BPM range.
 
     One request per key is made so every hit carries the key it was found for. 20 hits per key and page.
     with_details=true additionally reads each hit's song page for exact tempo (or 'variable ~x'), all keys
     (songs with key changes list several) and duration - slower (requests are throttled, results cached).
-    Each hit includes 'in_library' if a track with the same title and artist is already in the library."""
-    from .research import KaraokeVersionClient, in_library, library_index
+    Each hit includes 'in_library' if a track with the same title and artist is already in the library.
+    include_semitones=true also searches the keys 1 semitone below/above (Karaoke-Version can transpose a
+    track); each hit then has 'transpose_semitones' (0 = fits as is, +1/-1 = transpose by that much)."""
+    from .research import KaraokeVersionClient, in_library, library_index, semitone_shift, with_semitones
     global _kv_client
     _check_notation(notation)
     if _kv_client is None:
@@ -227,13 +229,16 @@ def search_karaoke_version(keys: list[str] | None = None, bpm_min: float | None 
     ks = [Key.from_code(c) for c in _parse_keys(keys)]
     if not ks and not bpm_min and not bpm_max:
         raise ValueError("Give at least one key or a BPM range")
-    res = _kv_client.search(ks, bpm_min, bpm_max, max(1, int(page)))
+    targets = {k.code for k in ks}
+    res = _kv_client.search(with_semitones(ks) if include_semitones else ks, bpm_min, bpm_max, max(1, int(page)))
     if with_details:
         for s in res.songs:
             _kv_client.load_details(s)
     idx = library_index(lib().db.search(Query()))
     return {"total": res.total, "page": res.page, "has_more": res.has_more, "search_url": res.url,
-            "hits": [s.to_dict(notation) | {"in_library": in_library(s, idx)} for s in res.songs]}
+            "hits": [s.to_dict(notation) | {"in_library": in_library(s, idx)} |
+                     ({"transpose_semitones": semitone_shift(s.keys, targets)} if include_semitones and targets else {})
+                     for s in res.songs]}
 
 
 # ============================================================================ keywords

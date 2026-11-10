@@ -255,6 +255,10 @@ STRINGS: dict[str, str] = {
     "research_extend": "Añadir tonalidades armónicas",
     "research_clear": "Borrar tonalidades",
     "research_none": "Elige al menos una tonalidad o un rango de BPM.",
+    "kv_semitones": 'Incluir ±1 semitono',
+    "kv_semitones_tip": 'También encuentra pistas un semitono por debajo o por encima de las tonalidades elegidas. En Karaoke-Version se pueden transponer para que encajen; la columna «Transp.» indica cuánto.',
+    "kv_transpose_col": 'Transp.',
+    "kv_transpose_tip": "Transpón {st} semitono en Karaoke-Version y la pista sonará en {target}.",
     "kv_search": "Buscar en Karaoke-Version",
     "kv_auto_details": "Cargar tempo, todas las tonalidades y duración de los resultados",
     "kv_auto_details_tip": "La lista de resultados de Karaoke-Version no muestra ni tempo ni tonalidad. KeyTool "

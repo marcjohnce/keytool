@@ -45,6 +45,7 @@ class Settings:
     volume: float = 0.8             # player volume 0..1
     show_details: bool = True       # right sidebar (metadata, file info, keywords) visible
     research_auto_details: bool = True   # load tempo/keys/duration from the song pages
+    research_semitones: bool = True      # also search keys 1 semitone below/above (transposable on KV)
     research_bpm_tolerance: float = 3.0  # +-% around the selected track's BPM
 
     @classmethod

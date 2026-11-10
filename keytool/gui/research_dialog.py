@@ -14,7 +14,8 @@ from PySide6.QtWidgets import (
 from ..db import Query
 from ..i18n import tr
 from ..keys import Key
-from ..research import KaraokeVersionClient, KVSong, in_library, library_index, search_url
+from ..research import (KaraokeVersionClient, KVSong, in_library, library_index, search_url, semitone_shift,
+                        with_semitones)
 from .theme import camelot_color
 from .widgets import KeyFilter, fmt_duration
 
@@ -99,11 +100,12 @@ class ResearchWorker:
 
 # =========================================================================== results model
 class KVModel(QAbstractTableModel):
-    COLS = ["in_lib", "title", "artist", "year", "key", "bpm", "duration", "price"]
+    COLS = ["in_lib", "title", "artist", "year", "key", "shift", "bpm", "duration", "price"]
 
     def __init__(self):
         super().__init__()
         self.songs: list[KVSong] = []
+        self.targets: set[str] = set()       # key codes the user chose; hits +-1 semitone show a "Transp." hint
         self.lib_index: set = set()
         self.notation = "camelot"
         self.dark = True
@@ -136,9 +138,13 @@ class KVModel(QAbstractTableModel):
     def headerData(self, section, orientation, role=Qt.DisplayRole):
         if orientation == Qt.Horizontal and role == Qt.DisplayRole:
             c = self.COLS[section]
+            if c == "shift":
+                return tr("kv_transpose_col")
             return "✓" if c == "in_lib" else tr({"price": "price", "key": "key", "bpm": "bpm"}.get(c, c))
         if orientation == Qt.Horizontal and role == Qt.ToolTipRole and self.COLS[section] == "in_lib":
             return tr("in_library")
+        if orientation == Qt.Horizontal and role == Qt.ToolTipRole and self.COLS[section] == "shift":
+            return tr("kv_semitones_tip")
         return None
 
     def data(self, idx, role=Qt.DisplayRole):
@@ -147,7 +153,10 @@ class KVModel(QAbstractTableModel):
         s = self.songs[idx.row()]
         c = self.COLS[idx.column()]
         keys = [Key.from_code(k) for k in s.keys]
+        shift = semitone_shift(s.keys, self.targets) if self.targets else 0
         if role == Qt.DisplayRole:
+            if c == "shift":
+                return "" if not shift else ("+1" if shift > 0 else "−1") if abs(shift) == 1 else f"{shift:+d}"
             if c == "in_lib":
                 return "✓" if in_library(s, self.lib_index) else ""
             if c == "key":
@@ -162,6 +171,8 @@ class KVModel(QAbstractTableModel):
                 return str(s.year or "")
             return getattr(s, c) or ""
         if role == SORT_ROLE:
+            if c == "shift":
+                return 9 if shift is None else abs(shift) * 2 + (shift < 0)
             if c == "key":
                 return (keys[0].camelot_number * 2 + (0 if keys[0].minor else 1)) if keys else 999
             if c in ("bpm", "year", "duration"):
@@ -174,9 +185,18 @@ class KVModel(QAbstractTableModel):
             return camelot_color(keys[0].code, self.dark)
         if role == Qt.ForegroundRole and c == "key" and keys:
             return QColor("#111111")
-        if role == Qt.TextAlignmentRole and c in ("in_lib", "year", "key", "bpm", "duration", "price"):
+        if role == Qt.FontRole and c == "shift" and shift:
+            from PySide6.QtGui import QFont
+            f = QFont(); f.setBold(True)
+            return f
+        if role == Qt.TextAlignmentRole and c in ("in_lib", "year", "key", "shift", "bpm", "duration", "price"):
             return int(Qt.AlignCenter)
         if role == Qt.ToolTipRole:
+            if c == "shift" and shift and keys:
+                src = next((k for k in keys if k.transpose(shift).code in self.targets), keys[0])
+                dst = src.transpose(shift)
+                st = f"{shift:+d}".replace("-", "−")
+                return tr("kv_transpose_tip", st=st, target=f"{dst.long_name(tr.lang)} ({dst.camelot()})")
             if c == "key" and keys:
                 extra = "\n" + tr("kv_key_change") if len(keys) > 1 else ""
                 return " · ".join(f"{k.long_name(tr.lang)} ({k.camelot()})" for k in keys) + extra
@@ -228,6 +248,10 @@ class ResearchDialog(QDialog):
         self.auto_details.setChecked(getattr(settings, "research_auto_details", True))
         self.auto_details.setToolTip(tr("kv_auto_details_tip"))
         left.addWidget(self.auto_details)
+        self.semitones = QCheckBox(tr("kv_semitones"))
+        self.semitones.setChecked(getattr(settings, "research_semitones", True))
+        self.semitones.setToolTip(tr("kv_semitones_tip"))
+        left.addWidget(self.semitones)
         self.search_btn = QPushButton("🔎  " + tr("kv_search")); self.search_btn.setObjectName("primary")
         self.search_btn.clicked.connect(self.new_search)
         left.addWidget(self.search_btn)
@@ -254,9 +278,16 @@ class ResearchDialog(QDialog):
         self.table.setShowGrid(False)
         hh = self.table.horizontalHeader()
         hh.setStretchLastSection(False)
-        for i, w in enumerate((32, 260, 190, 56, 120, 64, 60, 70)):
+        for i, w in enumerate((32, 260, 190, 56, 120, 64, 64, 60, 70)):
             self.table.setColumnWidth(i, w)
         hh.setSectionResizeMode(1, QHeaderView.Stretch)
+        from .widgets import KeyChipDelegate
+
+        def _first_key(idx):
+            s = self.model.songs[self.proxy.mapToSource(idx).row()]
+            return s.keys[0] if s.keys else None
+        self.table.setItemDelegateForColumn(KVModel.COLS.index("key"),
+                                            KeyChipDelegate(_first_key, lambda: self.model.dark, self.table))
         self.table.doubleClicked.connect(lambda _: self.open_selected())
         self.table.selectionModel().currentRowChanged.connect(self._row_selected)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -306,8 +337,13 @@ class ResearchDialog(QDialog):
             self.status.setText(tr("research_none"))
             return
         self.s.research_auto_details = self.auto_details.isChecked()
+        self.s.research_semitones = self.semitones.isChecked()
         self.page, self.total, self.has_more = 1, 0, False
+        self.model.targets = {k.code for k in keys} if self.semitones.isChecked() else set()
         self.model.reset()
+        if self.semitones.isChecked():
+            keys = with_semitones(keys)                 # + keys 1 semitone below/above (transposable)
+        self.table.setColumnHidden(KVModel.COLS.index("shift"), not self.semitones.isChecked() or not keys)
         self.web_url = search_url(keys, lo, hi)
         self._criteria = (keys, lo, hi)
         self.status.setText(tr("kv_searching", n=max(1, len(keys))))

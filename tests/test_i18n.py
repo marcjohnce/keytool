@@ -20,6 +20,7 @@ def test_locale_complete_with_same_placeholders(lang):
     for key, (de, en) in _T.items():
         assert _fields(texts[key]) == _fields(en), key
         assert texts[key].strip(), key
+        assert "key" not in _fields(texts[key]), f"{key}: placeholder {{key}} clashes with tr(key, ...)"
 
 
 def test_languages_and_fallback(monkeypatch):

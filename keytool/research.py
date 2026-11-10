@@ -91,6 +91,36 @@ class KVPage:
     url: str                       # the combined search on the website (for "open in browser")
 
 
+# =========================================================================== semitone neighbours
+def with_semitones(keys: list[Key], semitones: int = 1) -> list[Key]:
+    """The keys plus the keys up to `semitones` below/above (same mode): songs in those keys can be
+    transposed on Karaoke-Version to fit. Order: the chosen keys first, then the neighbours."""
+    out = list(dict.fromkeys(keys))
+    for k in keys:
+        for st in range(1, semitones + 1):
+            for d in (-st, st):
+                t = k.transpose(d)
+                if t not in out:
+                    out.append(t)
+    return out
+
+
+def semitone_shift(song_keys: list[str], targets: set[str], semitones: int = 1) -> int | None:
+    """By how many semitones a song has to be transposed so that one of its keys becomes a target key:
+    0 = fits as is; +1 = one semitone higher; -1 = lower; None = does not fit within +-semitones."""
+    best = None
+    for code in song_keys:
+        k = Key.from_code(code)
+        if not k:
+            continue
+        for st in sorted(range(-semitones, semitones + 1), key=abs):   # 0 first, then +-1 ...
+            if k.transpose(st).code in targets:
+                if best is None or abs(st) < abs(best):
+                    best = st
+                break
+    return best
+
+
 # =========================================================================== URLs
 def chordkey_codes(keys: list[Key]) -> list[int]:
     codes: list[int] = []
