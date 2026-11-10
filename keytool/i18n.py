@@ -1,7 +1,17 @@
-"""Very small translation layer (German / English)."""
+"""Very small translation layer.
+
+German and English live side by side in _T below; further languages are in keytool/locales/<code>.py
+(dict STRINGS) and fall back to English for any key they lack.
+"""
 from __future__ import annotations
 
-LANGUAGES = {"de": "Deutsch", "en": "English"}
+import importlib
+import time
+
+LANGUAGES = {"de": "Deutsch", "en": "English", "fr": "Français", "it": "Italiano"}
+DECIMAL_COMMA = {"de", "fr", "it"}                    # 124,5 instead of 124.5
+DATETIME_FORMATS = {"de": "%d.%m.%Y %H:%M", "fr": "%d/%m/%Y %H:%M", "it": "%d/%m/%Y %H:%M",
+                    "en": "%Y-%m-%d %H:%M"}
 
 _T: dict[str, tuple[str, str]] = {
     # key: (de, en)
@@ -311,6 +321,21 @@ _T: dict[str, tuple[str, str]] = {
 }
 
 
+_extra: dict[str, dict[str, str]] = {}
+
+
+def strings_for(lang: str) -> dict[str, str]:
+    """Texts of an additional language (fr, it ...); empty dict for de/en or unknown codes."""
+    if lang in ("de", "en") or lang not in LANGUAGES:
+        return {}
+    if lang not in _extra:
+        try:
+            _extra[lang] = importlib.import_module(f"keytool.locales.{lang}").STRINGS
+        except Exception:
+            _extra[lang] = {}
+    return _extra[lang]
+
+
 class Translator:
     def __init__(self, lang: str = "de"):
         self.lang = lang if lang in LANGUAGES else "de"
@@ -319,7 +344,10 @@ class Translator:
         pair = _T.get(key)
         if not pair:
             return key
-        s = pair[0] if self.lang == "de" else pair[1]
+        if self.lang == "de":
+            s = pair[0]
+        else:
+            s = strings_for(self.lang).get(key, pair[1])
         return s.format(**kw) if kw else s
 
 
@@ -328,3 +356,16 @@ tr = Translator()
 
 def set_language(lang: str) -> None:
     tr.lang = lang if lang in LANGUAGES else "de"
+
+
+def fmt_number(value: float, decimals: int = 1) -> str:
+    """Number with the decimal separator of the UI language (124,5 in de/fr/it, 124.5 in en)."""
+    s = f"{value:.{decimals}f}"
+    return s.replace(".", ",") if tr.lang in DECIMAL_COMMA else s
+
+
+def fmt_datetime(ts: float | None) -> str:
+    """Date + time in the UI language's usual order; '' for no timestamp."""
+    if not ts:
+        return ""
+    return time.strftime(DATETIME_FORMATS.get(tr.lang, DATETIME_FORMATS["en"]), time.localtime(ts))

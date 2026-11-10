@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QListWidget, QListWidgetItem, QPushButton, QSizePolicy, QToolButton, QVBoxLayout, QWidget, QButtonGroup,
 )
 
-from ..i18n import tr
+from ..i18n import fmt_datetime, fmt_number, tr
 from ..keys import Key, all_keys
 from .theme import camelot_color
 
@@ -48,11 +48,6 @@ def source_text(r: dict, field: str) -> str:
     return f"{tr('auto')} · {tr('confidence')} {int((conf or 0) * 100)} %"
 
 
-def fmt_datetime(ts) -> str:
-    import time
-    if not ts:
-        return ""
-    return time.strftime("%d.%m.%Y %H:%M" if tr.lang == "de" else "%Y-%m-%d %H:%M", time.localtime(ts))
 
 
 def fmt_duration(sec) -> str:
@@ -187,8 +182,7 @@ class TrackModel(QAbstractTableModel):
                     return tr("in_deck")
                 if d is None:
                     return ""
-                txt = f"{'+' if d >= 0 else '−'}{abs(d):.1f} %"
-                return txt.replace(".", ",") if tr.lang == "de" else txt
+                return f"{'+' if d >= 0 else '−'}{fmt_number(abs(d))} %"
             if role == SORT_ROLE:
                 return -1.0 if is_deck else (abs(d) if d is not None else 1e9)
             if role == Qt.ForegroundRole:
@@ -203,7 +197,7 @@ class TrackModel(QAbstractTableModel):
             return None
         if role == Qt.DisplayRole:
             if col == "bpm":
-                return (f"{v:.1f}".replace(".", ",") if tr.lang == "de" else f"{v:.1f}") if v else ""
+                return fmt_number(v) if v else ""
             if col == "key":
                 k = Key.from_code(v)
                 return k.format(self.notation) if k else ""
@@ -595,7 +589,7 @@ def fmt_size(n) -> str:
         return ""
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1024 or unit == "GB":
-            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}".replace(".", ",")
+            return f"{n:.0f} {unit}" if unit == "B" else f"{fmt_number(n)} {unit}"
         n /= 1024
 
 
@@ -747,6 +741,13 @@ class DetailPanel(QWidget, Translatable):
         kv.addWidget(self.kw_remove)
         lay.addWidget(self.g_kw)
         lay.addStretch(1)
+        # long labels (e.g. "Artiste de l'album") wrap onto two lines instead of pushing the fields out
+        for form in (fm, fk, ff):
+            for i in range(form.rowCount()):
+                item = form.itemAt(i, QFormLayout.LabelRole)
+                if item is not None and isinstance(item.widget(), QLabel):
+                    item.widget().setWordWrap(True)
+                    item.widget().setMaximumWidth(118)
         self.retranslate()
 
     # ------------------------------------------------------------------ texts

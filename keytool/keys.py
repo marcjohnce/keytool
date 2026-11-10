@@ -131,6 +131,16 @@ class Key:
             if self.minor:
                 name = name.lower()
             return f"{name}-{'Moll' if self.minor else 'Dur'}"
+        if lang in ("fr", "it"):
+            # solfège: do ré mi fa sol la si (fr, lower case) / Do Re Mi Fa Sol La Si (it)
+            letters = {"C": 0, "D": 1, "E": 2, "F": 3, "G": 4, "A": 5, "B": 6}
+            syll = (("do", "ré", "mi", "fa", "sol", "la", "si") if lang == "fr"
+                    else ("Do", "Re", "Mi", "Fa", "Sol", "La", "Si"))
+            acc = {"#": (" dièse" if lang == "fr" else " diesis"), "b": (" bémol" if lang == "fr" else " bemolle")}
+            base = syll[letters[name[0]]] + (acc[name[1]] if len(name) > 1 else "")
+            mode = (("mineur" if self.minor else "majeur") if lang == "fr"
+                    else ("minore" if self.minor else "maggiore"))
+            return f"{base} {mode}"
         return f"{name} {'minor' if self.minor else 'major'}"
 
     # ------------------------------------------------------------------ harmony

@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..analysis_queue import DONE, ERROR, RUNNING, WAITING, AnalysisQueue
-from ..i18n import tr
+from ..i18n import fmt_datetime, tr
 from .widgets import Translatable
 
 
@@ -20,10 +20,6 @@ class QueueBridge(QObject):
     changed = Signal(str, object)
 
 
-def fmt_datetime(ts) -> str:
-    if not ts:
-        return ""
-    return time.strftime("%d.%m.%Y %H:%M" if tr.lang == "de" else "%Y-%m-%d %H:%M", time.localtime(ts))
 
 
 class QueuePanel(QWidget, Translatable):

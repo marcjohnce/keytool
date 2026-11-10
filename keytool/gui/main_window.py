@@ -360,6 +360,10 @@ class MainWindow(QMainWindow, Translatable):
             self.update_progress()
         self.model.refresh_all()
         self.update_count()
+        # the "fits" column is as narrow as possible, but never narrower than its header in this language
+        fm = self.table.horizontalHeader().fontMetrics()
+        fit_col = TrackModel.COLUMNS.index("fit")
+        self.table.setColumnWidth(fit_col, max(44, fm.horizontalAdvance(tr("fit")) + 26))
 
     # ------------------------------------------------------------------ data
     def build_query(self) -> Query:

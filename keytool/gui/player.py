@@ -8,7 +8,7 @@ from PySide6.QtCore import QObject, QPointF, QRectF, QRunnable, Qt, QThreadPool,
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QStyle, QToolButton, QVBoxLayout, QWidget
 
-from ..i18n import tr
+from ..i18n import fmt_number, tr
 from ..keys import Key
 from .widgets import Translatable, fmt_duration
 
@@ -806,7 +806,7 @@ class PlayerPanel(QWidget, Translatable):
             self.key_chip.set_key(None, "–")
             self.key_name.setText("")
         bpm = r.get("bpm")
-        self.bpm_lbl.setText((f"{bpm:.1f}".replace(".", ",") if tr.lang == "de" else f"{bpm:.1f}") if bpm else "–")
+        self.bpm_lbl.setText(fmt_number(bpm) if bpm else "–")
         e = r.get("energy")
         self.bpm_sub.setText(tr("bpm_energy", e=e) if e else "BPM")
 

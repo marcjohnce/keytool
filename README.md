@@ -26,7 +26,7 @@ die Bibliothek zugreifen.
 | Serato-Cues | Vorhandene Serato-DJ-Hot-Cues (Farbe, Name) und gespeicherte Loops werden aus den Dateien gelesen (MP3, WAV, FLAC, M4A; OGG soweit möglich) und in der Wellenform angezeigt; Klick auf ein Cue-Fähnchen oder Alt+1…8 springt hin |
 | Wellenform | Übersicht des ausgewählten Titels über der Trackliste, gefärbt nach Frequenzbändern (Bass blau, Mitten bernstein, Höhen weiß), Klicken/Ziehen zum Spulen, Taktmarken aus der BPM |
 | Passt zum Deck | Spalte „Passt“ (● gleiche Tonart, ◐ harmonischer Nachbar ±1 oder Dur/Moll, ○ passt nicht, inkl. Transposition) und „zum Deck“ (Tempo-Abweichung in %, über ±6 % gedämpft); beide sortierbar |
-| Oberfläche | Deutsch / Englisch, heller und dunkler Modus (oder System), Umschalten ohne Neustart; Schrift Archivo (SIL OFL, mitgeliefert), Farbe nur für Tonarten, Bernstein für Wiedergabe |
+| Oberfläche | Deutsch, Englisch, Französisch, Italienisch (in den Einstellungen; Zahlen, Datum und Tonartnamen wie „la mineur“ / „La minore“ passend zur Sprache), heller und dunkler Modus (oder System), Umschalten ohne Neustart; Schrift Archivo (SIL OFL, mitgeliefert), Farbe nur für Tonarten, Bernstein für Wiedergabe |
 | MCP-Server | Vollzugriff: suchen, Details, Schlüsselwörter, Werte setzen, Tags schreiben, Ordner einlesen & analysieren |
 
 ## Installation & Start (Windows)
@@ -150,6 +150,10 @@ Aus dem Quellcode: `"command": "C:\\Pfad\\zu\\KeyTool\\.venv\\Scripts\\python.ex
 Alternativ läuft der Server per `python -m keytool --mcp-http` (bzw. `KeyTool-MCP.exe --mcp-http`) über Streamable HTTP unter `http://127.0.0.1:8000/mcp` – nur lokal erreichbar.
 
 GUI und MCP-Server nutzen dieselbe Datenbank (`%APPDATA%\KeyTool\library.sqlite3`) und können gleichzeitig laufen.
+
+**Weitere Sprachen:** Texte für Deutsch und Englisch stehen in `keytool/i18n.py`, weitere Sprachen je in
+`keytool/locales/<code>.py` (fr, it). Eine neue Sprache = neue Datei + Eintrag in `LANGUAGES`; fehlende Texte
+erscheinen auf Englisch, `tests/test_i18n.py` meldet Lücken und abweichende Platzhalter.
 
 **Fehlersuche:** Schlägt eine Analyse fehl oder stürzt ein Analyse-Prozess ab, steht die Ursache (Python-Traceback bzw.
 Absturzstelle und Exit-Code) in `%APPDATA%\KeyTool\analysis.log`. Die exe ohne Konsolenfenster schreibt dorthin
