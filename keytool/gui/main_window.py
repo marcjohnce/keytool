@@ -98,6 +98,7 @@ class MainWindow(QMainWindow, Translatable):
 
     def _build_toolbar(self):
         tb = QToolBar()
+        self.toolbar = tb
         tb.setMovable(False)
         tb.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self.addToolBar(tb)
@@ -573,7 +574,8 @@ class MainWindow(QMainWindow, Translatable):
         if not self.queue.is_busy():
             self._batch_done = 0
         self.queue.add(ids, keep_tag_values=keep_tag_values, front=front)
-        self.queue_dock.show()
+        # the queue panel only opens on request; the toolbar button shows that work is pending
+        self.update_progress()
         self.refresh()
 
     def select_track_by_id(self, track_id: int):
@@ -633,7 +635,13 @@ class MainWindow(QMainWindow, Translatable):
     def update_progress(self):
         c = self.queue.counts()
         busy = c[WAITING] + c[RUNNING]
-        self.a_queue.setText(tr('queue') + (f" ({busy})" if busy else ""))
+        self.a_queue.setText(tr('queue') + (f"  {busy}" if busy else ""))
+        self.a_queue.setToolTip(tr("queue_busy_tip", running=c[RUNNING], waiting=c[WAITING]) if busy
+                                else tr("queue_idle_tip"))
+        btn = self.toolbar.widgetForAction(self.a_queue)
+        if btn is not None and btn.property("busy") != bool(busy):
+            btn.setProperty("busy", bool(busy))       # amber highlight while analyses run or wait
+            btn.style().unpolish(btn); btn.style().polish(btn)
         if self.thread is not None:                     # scanning shows its own (indeterminate) progress
             return
         if busy:

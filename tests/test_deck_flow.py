@@ -95,3 +95,20 @@ def test_context_menu_filters(win):
     win.reset_filters(); win.table.selectRow(_row_of(win, "A1"))
     win.filter_by_key(win._menu_row()); win.refresh()
     assert sorted(win.proxy.index(i, 1).data() for i in range(win.proxy.rowCount())) == ["A1", "B1"]
+
+
+def test_queue_opens_only_on_request(win):
+    import time
+    btn = win.toolbar.widgetForAction(win.a_queue)
+    win.enqueue([r["id"] for r in win.model.rows], keep_tag_values=False)
+    assert not win.queue_dock.isVisible()                      # no automatic opening
+    assert btn.property("busy") is True and win.a_queue.text().split()[-1].isdigit()   # e.g. "Warteschlange  4"
+    deadline = time.time() + 120
+    while win.queue.is_busy() and time.time() < deadline:
+        QApplication.processEvents(); time.sleep(0.05)
+    for _ in range(20):
+        QApplication.processEvents(); time.sleep(0.02)
+    assert not win.queue.is_busy()
+    assert btn.property("busy") is False and win.a_queue.text() == "Warteschlange"
+    win.a_queue.setChecked(True)                               # opening by hand still works
+    assert win.queue_dock.isVisible()

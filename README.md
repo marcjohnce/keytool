@@ -84,7 +84,8 @@ Ein separates FFmpeg ist nicht nötig.
   * Doppelklick öffnet die Song-Seite, „Suche im Browser öffnen“ die gleiche Suche auf der Website.
   * Die AGB von Karaoke-Version untersagen Crawling nur für KI-Training, die robots.txt erlaubt die Suchseiten.
     KeyTool ruft nur ab, was du anforderst, identifiziert sich als „KeyTool“ und hält Pausen zwischen Anfragen ein.
-* **Analyse-Warteschlange** (☰ Warteschlange in der Toolbar): Alle Analysen – Import, „Ausstehende analysieren“,
+* **Analyse-Warteschlange** („Warteschlange“ in der Werkzeugleiste, öffnet sich nur auf Klick; solange Analysen
+  laufen oder warten, ist der Knopf in Bernstein hervorgehoben und zeigt die Anzahl): Alle Analysen – Import, „Ausstehende analysieren“,
   „Erneut analysieren“ – landen in einer Warteschlange, die von oben nach unten abgearbeitet wird (bei mehreren
   parallelen Analysen starten immer die obersten wartenden Titel; mit „Parallele Analysen = 1“ streng nacheinander).
   * **Jetzt analysieren** (Rechtsklick in der Liste oder in der Warteschlange) setzt Titel an die Spitze.

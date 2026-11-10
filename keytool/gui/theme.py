@@ -128,6 +128,9 @@ def apply_theme(app: QApplication, name: str) -> dict:
         QToolButton {{ padding: 6px 10px; border-radius: 8px; border: 1px solid transparent; background: transparent; }}
         QToolButton:hover {{ background: {c['hover']}; border-color: {c['border']}; }}
         QToolButton::menu-indicator {{ image: none; width: 0; }}
+        QToolBar QToolButton[busy="true"] {{ background: {c['accent']}; color: {c['accent_text']};
+            border-color: {c['accent']}; font-weight: 700; }}
+        QToolBar QToolButton[busy="true"]:hover {{ background: {QColor(c['accent']).lighter(110).name()}; }}
         QToolBar QToolButton#tbPrimary {{ border-color: {c['border']}; background: {c['button']}; }}
         QToolButton:checked {{ background: {c['invert_bg']}; color: {c['invert_text']}; border-color: {c['invert_bg']}; font-weight: 700; }}
         QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox, QTextEdit, QPlainTextEdit {{
