@@ -35,8 +35,10 @@ def crashing_recording_worker(path, *args):
 def segfault_worker(path, *args):
     """Native crash (segmentation fault / access violation) for files named *SEGV*."""
     if "SEGV" in os.path.basename(path):
-        import ctypes
-        ctypes.string_at(0)
+        # a real native crash on every platform (ctypes.string_at(0) is caught by ctypes on Windows and
+        # only raises OSError); _sigsegv is CPython's helper for exactly this kind of test
+        import faulthandler
+        faulthandler._sigsegv()
     from keytool.library import _analyze_worker
     return _analyze_worker(path, *args)
 
