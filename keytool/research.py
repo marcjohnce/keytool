@@ -234,6 +234,22 @@ class KVError(RuntimeError):
     pass
 
 
+class KVBlocked(KVError):
+    """Karaoke-Version answered with its bot-protection page ("Client Challenge") instead of results.
+    The page has to be solved by a real browser; KeyTool does not work around it, the search is opened
+    in the user's browser instead (`url`)."""
+
+    def __init__(self, url: str):
+        super().__init__("Karaoke-Version: client challenge (bot protection)")
+        self.url = url
+
+
+def is_challenge(page_html: str) -> bool:
+    """True for Karaoke-Version's (Fastly) bot-protection interstitial."""
+    head = page_html[:4000]
+    return "<title>Client Challenge</title>" in head or "/_fs-ch-" in head
+
+
 class KaraokeVersionClient:
     """Throttled HTTP client with a small on-disk cache for song pages. Thread-safe."""
 
@@ -289,7 +305,10 @@ class KaraokeVersionClient:
         for q in queries:
             if cancel and cancel.is_set():
                 break
-            n, songs = parse_list(self.get(search_url(q, bpm_min, bpm_max, page, self.base)), self.base)
+            page_html = self.get(search_url(q, bpm_min, bpm_max, page, self.base))
+            if is_challenge(page_html):            # bot protection: no results for apps, only for browsers
+                raise KVBlocked(search_url(keys, bpm_min, bpm_max, page, self.base))
+            n, songs = parse_list(page_html, self.base)
             n = n if n is not None else len(songs)
             total += n
             more = more or n > page * PER_PAGE
@@ -322,7 +341,10 @@ class KaraokeVersionClient:
     def load_details(self, song: KVSong) -> KVSong:
         d = self._cached_details(song.url)
         if d is None:
-            d = parse_detail(self.get(song.url))
+            page_html = self.get(song.url)
+            if is_challenge(page_html):
+                raise KVBlocked(song.url)
+            d = parse_detail(page_html)
             self._cache[song.url] = dict(t=time.time(), bpm=d.bpm, var=d.bpm_variable, keys=d.keys, dur=d.duration)
             self._save_cache()
         self._apply(song, d)

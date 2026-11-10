@@ -230,10 +230,20 @@ def search_karaoke_version(keys: list[str] | None = None, bpm_min: float | None 
     if not ks and not bpm_min and not bpm_max:
         raise ValueError("Give at least one key or a BPM range")
     targets = {k.code for k in ks}
-    res = _kv_client.search(with_semitones(ks) if include_semitones else ks, bpm_min, bpm_max, max(1, int(page)))
+    from .research import KVBlocked
+    try:
+        res = _kv_client.search(with_semitones(ks) if include_semitones else ks, bpm_min, bpm_max, max(1, int(page)))
+    except KVBlocked as e:
+        # Karaoke-Version's bot protection only lets real browsers through; we do not work around it
+        return {"error": "blocked_by_bot_protection", "total": 0, "hits": [], "search_url": e.url,
+                "message": "Karaoke-Version now only serves search results to web browsers (client challenge). "
+                           "Open search_url in a browser to see the results."}
     if with_details:
         for s in res.songs:
-            _kv_client.load_details(s)
+            try:
+                _kv_client.load_details(s)
+            except KVBlocked:
+                break
     idx = library_index(lib().db.search(Query()))
     return {"total": res.total, "page": res.page, "has_more": res.has_more, "search_url": res.url,
             "hits": [s.to_dict(notation) | {"in_library": in_library(s, idx)} |

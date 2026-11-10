@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 from ..db import Query
 from ..i18n import tr
 from ..keys import Key
-from ..research import (KaraokeVersionClient, KVSong, in_library, library_index, search_url, semitone_shift,
+from ..research import (KaraokeVersionClient, KVBlocked, KVSong, in_library, library_index, search_url, semitone_shift,
                         with_semitones)
 from .theme import camelot_color
 from .widgets import KeyFilter, fmt_duration
@@ -27,6 +27,7 @@ class _Bridge(QObject):
     page_loaded = Signal(int, object)        # generation, KVPage
     song_updated = Signal(int, str)          # generation, url
     failed = Signal(int, str)
+    blocked = Signal(int, str)               # generation, search URL for the browser (bot protection)
     busy = Signal(bool)
 
 
@@ -94,6 +95,10 @@ class ResearchWorker:
                 else:
                     self.client.load_details(song)
                     self.bridge.song_updated.emit(gen, song.url)
+            except KVBlocked as e:
+                with self._cv:
+                    self._details.clear()            # song pages are protected the same way
+                self.bridge.blocked.emit(gen, e.url)
             except Exception as e:
                 self.bridge.failed.emit(gen, str(e))
 
@@ -308,6 +313,7 @@ class ResearchDialog(QDialog):
         self.worker.bridge.page_loaded.connect(self._page_loaded)
         self.worker.bridge.song_updated.connect(self._song_updated)
         self.worker.bridge.failed.connect(self._failed)
+        self.worker.bridge.blocked.connect(self._blocked)
         self.worker.bridge.busy.connect(self._busy)
         self._update_buttons()
         if keys or bpm_min or bpm_max:
@@ -374,6 +380,17 @@ class ResearchDialog(QDialog):
         if gen == self.worker.gen:
             self.model.changed(url)
             self._update_status()
+
+    def _blocked(self, gen, url):
+        """Karaoke-Version requires a real browser now: say so and offer the same search there."""
+        if gen != self.worker.gen:
+            return
+        if not self.model.songs:
+            self.web_url = url or self.web_url
+            self.status.setText("⚠ " + tr("kv_blocked"))
+        self.web_btn.setObjectName("primary")
+        self.web_btn.style().unpolish(self.web_btn); self.web_btn.style().polish(self.web_btn)
+        self._update_buttons()
 
     def _failed(self, gen, msg):
         if gen == self.worker.gen:

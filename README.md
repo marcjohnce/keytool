@@ -87,6 +87,10 @@ Ein separates FFmpeg ist nicht nötig.
   * Doppelklick öffnet die Song-Seite, „Suche im Browser öffnen“ die gleiche Suche auf der Website.
   * Die AGB von Karaoke-Version untersagen Crawling nur für KI-Training, die robots.txt erlaubt die Suchseiten.
     KeyTool ruft nur ab, was du anforderst, identifiziert sich als „KeyTool“ und hält Pausen zwischen Anfragen ein.
+  * **Bot-Schutz (seit November 2026):** Karaoke-Version liefert Suchergebnisse nur noch an echte Webbrowser
+    (Fastly „Client Challenge“). KeyTool umgeht das nicht: es erkennt die Prüfseite, sagt das im Dialog und bietet
+    „Suche im Browser öffnen“ mit allen gewählten Tonarten (inkl. ±1 Halbton) und dem BPM-Bereich an. Der
+    MCP-Befehl liefert dann `error: blocked_by_bot_protection` und den Link `search_url`.
 * **Import aus Mixed In Key** („Analysieren ▾ → Aus Mixed In Key importieren …“): liest die Bibliothek von
   Mixed In Key 10/11 (`%LOCALAPPDATA%\Mixed In Key\Mixed In Key\<Version>\MIKStore.db`, wird automatisch
   gefunden) und übernimmt Tonart, Tempo und Energy. Zuordnung über den Dateipfad, bei verschobenen Dateien über

@@ -302,6 +302,7 @@ _T: dict[str, tuple[str, str]] = {
     "kv_semitones_tip": ('Findet auch Titel einen Halbton tiefer oder höher als die gewählten Tonarten. Auf Karaoke-Version lassen sie sich passend transponieren; die Spalte „Transp.“ zeigt, um wie viel.', "Also finds tracks one semitone below or above the chosen keys. They can be transposed to fit on Karaoke-Version; the 'Transp.' column shows by how much."),
     "kv_transpose_col": ('Transp.', 'Transp.'),
     "kv_transpose_tip": ('Auf Karaoke-Version um {st} Halbton transponieren, dann klingt der Titel in {target}.', 'Transpose by {st} semitone on Karaoke-Version and the track sounds in {target}.'),
+    "kv_blocked": ('Karaoke-Version lässt Suchen inzwischen nur noch aus einem Webbrowser zu (Bot-Schutz) und liefert KeyTool deshalb keine Treffer. Öffne die Suche mit „Suche im Browser öffnen“ – sie enthält alle gewählten Tonarten und den BPM-Bereich.', "Karaoke-Version now only allows searches from a web browser (bot protection), so KeyTool gets no results. Use 'Open search in browser' – it includes all chosen keys and the BPM range."),
     "kv_search": ("Bei Karaoke-Version suchen", "Search Karaoke-Version"),
     "kv_auto_details": ("Tempo, alle Tonarten und Dauer der Treffer nachladen",
                         "Load tempo, all keys and duration of the hits"),
