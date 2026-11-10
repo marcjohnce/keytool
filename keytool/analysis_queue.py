@@ -16,8 +16,7 @@ from __future__ import annotations
 import itertools
 import threading
 import time
-from concurrent.futures import FIRST_COMPLETED, wait
-from concurrent.futures.process import BrokenProcessPool
+from concurrent.futures import FIRST_COMPLETED, BrokenExecutor, wait
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -163,6 +162,31 @@ class AnalysisQueue:
     def _first_finished_index(self) -> int:
         return next((n for n, i in enumerate(self._items) if i.state in (DONE, ERROR)), len(self._items))
 
+    def _log_crash(self, pool, crashed: list[QueueItem]) -> None:
+        """Write which files were running when a worker died, with the exit codes (0xC0000005 = access
+        violation on Windows, -11 = SIGSEGV). Never raises: diagnostics must not stop the queue."""
+        codes = []
+        try:
+            procs = getattr(pool, "_processes", None) or {}
+            for p in list(procs.values()):
+                try:
+                    p.join(timeout=0.5)
+                    if p.exitcode not in (None, 0):
+                        codes.append(f"{p.exitcode} (0x{p.exitcode & 0xFFFFFFFF:08X})")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        files = []
+        for i in crashed:
+            try:
+                t = self.lib.db.get_track(i.track_id)
+                files.append(t["path"] if t else str(i.track_id))
+            except Exception:
+                files.append(str(i.track_id))
+        write_log("analysis process died; exit codes: " + (", ".join(codes) or "unknown") + "; files: "
+                  + "; ".join(files))
+
     def _next_waiting(self) -> QueueItem | None:
         return next((i for i in self._items if i.state == WAITING), None)
 
@@ -210,10 +234,21 @@ class AnalysisQueue:
                             self._finish(item, DONE)
                             started.append(("finished", item))
                             continue
+                        fresh = pool is None
                         try:
                             if pool is None:
                                 pool = _make_pool(full)
                             fut = pool.submit(self.lib.worker_fn, *args)
+                        except BrokenExecutor:
+                            if not fresh:
+                                # a running analysis crashed and the pool noticed before we saw its result
+                                # (common on Windows): leave this track waiting, it gets a fresh pool once
+                                # the crash has been handled below
+                                if not running:
+                                    pool.shutdown(wait=False, cancel_futures=True)
+                                    pool = None
+                                break
+                            raise                          # a brand-new pool is unusable -> report below
                         except Exception as e:     # pool could not start a process: report, don't hang
                             import traceback
                             write_log("could not start analysis process\n" + traceback.format_exc())
@@ -239,12 +274,14 @@ class AnalysisQueue:
                     try:
                         res = fut.result()
                         err = None
-                    except BrokenProcessPool:
+                    except BrokenExecutor:
                         broken = True
                         running[fut] = item                # handled below together with the others
                         continue
                     except Exception as e:
                         res, err = None, f"{type(e).__name__}: {e}"
+                        t = self.lib.db.get_track(item.track_id)
+                        write_log(f"analysis failed: {t['path'] if t else item.track_id}: {err}")
                     self.lib.store_result(item.track_id, res, err, item.keep_tag_values)
                     with self._cv:
                         self._suspects.discard(item.track_id)
@@ -253,18 +290,7 @@ class AnalysisQueue:
                 if broken:
                     crashed = list(running.values())
                     running.clear()
-                    codes = []
-                    for p in list(getattr(pool, "_processes", {}).values()):
-                        try:
-                            p.join(timeout=0.5)
-                            if p.exitcode not in (None, 0):
-                                c = p.exitcode
-                                codes.append(f"{c} (0x{c & 0xFFFFFFFF:08X})")
-                        except Exception:
-                            pass
-                    write_log("analysis process died; exit codes: " + (", ".join(codes) or "unknown") +
-                              "; files: " + "; ".join(self.lib.db.get_track(i.track_id)["path"]
-                                                      for i in crashed if self.lib.db.get_track(i.track_id)))
+                    self._log_crash(pool, crashed)
                     pool.shutdown(wait=False, cancel_futures=True)
                     pool = None
                     with self._cv:

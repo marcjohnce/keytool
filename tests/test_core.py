@@ -983,3 +983,47 @@ def test_paths_keep_case_but_match_case_insensitively(tmp_path, monkeypatch):
     assert rep.unchanged == 1 and not rep.to_analyze                                  # nothing re-analysed
     t2 = lib2.search(Query())[0]
     assert t2["path"] == str(f) and t2["filename"] == "Westerland CRASH.wav"          # casing restored
+
+
+def test_queue_requeues_track_when_pool_breaks_during_submit(tmp_path, monkeypatch):
+    """Windows timing: a running analysis crashes and the pool reports itself broken on the *next* submit,
+    before the queue has seen the crashed future. The healthy track must go back to waiting and be analysed
+    with a fresh pool – not be marked as an error."""
+    import threading
+    from concurrent.futures import Future
+    from concurrent.futures.process import BrokenProcessPool
+    import keytool.analysis_queue as aq
+    from keytool.analysis_queue import AnalysisQueue, DONE
+    lib, ids = _queue_lib(tmp_path, ["a", "b"], workers=2)
+    result = dict(bpm=120.0, bpm_confidence=0.9, key=Key.parse("8A").code, key_confidence=0.8, duration=3.0)
+    pools = []
+
+    class FakePool:
+        def __init__(self, workers):
+            self.n = len(pools)
+            self.submits = 0
+            pools.append(self)
+
+        def submit(self, fn, path, *args):
+            self.submits += 1
+            f = Future()
+            if self.n == 0 and self.submits == 1:      # first analysis "crashes" a moment later
+                threading.Timer(0.3, lambda: f.set_exception(BrokenProcessPool("terminated abruptly"))).start()
+                return f
+            if self.n == 0:                            # pool already knows it is broken
+                raise BrokenProcessPool("A child process terminated abruptly")
+            f.set_result(dict(result))                 # later pools work
+            return f
+
+        def shutdown(self, wait=True, cancel_futures=False):
+            pass
+
+    monkeypatch.setattr(aq, "_make_pool", FakePool)
+    q = AnalysisQueue(lib)
+    q.add([ids["a"], ids["b"]], keep_tag_values=False)
+    assert q.wait_idle(30)
+    st = {i.track_id: i for i in q.items()}
+    q.shutdown()
+    assert st[ids["b"]].state == DONE and not st[ids["b"]].error        # was marked as error before
+    assert st[ids["a"]].state == DONE                                    # retried alone, then fine
+    assert lib.db.get_track(ids["b"])["status"] == "ok" and len(pools) >= 2
