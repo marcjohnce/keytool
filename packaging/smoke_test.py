@@ -21,14 +21,21 @@ SR = 22050
 SECONDS = 20
 
 
-def write_track(path: str) -> None:
-    """A minor chord (A C E) plus a click on every beat at 120 BPM."""
+def write_track(path: str, seconds: int = SECONDS, parts: bool = False) -> None:
+    """A minor chord (A C E) plus a click on every beat at 120 BPM. parts: 15 s blocks alternating with an
+    F major chord (F A C) and no clicks, so the song-section detection has something to find."""
     freqs = (220.0, 261.63, 329.63)
+    other = (174.61, 220.0, 261.63)
     beat = int(SR * 60 / BPM)
     frames = bytearray()
-    for n in range(SR * SECONDS):
+    for n in range(SR * seconds):
         t = n / SR
-        v = sum(math.sin(2 * math.pi * f * t) for f in freqs) / len(freqs) * 0.35
+        b = parts and int(t // 15) % 2 == 1
+        fs = other if b else freqs
+        v = sum(math.sin(2 * math.pi * f * t) for f in fs) / len(fs) * 0.35
+        if b:
+            frames += struct.pack("<h", int(max(-1.0, min(1.0, v)) * 32000))
+            continue
         k = n % beat
         if k < 600:                                    # short decaying click on the beat
             v += math.sin(2 * math.pi * 1000 * t) * math.exp(-k / 120) * 0.6
@@ -48,15 +55,20 @@ def main(dist: str) -> int:
     work = tempfile.mkdtemp(prefix="keytool-smoke-")
     track = os.path.join(work, "smoke.wav")
     write_track(track)
+    song = os.path.join(work, "sections.wav")
+    write_track(song, seconds=60, parts=True)
     env = dict(os.environ, KEYTOOL_DATA_DIR=os.path.join(work, "data"))
-    proc = subprocess.run([exe, "--analyze", track], env=env, capture_output=True, text=True, timeout=600)
+    proc = subprocess.run([exe, "--analyze", track, song], env=env, capture_output=True, text=True, timeout=900)
     print(proc.stdout[-3000:])
     if proc.returncode != 0:
         print(proc.stderr[-3000:])
         print(f"KeyTool-MCP exited with {proc.returncode}")
         return 1
     db = os.path.join(work, "data", "library.sqlite3")
-    row = sqlite3.connect(db).execute("SELECT status, bpm, key, error FROM tracks").fetchone()
+    con = sqlite3.connect(db)
+    row = con.execute("SELECT status, bpm, key, error FROM tracks WHERE filename='smoke.wav'").fetchone()
+    sections = con.execute("SELECT sections FROM tracks WHERE filename='sections.wav'").fetchone()[0]
+    print("sections:", sections)
     print("result:", row)
     log = os.path.join(work, "data", "analysis.log")
     if os.path.exists(log):
@@ -70,6 +82,14 @@ def main(dist: str) -> int:
         return 1
     if key != "9:min":                                 # A minor (pitch class 9) = Camelot 8A
         print(f"unexpected key {key} (expected 9:min = A minor)")
+        return 1
+    import json
+    try:
+        n_sections = len(json.loads(sections or "null") or [])
+    except ValueError:
+        n_sections = 0
+    if n_sections < 2:                                 # scipy/librosa parts missing in the frozen app?
+        print("song sections were not detected (see analysis.log)")
         return 1
     print("smoke test passed")
     return 0

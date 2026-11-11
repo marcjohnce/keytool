@@ -30,6 +30,7 @@ _seq = itertools.count(1)
 class QueueItem:
     track_id: int
     keep_tag_values: bool = True
+    sections_only: bool = False     # only detect song sections (track was analysed before)
     state: str = WAITING
     error: str = ""
     title: str = ""
@@ -56,7 +57,7 @@ class AnalysisQueue:
         self._thread: threading.Thread | None = None
 
     # ------------------------------------------------------------------ public API (any thread)
-    def add(self, track_ids, keep_tag_values: bool = True, front: bool = False) -> int:
+    def add(self, track_ids, keep_tag_values: bool = True, front: bool = False, sections_only: bool = False) -> int:
         """Queue tracks. Returns the number of tracks newly added."""
         ids = list(dict.fromkeys(track_ids))
         rows = {t["id"]: t for t in self.lib.db.get_tracks(ids)}
@@ -70,12 +71,14 @@ class AnalysisQueue:
                 if cur is not None:
                     if cur.state == WAITING:
                         cur.keep_tag_values = cur.keep_tag_values and keep_tag_values
+                        cur.sections_only = cur.sections_only and sections_only
                         if front:
                             new_items.append(cur)
                     continue
                 self._drop_finished(tid)
                 r = rows[tid]
-                item = QueueItem(tid, keep_tag_values, title=r["title"] or r["filename"], artist=r["artist"] or "",
+                item = QueueItem(tid, keep_tag_values, sections_only, title=r["title"] or r["filename"],
+                                 artist=r["artist"] or "",
                                  path=r["path"], prev_status=r["status"] or "", prev_error=r["error"] or "")
                 self.lib.db.update_track(tid, status="pending")
                 new_items.append(item)
@@ -227,7 +230,7 @@ class AnalysisQueue:
                         if item is None:
                             break
                         t = self.lib.db.get_track(item.track_id)
-                        args = self.lib.submit_args(t, item.keep_tag_values) if t else None
+                        args = self.lib.submit_args(t, item.keep_tag_values, item.sections_only) if t else None
                         if args is None:                   # nothing to analyse (or track deleted)
                             if t:
                                 self.lib.db.update_track(item.track_id, status="ok", error="")

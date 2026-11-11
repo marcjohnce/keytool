@@ -59,6 +59,17 @@ executables" → Run workflow.
   and have not changed are skipped. Analysis runs in parallel on several CPU cores.
 * **Search:** the "Search everything" field (Ctrl+F) searches title, artist, album, file name, genre, year and
   keywords. All filters on the left can be combined.
+* **Song sections:** every analysis also detects the song's sections (intro, verse, pre-chorus, chorus, bridge, break,
+  outro) and stores their boundaries in the library. The deck shows them as tinted bands in the waveform with their
+  names along the bottom; the same colour means the same part (chorus 1, 2 and 3 share one), the section playing now is
+  a little stronger. Tracks without analysed sections show the plain waveform. For tracks analysed before this
+  feature: "Analyze ▾ → Analyse song sections" (selected tracks, or all tracks without sections when nothing is
+  selected). Method: Laplacian structural segmentation (McFee & Ellis 2014) with librosa and scipy – recurrence
+  matrix of beat-synchronous CQT features plus MFCC continuity, spectral clustering into groups of similar parts.
+  The grouping is the reliable part; the names (chorus = loudest repeating part, verse = the other main repeating
+  part, intro/outro = short quieter edges, break = quiet part, bridge = other one-off part) are a heuristic. MSAF
+  implements the same algorithm but is unmaintained and pins old librosa versions, so it is not used. Adds roughly
+  2–4 seconds per track to an analysis; the MCP tool `get_track` returns the sections.
 * **Cues column:** number of Serato cue points in each file (0 = none, empty = not counted yet). Counted when
   files are imported or changed, for older libraries once in the background after the start, and again whenever a
   track is loaded into the deck. Cue points that only live in another program's database are not counted.
@@ -271,6 +282,7 @@ Environment variables: `KEYTOOL_DATA_DIR` (folder for settings + database), `KEY
 ```
 keytool/
   analysis.py       BPM and key detection (classic / fast)
+  structure.py      Song sections: segmentation, grouping, labels
   analysis_queue.py Analysis queue (order, "Analyse now", crash-safe)
   compare.py        Compare the key detection methods on your own tracks
   keys.py           Key model, notations, Camelot wheel
