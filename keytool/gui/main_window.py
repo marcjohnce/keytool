@@ -107,10 +107,16 @@ class MainWindow(QMainWindow, Translatable):
         a.triggered.connect(slot)
         return a
 
+    def createPopupMenu(self):
+        """No right-click menu on the toolbar (Qt's default only offers to hide the toolbar itself)."""
+        return None
+
     def _build_toolbar(self):
         tb = QToolBar()
         self.toolbar = tb
         tb.setMovable(False)
+        tb.setContextMenuPolicy(Qt.PreventContextMenu)
+        tb.toggleViewAction().setEnabled(False)          # the toolbar cannot be hidden by accident
         tb.setToolButtonStyle(Qt.ToolButtonTextOnly)
         self.addToolBar(tb)
         brand = QLabel("KeyTool"); brand.setObjectName("brand")
