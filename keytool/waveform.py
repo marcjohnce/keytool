@@ -1,7 +1,7 @@
 """Waveform overview: per-bin peak level plus a colour from the energy in three frequency bands.
 
 low (< 200 Hz) -> blue, mid (200 Hz - 2 kHz) -> amber, high (> 2 kHz) -> white, similar to
-the 3-band waveforms in DJ software. Results are cached on disk (a few KB per track).
+the 3-band waveforms in DJ software. Results are cached on disk (some 10 to 100 KB per track).
 """
 from __future__ import annotations
 
@@ -14,8 +14,10 @@ import numpy as np
 from .config import data_dir
 
 WF_SR = 11025
-DEFAULT_BINS = 1600
-_CACHE_VERSION = 2
+DEFAULT_BINS = 0               # 0 = by duration: BINS_PER_SECOND, enough detail for the deck's zoom
+BINS_PER_SECOND = 100          # 10 ms per bin
+MIN_BINS, MAX_BINS = 1600, 90000
+_CACHE_VERSION = 3
 
 _BAND_COLORS = np.array([
     [0.22, 0.48, 1.00],   # low
@@ -48,6 +50,8 @@ def compute_waveform(path: str, bins: int = DEFAULT_BINS) -> Waveform:
     n = y.size
     if n == 0:
         return Waveform(np.zeros(0, np.float32), np.zeros((0, 3), np.uint8), duration)
+    if not bins:
+        bins = int(min(max(MIN_BINS, n / WF_SR * BINS_PER_SECOND), MAX_BINS))
     bins = max(1, min(bins, n // 64))
     per = n // bins
     frames = y[: per * bins].reshape(bins, per)

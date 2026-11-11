@@ -36,6 +36,7 @@ def tinted(icon, color: QColor, size: int = 20):
 
 
 BTN = 40                      # diameter of all round control buttons
+ZOOM_BTN = 30                 # the smaller zoom buttons next to the volume
 from .theme import CUE_COLOR, CUE_TEXT_COLOR   # all cue points are shown in one colour
 
 UNSURE = 0.5            # song sections below this confidence get a "?" and a fainter name
@@ -246,7 +247,11 @@ class WaveformView(QWidget):
     sections_edited = Signal(list)    # song sections changed by hand (complete new list)
     cues_edited = Signal(list)        # cue points changed by hand (complete new list of serato.Cue)
     redetect_requested = Signal()     # "detect the sections again" for the loaded track
+    zoom_changed = Signal(float)      # zoom factor (1.0 = whole track)
     STRIP = 18                        # height of the section-name strip below the waveform
+    MAX_ZOOM = 64.0                   # at most 64x ...
+    MIN_SPAN = 4.0                    # ... and never less than 4 s across the whole width
+    ZOOM_STEP = 1.5                   # one click on + / -; the mouse wheel zooms in finer steps
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -269,6 +274,9 @@ class WaveformView(QWidget):
         self._bdrag: int | None = None    # section whose start is being dragged
         self._cdrag: list | None = None   # [cue, press x, moved?] while a cue flag is held
         self._edit_before: list = []
+        self.zoom = 1.0               # 1.0 = the whole track fits (minimum)
+        self.view0 = 0.0              # seconds at the left edge while zoomed in
+        self._pan: tuple[float, float] | None = None   # (press x, view0) while panning with the middle button
 
     # one muted hue per group (A, B, C ...): same part = same colour; the Camelot colours stay the loud ones
     SECTION_HUES = (205, 30, 150, 275, 95, 340, 180, 55)
@@ -289,8 +297,56 @@ class WaveformView(QWidget):
         return self.height() - self.STRIP if self.sections and self.duration else self.height()
 
     def _section_x(self, sec) -> tuple[float, float]:
-        inner = self.width() - 8
-        return (4 + sec["start"] / self.duration * inner, 4 + min(sec["end"], self.duration) / self.duration * inner)
+        return self._x_of(sec["start"]), self._x_of(min(sec["end"], self.duration))
+
+    # -- zoom: the view shows [view0, view0 + duration / zoom]
+    def _span(self) -> float:
+        return self.duration / self.zoom if self.duration else 0.0
+
+    def max_zoom(self) -> float:
+        if not self.duration:
+            return 1.0
+        return max(1.0, min(self.MAX_ZOOM, self.duration / self.MIN_SPAN))
+
+    def _clamp_view(self):
+        self.view0 = min(max(self.view0, 0.0), max(0.0, self.duration - self._span()))
+
+    def set_zoom(self, zoom: float, anchor: float | None = None):
+        """Zoom to `zoom` (1.0 = whole track) around the time `anchor` (seconds), which keeps its place on
+        screen; without anchor: around the playhead if it is visible, else around the middle of the view."""
+        zoom = min(max(float(zoom), 1.0), self.max_zoom())
+        if not self.duration:
+            self.zoom = zoom
+            return
+        if anchor is None:
+            now = self.position * self.duration
+            anchor = now if self.view0 <= now <= self.view0 + self._span() else self.view0 + self._span() / 2
+        frac = (anchor - self.view0) / self._span() if self._span() else 0.0
+        if not 0.0 <= frac <= 1.0:                     # anchor not in view: bring it to the middle
+            frac = 0.5
+        self.zoom = zoom
+        self.view0 = anchor - frac * self._span()
+        self._clamp_view()
+        self.update()
+        self.zoom_changed.emit(self.zoom)
+
+    def scroll_by(self, seconds: float):
+        self.view0 += seconds
+        self._clamp_view()
+        self.update()
+
+    def wheelEvent(self, e):
+        """Wheel: zoom at the mouse pointer; Shift+wheel or a horizontal wheel: scroll the zoomed view."""
+        if self.peaks is None or not self.duration:
+            return
+        d = e.angleDelta()
+        if d.x() or (e.modifiers() & Qt.ShiftModifier):
+            steps = (d.x() or d.y()) / 120.0
+            self.scroll_by(-steps * self._span() * 0.15)
+        elif d.y():
+            t = self._t_of(e.position().x())
+            self.set_zoom(self.zoom * 1.25 ** (d.y() / 120.0), anchor=t)
+        e.accept()
 
     def section_in_strip(self, pos) -> dict | None:
         """The section whose name strip (below the waveform) is under the mouse."""
@@ -305,6 +361,9 @@ class WaveformView(QWidget):
     def set_waveform(self, wf):
         self.peaks, self.colors, self.duration = wf.peaks, wf.colors, wf.duration
         self.message = ""
+        self.view0 = 0.0                       # a new track starts at its beginning (the zoom level stays)
+        self.zoom = min(self.zoom, self.max_zoom())
+        self.zoom_changed.emit(self.zoom)
         self.update()
 
     def set_markers(self, markers):
@@ -325,7 +384,14 @@ class WaveformView(QWidget):
         self.update()
 
     def set_position(self, frac: float):
+        old = self.position * self.duration
         self.position = min(max(frac, 0.0), 1.0)
+        if self.zoom > 1.0 and self.duration and not (self._drag or self._pan or self._cdrag or self._bdrag):
+            # follow the playhead while it was in view: page on when it reaches 90 % of the width
+            now, span = self.position * self.duration, self._span()
+            if self.view0 <= old <= self.view0 + span and not (self.view0 <= now <= self.view0 + 0.9 * span):
+                self.view0 = now - 0.1 * span
+                self._clamp_view()
         self.update()
 
     # -- painting
@@ -350,8 +416,8 @@ class WaveformView(QWidget):
         # saved loops: translucent band behind the waveform
         if dur_ms > 0:
             for lp in self.loops:
-                x0 = 4 + lp.start_ms / dur_ms * inner
-                x1 = 4 + lp.end_ms / dur_ms * inner
+                x0 = self._x_of(lp.start_ms / 1000.0)
+                x1 = self._x_of(lp.end_ms / 1000.0)
                 c = QColor(lp.color)
                 band = QColor(c); band.setAlpha(55)
                 p.fillRect(QRectF(x0, 1, max(2.0, x1 - x0), h - 2), band)
@@ -375,10 +441,12 @@ class WaveformView(QWidget):
                     p.setPen(edge)
                     p.drawLine(QPointF(x0, 2), QPointF(x0, full - 2))
                     p.setPen(Qt.NoPen)
-        # resample bins to pixel columns (max of peaks, colour of the loudest bin)
+        # resample the visible bins to pixel columns (max of peaks, colour of the loudest bin)
         cols = max(1, int(inner))
-        edges = np.linspace(0, n, cols + 1).astype(int)
-        played_x = 4 + self.position * inner
+        t_edges = self.view0 + np.arange(cols + 1) / cols * self._span()
+        edges = np.clip((t_edges / self.duration * n).astype(int), 0, n - 1) if self.duration else \
+            np.linspace(0, n, cols + 1).astype(int)
+        played_x = self._x_of(now)
         amp = (h - 14) / 2
         for x in range(cols):
             a, b = edges[x], max(edges[x + 1], edges[x] + 1)
@@ -394,7 +462,7 @@ class WaveformView(QWidget):
             p.setPen(c)
             hh = max(1.0, level * amp)
             p.drawLine(QPointF(px, mid - hh), QPointF(px, mid + hh))
-        # section names in the strip below the waveform ("?" = unsure)
+        # section names in the strip below the waveform ("?" = unsure); kept inside the view when zoomed
         if self.sections and self.duration:
             from PySide6.QtGui import QFont
             f = QFont(self.font()); f.setPointSizeF(max(7.0, f.pointSizeF() * 0.8)); f.setWeight(QFont.DemiBold)
@@ -402,6 +470,7 @@ class WaveformView(QWidget):
             fm = p.fontMetrics()
             for sec in self.sections:
                 x0, x1 = self._section_x(sec)
+                x0, x1 = max(x0, 4.0), min(x1, w - 4.0)
                 if x1 - x0 < 24:
                     continue
                 playing = sec["start"] <= now < sec["end"]
@@ -413,17 +482,21 @@ class WaveformView(QWidget):
                 name = fm.elidedText(label, Qt.ElideRight, int(x1 - x0 - 8))
                 p.drawText(QRectF(x0 + 4, h, x1 - x0 - 6, full - h), Qt.AlignLeft | Qt.AlignVCenter, name)
             p.setFont(self.font())
-        # beat ticks (from BPM, without phase) every bar as a subtle orientation aid
+        # beat ticks (from BPM, without phase) as a subtle orientation aid: every bar, zoomed in every beat
         if self.bpm and self.duration:
-            bar = 4 * 60.0 / self.bpm
-            if bar * inner / self.duration >= 6:
-                tick = QColor(pal.color(pal.ColorRole.Text)); tick.setAlpha(28)
-                p.setPen(tick)
-                t = 0.0
-                while t < self.duration:
-                    x = 4 + t / self.duration * inner
-                    p.drawLine(QPointF(x, 3), QPointF(x, 8))
-                    t += bar
+            beat = 60.0 / self.bpm
+            px_per_s = inner / self._span()
+            step = beat if beat * px_per_s >= 8 else 4 * beat
+            if step * px_per_s >= 6:
+                tick = QColor(pal.color(pal.ColorRole.Text))
+                k = int(self.view0 // step)
+                while k * step <= self.view0 + self._span():
+                    bar_line = step == 4 * beat or k % 4 == 0
+                    tick.setAlpha(28 if bar_line else 16)
+                    p.setPen(tick)
+                    x = self._x_of(k * step)
+                    p.drawLine(QPointF(x, 3), QPointF(x, 8 if bar_line else 6))
+                    k += 1
         # Serato hot cues: coloured line + flag with the slot number (or name)
         self._flag_rects = []
         if dur_ms > 0 and self.cues:
@@ -432,7 +505,9 @@ class WaveformView(QWidget):
             p.setFont(f)
             fm = QFontMetrics(f)
             for cue in self.cues:
-                x = 4 + cue.position_ms / dur_ms * inner
+                x = self._x_of(cue.position_ms / 1000.0)
+                if not -30 <= x <= w + 2:                     # outside the zoomed view
+                    continue
                 col = QColor(CUE_COLOR)
                 line = QColor(col); line.setAlpha(230)
                 p.setPen(QPen(line, 2))
@@ -453,18 +528,36 @@ class WaveformView(QWidget):
         if self.hover is not None:
             hc = QColor(pal.color(pal.ColorRole.Text)); hc.setAlpha(90)
             p.setPen(QPen(hc, 1))
-            hx = 4 + self.hover * inner
+            hx = self._x_of(self.hover * self.duration)
             p.drawLine(QPointF(hx, 2), QPointF(hx, full - 2))
             p.drawText(QRectF(hx + 4, 2, 70, 16), Qt.AlignLeft, fmt_time(self.hover * self.duration * 1000))
         p.setPen(QPen(pal.color(pal.ColorRole.Link), 2))     # amber playhead
         p.drawLine(QPointF(played_x, 1), QPointF(played_x, full - 1))
+        # zoomed in: a thin bar along the top shows which part of the track is in view
+        if self.zoom > 1.0 and self.duration:
+            p.setPen(Qt.NoPen)
+            track = QColor(pal.color(pal.ColorRole.Text)); track.setAlpha(30)
+            p.setBrush(track)
+            p.drawRect(QRectF(4, 0, inner, 3))
+            thumb = QColor(pal.color(pal.ColorRole.Text)); thumb.setAlpha(150)
+            p.setBrush(thumb)
+            p.drawRect(QRectF(4 + self.view0 / self.duration * inner, 0, max(4.0, inner / self.zoom), 3))
 
     # -- interaction
+    def _t_of(self, x: float) -> float:
+        """Track time (s) at a widget x position, in the zoomed view."""
+        return self.view0 + (x - 4) / max(1, self.width() - 8) * self._span()
+
     def _frac(self, x: float) -> float:
-        return min(max((x - 4) / max(1, self.width() - 8), 0.0), 1.0)
+        """Position in the whole track (0..1) at a widget x position."""
+        if not self.duration:
+            return min(max((x - 4) / max(1, self.width() - 8), 0.0), 1.0)
+        return min(max(self._t_of(x) / self.duration, 0.0), 1.0)
 
     def _x_of(self, seconds: float) -> float:
-        return 4 + seconds / self.duration * (self.width() - 8) if self.duration else 4.0
+        if not self.duration:
+            return 4.0
+        return 4 + (seconds - self.view0) / self._span() * (self.width() - 8)
 
     def _cue_at(self, pos):
         """Cue under the mouse: its flag, or anywhere within 5 px of its line (nearest one wins)."""
@@ -613,6 +706,10 @@ class WaveformView(QWidget):
             self._ask_section_name(self.sections.index(sec))
 
     def mousePressEvent(self, e):
+        if self.peaks is not None and e.button() == Qt.MiddleButton and self.zoom > 1.0:
+            self._pan = (e.position().x(), self.view0)            # middle button: drag the zoomed view
+            self.setCursor(Qt.ClosedHandCursor)
+            return
         if self.peaks is None or e.button() != Qt.LeftButton:
             return
         b = self._boundary_at(e.position())
@@ -638,6 +735,12 @@ class WaveformView(QWidget):
         if self.peaks is None:
             return
         pos = e.position()
+        if self._pan is not None:
+            x0, v0 = self._pan
+            self.view0 = v0 - (pos.x() - x0) / max(1, self.width() - 8) * self._span()
+            self._clamp_view()
+            self.update()
+            return
         self.hover = self._frac(pos.x())
         free = self._free(e)
         if self._bdrag is not None:
@@ -684,6 +787,10 @@ class WaveformView(QWidget):
 
     def mouseReleaseEvent(self, _):
         self._drag = False
+        if self._pan is not None:
+            self._pan = None
+            self.unsetCursor()
+            return
         if self._bdrag is not None:
             before, self._bdrag = self._edit_before, None
             if self.sections != before:
@@ -808,6 +915,10 @@ class CircleButton(QPushButton):
             tri(cx + m * tip, cy, cx - m * base, cy - half, cx - m * base, cy + half)
             x0, x1 = sorted((cx - m * bar_in, cx - m * bar_out))
             p.drawRect(QRectF(x0, cy - half, x1 - x0, 2 * half))
+        elif g in ("zoom_in", "zoom_out"):                    # plus / minus
+            p.drawRoundedRect(QRectF(cx - 6.5 * u, cy - 1.3 * u, 13 * u, 2.6 * u), 1, 1)
+            if g == "zoom_in":
+                p.drawRoundedRect(QRectF(cx - 1.3 * u, cy - 6.5 * u, 2.6 * u, 13 * u), 1, 1)
         elif g in ("vol", "mute"):
             body = QPainterPath(QPointF(cx - 8 * u, cy - 3 * u))
             body.lineTo(cx - 4.5 * u, cy - 3 * u); body.lineTo(cx + 0.5 * u, cy - 7.5 * u)
@@ -942,6 +1053,19 @@ class PlayerPanel(QWidget, Translatable):
         for wdg in (self.prev_btn, self.prev_cue_btn, self.play_btn, self.next_cue_btn, self.next_btn, self.stop_btn):
             bar.addWidget(wdg, 0, Qt.AlignVCenter)
         bar.addSpacing(8); bar.addWidget(self.time, 0, Qt.AlignVCenter); bar.addStretch(1)
+        # waveform zoom: - / factor (click = 100 %) / +; the mouse wheel on the waveform zooms as well
+        self.zoom_out_btn = CircleButton("zoom_out", ZOOM_BTN)
+        self.zoom_in_btn = CircleButton("zoom_in", ZOOM_BTN)
+        self.zoom_lbl = QPushButton("100 %"); self.zoom_lbl.setObjectName("zoomLabel")
+        self.zoom_lbl.setFlat(True); self.zoom_lbl.setCursor(Qt.PointingHandCursor)
+        from PySide6.QtGui import QFontMetrics
+        self.zoom_lbl.setFixedWidth(QFontMetrics(self.zoom_lbl.font()).horizontalAdvance("6400 %") + 16)
+        self.zoom_out_btn.clicked.connect(lambda: self.wave.set_zoom(self.wave.zoom / WaveformView.ZOOM_STEP))
+        self.zoom_in_btn.clicked.connect(lambda: self.wave.set_zoom(self.wave.zoom * WaveformView.ZOOM_STEP))
+        self.zoom_lbl.clicked.connect(lambda: self.wave.set_zoom(1.0))
+        for wdg in (self.zoom_out_btn, self.zoom_lbl, self.zoom_in_btn):
+            bar.addWidget(wdg, 0, Qt.AlignVCenter)
+        bar.addSpacing(14)
         bar.addWidget(self.mute_btn, 0, Qt.AlignVCenter); bar.addWidget(self.volume, 0, Qt.AlignVCenter)
         info.addLayout(bar)
         info.addStretch(1)
@@ -999,9 +1123,11 @@ class PlayerPanel(QWidget, Translatable):
         self.wave.cue_clicked.connect(self.seek_ms)
         self.wave.section_clicked.connect(self.seek_ms)
         self.wave.sections_edited.connect(self._sections_edited)
+        self.wave.zoom_changed.connect(self._zoom_changed)
         self.wave.cues_edited.connect(self._cues_edited)
         self.wave.redetect_requested.connect(lambda: self.row and self.redetect_sections.emit(self.row["id"]))
         root.addWidget(self.wave)
+        self._zoom_changed(self.wave.zoom)
 
         self.player = None
         self._pending: tuple[int, bool] | None = None   # (position ms, play) applied once media is loaded
@@ -1028,6 +1154,9 @@ class PlayerPanel(QWidget, Translatable):
         super().retranslate()
         self.play_btn.setToolTip(tr("play_pause") + " (Space)")
         self.stop_btn.setToolTip(tr("stop"))
+        self.zoom_in_btn.setToolTip(tr("zoom_in_tip"))
+        self.zoom_out_btn.setToolTip(tr("zoom_out_tip"))
+        self.zoom_lbl.setToolTip(tr("zoom_reset_tip"))
         for st, b in self.tp_buttons.items():
             b.setToolTip(tr("transpose_tip", st=f"{st:+d}" if st else "0") if self._tp_available
                          else tr("transpose_unavailable"))
@@ -1321,6 +1450,11 @@ class PlayerPanel(QWidget, Translatable):
 
     def _cue_positions(self) -> list[int]:
         return sorted({c.position_ms for c in self.markers.cues}) if self.markers else []
+
+    def _zoom_changed(self, zoom: float):
+        self.zoom_lbl.setText(f"{int(round(zoom * 100))} %")
+        self.zoom_out_btn.setEnabled(zoom > 1.0)
+        self.zoom_in_btn.setEnabled(zoom < self.wave.max_zoom() - 1e-9)
 
     # -- editing in the waveform
     def _sections_edited(self, sections: list):

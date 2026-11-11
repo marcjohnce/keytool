@@ -280,6 +280,7 @@ def main():
         (pos(d.prev_btn, d, 0.5, 1.0, 0, -1), "Previous / next track", "bottom"),
         (pos(d.prev_cue_btn, d, 0.5, 1.0, 0, -1), "Previous / next cue point (disabled without cues)", "bottom"),
         (pos(d.play_btn, d, 0.5, 1.0, 0, -1), "Play / pause (Space)", "bottom"),
+        (pos(d.zoom_lbl, d, 0.5, 0.0, 0, 1), "Waveform zoom (100 % = whole track); mouse wheel zooms, Shift+wheel scrolls", "top"),
         (pos(d.mute_btn, d, 0.5, 0.0, 0, 1), "Mute and volume", "top"),
         (pos(d.key_chip, d, 0.5, 0.0, 0, 1), "Key of the deck, in the Camelot colour", "top"),
         (pos(d.tp_buttons[1], d, 0.5, 0.0, 0, 1), "Transpose −1 / +1 semitone at the original tempo (middle: original key)", "top"),

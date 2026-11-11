@@ -276,6 +276,11 @@ _T: dict[str, tuple[str, str]] = {
                      "Automatically write BPM & key into files after analysis"),
     "s_tag_notation": ("Notation für Tonart-Tag", "Notation for key tag"),
     "s_key_method": ("Tonart-Verfahren", "Key detection method"),
+    "zoom_in_tip": ("Wellenform vergrößern (auch Mausrad über der Wellenform)",
+                    "Zoom in on the waveform (also the mouse wheel over the waveform)"),
+    "zoom_out_tip": ("Wellenform verkleinern (bis 100 %)", "Zoom out of the waveform (down to 100 %)"),
+    "zoom_reset_tip": ("Zoom der Wellenform – Klick: ganzer Track (100 %). Umschalt+Mausrad oder mittlere Maustaste ziehen: verschieben",
+                       "Waveform zoom – click: whole track (100 %). Shift+wheel or drag with the middle button: scroll"),
     "s_sections_short": ("Song-Abschnitte erkennen", "Detect song sections"),
     "sd_sections": ("Erkennt bei jeder Analyse Intro, Strophe, Refrain usw. (braucht etwas mehr Zeit). "
                     "Ausgeschaltet geht es weiter über „Analyse → Song-Abschnitte analysieren“.",
