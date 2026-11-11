@@ -4,6 +4,10 @@ KeyTool analyses audio files (MP3, WAV, FLAC, OGG, M4A), detects **tempo (BPM)**
 a searchable library. You can search and filter by title, artist, album, year, BPM, key and your own **keywords**.
 Through the built-in **MCP server**, Claude Desktop and similar apps can work with the library directly.
 
+![KeyTool main window](docs/screenshots/01-main-window.png)
+
+More annotated screenshots are in [Screenshots](#screenshots) below.
+
 ## Features
 
 | Area | Scope |
@@ -156,6 +160,32 @@ executables" → Run workflow.
   Key, rekordbox, KeyFinder), modal or atonal music is occasionally confused with the relative key or the fifth. A
   low confidence is a hint to double-check; values can be corrected manually.
 
+## Screenshots
+
+All screenshots show a made-up demo library (titles, artists and cover images are invented). They are generated with
+`python docs/make_screenshots.py`, so they can be refreshed after UI changes.
+
+### Deck
+![Deck](docs/screenshots/02-deck.png)
+
+### Key filter
+![Key filter](docs/screenshots/03-key-filter.png)
+
+### Track list
+![Track list](docs/screenshots/04-track-list.png)
+
+### Details sidebar
+![Details sidebar](docs/screenshots/05-details.png)
+
+### Karaoke-Version search
+![Karaoke-Version search](docs/screenshots/06-karaoke-version.png)
+
+### Import from Mixed In Key
+![Import from Mixed In Key](docs/screenshots/07-mixed-in-key-import.png)
+
+### Settings
+![Settings](docs/screenshots/08-settings.png)
+
 ## MCP server
 
 For Claude Desktop, add this to `%APPDATA%\Claude\claude_desktop_config.json`
@@ -240,6 +270,7 @@ keytool/
 packaging/          PyInstaller spec, launchers, icon, smoke test for the built .exe
 .github/workflows/  CI: tests, Windows build, release
 tests/              Tests with synthetic audio files in all formats
+docs/               Annotated screenshots and the script that generates them
 ```
 
 Tests: `pip install pytest` and `python -m pytest tests`.
