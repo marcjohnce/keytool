@@ -5,7 +5,7 @@ import math
 import os
 from typing import Callable
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal, QStringListModel
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QObject, Qt, Signal, QStringListModel
 from PySide6.QtGui import QColor, QPainter, QPalette
 from PySide6.QtWidgets import (
     QApplication, QStyle, QStyledItemDelegate, QStyleOptionViewItem,
@@ -660,6 +660,39 @@ def _common(rows: list[dict], field: str):
     return vals.pop() if len(vals) == 1 else MIXED
 
 
+class _RetagHint(QWidget):
+    """Line under a field that holds an Auto re-tag suggestion: source, old value, undo."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        h = QHBoxLayout(self); h.setContentsMargins(2, 0, 0, 4); h.setSpacing(6)
+        self.source = QLabel(); self.source.setObjectName("retagSource")
+        self.was = QLabel(); self.was.setObjectName("retagWas")
+        self.was.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)    # shrinks with the panel, elided
+        self.undo = QPushButton("↺"); self.undo.setObjectName("retagUndo"); self.undo.setCursor(Qt.PointingHandCursor)
+        h.addWidget(self.source); h.addWidget(self.was, 1); h.addWidget(self.undo)
+        self._was_text = ""
+
+    def show_for(self, source: str, old):
+        self.source.setText(source)
+        old = "" if old in (None, "") else str(old)
+        self._was_text = tr("retag_was", v=old) if old else tr("retag_was_empty")
+        self.was.setToolTip(self._was_text)
+        self.undo.setToolTip(tr("retag_undo"))
+        self._elide()
+
+    def _elide(self):
+        self.was.setText(self.was.fontMetrics().elidedText(self._was_text, Qt.ElideRight, max(20, self.was.width())))
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._elide()
+
+
+class _RetagBridge(QObject):
+    done = Signal(int, object)          # track id, RetagResult | Exception
+
+
 class DetailPanel(QWidget, Translatable):
     """Editable track details: metadata, key/energy/tempo; read-only file info; keywords.
 
@@ -713,6 +746,29 @@ class DetailPanel(QWidget, Translatable):
         self.comment = QPlainTextEdit(); self.comment.setFixedHeight(58); self.comment.setTabChangesFocus(True)
         self.comment.textChanged.connect(lambda: self._mark("comment"))
         lbl = QLabel(); self.t(lbl.setText, "comment"); fm.addRow(lbl, self.comment)
+        # ---------------- auto re-tag: button + summary on top, a hint line under every suggested field
+        self.retag_btn = QPushButton(); self.t(self.retag_btn.setText, "retag_btn")
+        self.t(self.retag_btn.setToolTip, "retag_tip")
+        self.retag_btn.clicked.connect(self.auto_retag)
+        self.retag_banner = QLabel(); self.retag_banner.setObjectName("retagBanner"); self.retag_banner.setWordWrap(True)
+        self.retag_banner.hide()
+        rbox = QWidget(); rbl = QVBoxLayout(rbox); rbl.setContentsMargins(0, 0, 0, 4); rbl.setSpacing(6)
+        rbl.addWidget(self.retag_btn); rbl.addWidget(self.retag_banner)
+        fm.insertRow(0, rbox)
+        self._meta_form = fm
+        self.retag_widgets = {**self.edits, "year": self.year, "genre": self.genre}
+        self.retag_hints: dict[str, _RetagHint] = {}
+        for f, w in self.retag_widgets.items():
+            row, _ = fm.getWidgetPosition(w)
+            hint = _RetagHint()
+            hint.undo.clicked.connect(lambda _=False, f=f: self.undo_suggestion(f))
+            fm.insertRow(row + 1, "", hint)
+            fm.setRowVisible(hint, False)
+            self.retag_hints[f] = hint
+        self._suggested: dict = {}            # field -> Suggestion currently shown
+        self._retag_running: int | None = None
+        self._retag_bridge = _RetagBridge()
+        self._retag_bridge.done.connect(self._retag_done)
         lay.addWidget(self.g_meta)
 
         # ---------------- key / energy / tempo
@@ -842,6 +898,7 @@ class DetailPanel(QWidget, Translatable):
         self._update_buttons()
 
     def _update_buttons(self):
+        self.retag_btn.setEnabled(len(self.rows) == 1 and self._retag_running is None)
         on = bool(self.dirty) and bool(self.rows)
         self.save_btn.setEnabled(on)
         self.revert_btn.setEnabled(on)
@@ -884,6 +941,120 @@ class DetailPanel(QWidget, Translatable):
     def has_unsaved(self) -> bool:
         return bool(self.dirty)
 
+    # ------------------------------------------------------------------ auto re-tag
+    online_retag = True                      # tests switch MusicBrainz off
+
+    def auto_retag(self):
+        """Ask the file name, the ISRC code and MusicBrainz for tags (in the background) and put the
+        suggestions into the fields. Save takes them over, Discard drops them."""
+        if len(self.rows) != 1 or self._retag_running is not None:
+            return
+        import threading
+        from ..retag import suggest
+        row = dict(self.rows[0])
+        self._retag_running = row["id"]
+        self.retag_btn.setText(tr("retag_running"))
+        self._update_buttons()
+        bridge, online = self._retag_bridge, self.online_retag
+
+        def work():
+            try:
+                res = suggest(row, online=online)
+            except Exception as e:                 # never crash the details for this
+                res = e
+            try:
+                bridge.done.emit(row["id"], res)
+            except RuntimeError:
+                pass
+        threading.Thread(target=work, daemon=True, name="auto-retag").start()
+
+    def _retag_done(self, track_id: int, res):
+        self._retag_running = None
+        self.retag_btn.setText(tr("retag_btn"))
+        self._update_buttons()
+        if len(self.rows) != 1 or self.rows[0]["id"] != track_id:
+            return                                  # selection changed meanwhile
+        if isinstance(res, Exception):
+            self._banner(tr("retag_error", e=f"{type(res).__name__}: {res}"))
+            return
+        self.apply_suggestions(res)
+
+    def apply_suggestions(self, res):
+        self._clear_suggestions()
+        for sg in res.suggestions:
+            w = self.retag_widgets.get(sg.field)
+            if w is None or (sg.field in self.dirty):
+                continue                            # never overwrite what the user is typing
+            if sg.field == "genre":
+                self.genre.setEditText(str(sg.value))
+            else:
+                w.setText(str(sg.value))
+            self._set_suggested(sg.field, True)
+            self.retag_hints[sg.field].show_for(tr(f"retag_src_{sg.source}"), sg.old)
+            self._meta_form.setRowVisible(self.retag_hints[sg.field], True)
+            self._suggested[sg.field] = sg
+            self._mark(sg.field)
+        self._summary(res)
+
+    def _summary(self, res=None):
+        res = res if res is not None else getattr(self, "_last_retag", None)
+        self._last_retag = res
+        n = len(self._suggested)
+        if n:
+            srcs = []
+            for sg in self._suggested.values():
+                name = tr(f"retag_src_{sg.source}")
+                if sg.source == "isrc" and res is not None and res.isrc:
+                    name = f"{name} {res.isrc}"
+                if name not in srcs:
+                    srcs.append(name)
+            text = tr("retag_found", n=n, sources=", ".join(srcs))
+        else:
+            text = tr("retag_none")
+        if res is not None and res.online_error:
+            text += "\n" + tr("retag_offline")
+        self._banner(text)
+
+    def _banner(self, text: str):
+        self.retag_banner.setText(text)
+        self.retag_banner.show()
+
+    def _set_suggested(self, field: str, on: bool):
+        w = self.retag_widgets[field]
+        w.setProperty("suggested", on)
+        w.style().unpolish(w); w.style().polish(w)
+
+    def undo_suggestion(self, field: str):
+        """Put back the value the field had before the suggestion."""
+        if field not in self._suggested:
+            return
+        old = self._suggested.pop(field).old
+        self._loading = True
+        try:
+            if field == "genre":
+                self.genre.setEditText(old or "")
+            elif field == "year":
+                self.year.setText(str(old) if old else "")
+            else:
+                self.retag_widgets[field].setText(old or "")
+        finally:
+            self._loading = False
+        self.dirty.discard(field)
+        self._set_suggested(field, False)
+        self._meta_form.setRowVisible(self.retag_hints[field], False)
+        self._update_buttons()
+        self._summary()
+
+    def _clear_suggestions(self):
+        for f in list(getattr(self, "_suggested", {})):
+            self._set_suggested(f, False)
+        if hasattr(self, "retag_hints"):
+            for h in self.retag_hints.values():
+                self._meta_form.setRowVisible(h, False)
+            self.retag_banner.hide()
+        self._suggested = {}
+        self._last_retag = None
+
     # ------------------------------------------------------------------ keywords
     def _add_kw(self):
         parts = [p.strip() for p in self.kw_edit.text().split(",") if p.strip()]
@@ -904,6 +1075,7 @@ class DetailPanel(QWidget, Translatable):
             return
         self.rows = rows
         self.dirty.clear()
+        self._clear_suggestions()
         self._loading = True
         try:
             self._fill()

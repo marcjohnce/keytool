@@ -1,0 +1,24 @@
+{
+  "isrc": "GBXYZ2100417",
+  "recordings": [
+    {
+      "id": "6f1c1a7e-0000-4000-8000-000000000001",
+      "title": "Glass Harbour (Extended Mix)",
+      "length": 247000,
+      "first-release-date": "2021-03-12",
+      "artist-credit": [{"name": "Mara Veil", "joinphrase": "", "artist": {"id": "a1", "name": "Mara Veil"}}],
+      "genres": [{"name": "deep house", "count": 3}, {"name": "house", "count": 1}],
+      "tags": [{"name": "deep house", "count": 3}, {"name": "2021", "count": 1}],
+      "releases": [
+        {"id": "r2", "title": "Summer Sessions 2022", "status": "Official", "date": "2022-06-01",
+         "artist-credit": [{"name": "Various Artists", "joinphrase": ""}],
+         "release-group": {"primary-type": "Album", "secondary-types": ["Compilation"]}},
+        {"id": "r1", "title": "Tidal Lines", "status": "Official", "date": "2021-03-12",
+         "artist-credit": [{"name": "Mara Veil", "joinphrase": ""}],
+         "release-group": {"primary-type": "Album", "secondary-types": []}},
+        {"id": "r3", "title": "Glass Harbour (Promo)", "status": "Promotion", "date": "2021-01-20",
+         "artist-credit": [{"name": "Mara Veil", "joinphrase": ""}]}
+      ]
+    }
+  ]
+}

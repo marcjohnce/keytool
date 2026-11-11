@@ -62,6 +62,13 @@ executables" → Run workflow.
 * **Cues column:** number of Serato cue points in each file (0 = none, empty = not counted yet). Counted when
   files are imported or changed, for older libraries once in the background after the start, and again whenever a
   track is loaded into the deck. Cue points that only live in another program's database are not counted.
+* **Auto re-tag** (button at the top of "Metadata" in the details, one track at a time): suggests title, artist,
+  album, album artist, year and genre and puts them into the fields, each marked with its source, the old value and
+  a ↺ to undo just that field. "Save" takes the suggestions over, "Discard" brings back the old values. Sources, most
+  reliable first: the ISRC code in the file (looked up on MusicBrainz), a MusicBrainz search with artist and title,
+  and the file and folder name ("03 - Artist - Title [123456]", "Artist - Album (2021) [WEB]"). Only empty or
+  obviously broken fields (e.g. a title that is just the file name) get a suggestion. MusicBrainz is free and needs
+  no key (about one request per second); without internet only the file name is used.
 * **Track tooltip:** resting the mouse on the title, artist or album of a track shows a card with the cover
   artwork, title, artist, album and year (a record in the key's colour if there is no artwork). Covers are read in
   the background and cached.
@@ -225,6 +232,7 @@ error messages there that would otherwise stay invisible.
 | `convert_key`, `list_all_keys` | Convert notations |
 | `list_keywords`, `add_keywords`, `remove_keywords`, `set_keywords`, `rename_keyword` | Keywords |
 | `import_mixed_in_key` | Take over key, tempo, energy and collections from Mixed In Key (`dry_run` for a preview only) |
+| `suggest_tags` | Auto re-tag suggestions for one track (ISRC/MusicBrainz/file name); apply them with `update_metadata` |
 | `update_metadata` | Change title, artist, album, album artist, year, genre, comment, energy (one or more tracks) |
 | `set_bpm`, `set_key`, `write_tags` | Manual correction and writing tags |
 | `analyze_paths`, `reanalyze_tracks`, `get_job_status`, `cancel_job` | Import and analyse files/folders (background job) |
@@ -261,6 +269,7 @@ keytool/
   mik_import.py     Import from Mixed In Key (MIKStore.db)
   mcp_server.py     MCP server
   research.py       Search & parser for Karaoke-Version
+  retag.py          Auto re-tag: file-name heuristics, ISRC, MusicBrainz
   serato.py         Read Serato cues/loops (Serato Markers2)
   transpose.py      Transpose ±1 semitone at the original tempo (pedalboard/Rubber Band)
   waveform.py       Waveform computation (3 frequency bands) with cache

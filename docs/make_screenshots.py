@@ -360,6 +360,9 @@ def main():
     shot = ds.grab()
     det = w.details
     marks = [(QPoint(ds.width() - 60, 22), "Selected track(s); edits apply to all selected tracks", "right")]
+    rb = det.retag_btn
+    marks.append((rb.mapTo(ds, QPoint(rb.width() - 2, rb.height() // 2)),
+                  "Auto re-tag: suggestions from ISRC, MusicBrainz and the file name", "right"))
     for attr, label in (("year", "Year, album artist and the other tags are editable"),
                         ("key", "Key with its source and confidence; harmonic neighbours below"),
                         ("bpm", "Tempo: type it, or halve / double it")):
