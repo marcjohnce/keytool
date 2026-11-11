@@ -49,6 +49,79 @@ def test_functional_labels(song):
     assert section_at(secs, 60.0)["label"] == "chorus" and section_at(secs, 9999) is None
 
 
+def test_confidence_per_section(song):
+    _, secs = song
+    assert all(0.0 <= s["conf"] <= 1.0 for s in secs)
+    assert min(s["conf"] for s in secs if s["label"] == "chorus") >= 0.8         # clear repeats: sure
+
+
+# EDM-style track that starts 0.9 s late (lead-in): 16 bars intro, 8 bars build-up (rising), 16 bars drop,
+# 16 bars break, build-up, drop, outro (= intro material). Boundaries must land on the bar grid.
+BAR = 4 * 60 / 128
+EDM = [("intro", 16), ("build", 8), ("drop", 16), ("break", 16), ("build", 8), ("drop", 16), ("intro", 16)]
+LEAD_IN = 0.9
+
+
+def _edm_part(kind, bars, seed):
+    sec = bars * BAR
+    if kind == "intro":
+        return 0.4 * make_track(128, 9, True, seconds=sec, drums=False, seed=seed)
+    if kind == "build":
+        x = make_track(128, 9, True, seconds=sec, drums=True, seed=seed)
+        return x * np.linspace(0.12, 0.9, len(x))
+    if kind == "drop":
+        return make_track(128, 0, False, seconds=sec, drums=True, seed=seed)
+    return 0.25 * make_track(128, 5, False, seconds=sec, drums=False, seed=seed)
+
+
+@pytest.fixture(scope="module")
+def edm():
+    y = np.concatenate([np.zeros(int(LEAD_IN * SR))] + [_edm_part(k, b, i) for i, (k, b) in enumerate(EDM)])
+    return detect_sections(y.astype(np.float32), SR, bpm=128.0)
+
+
+def test_edm_labels_drop_and_buildup(edm):
+    assert [s["label"] for s in edm] == ["intro", "buildup", "drop", "break", "buildup", "drop", "outro"]
+    groups = [s["group"] for s in edm]
+    assert groups[1] == groups[4] and groups[2] == groups[5] and groups[0] == groups[6]
+
+
+def test_edm_boundaries_on_the_bar_grid(edm):
+    edges = LEAD_IN + np.cumsum([0] + [b for _, b in EDM]) * BAR
+    starts = [s["start"] for s in edm[1:]]
+    for t in starts:
+        bars = (t - LEAD_IN) / BAR
+        assert abs(bars - round(bars)) * BAR < 0.15, t                         # on a bar line
+    hits = sum(min(abs(t - e) for e in edges[1:-1]) < 0.15 for t in starts)
+    assert hits >= len(starts) - 1                                              # at most one is a bar off
+
+
+def test_beat_grid_needs_a_steady_pulse():
+    from keytool.structure import _beat_grid
+    rng = np.random.default_rng(1)
+    fps = SR / 512
+    n = int(60 * fps)
+    pulse = np.zeros(n)
+    pulse[(np.arange(0.25, 60, 0.5) * fps).astype(int)] = 1.0                 # kick every 0.5 s from 0.25 s
+    bt = np.arange(0.25, 60, 0.5)
+    grid = _beat_grid(bt, pulse + 0.01 * rng.random(n), SR, 512, 120.0, 60.0)
+    assert grid is not None and abs(grid[1] - grid[0] - 0.5) < 0.01
+    d = (grid[0] - (0.25 - 0.08)) % 0.5                  # phase = kick minus the onset lag
+    assert min(d, 0.5 - d) < 0.03
+    assert _beat_grid(bt, rng.random(n), SR, 512, 120.0, 60.0) is None         # no pulse: no grid
+
+
+def test_snap_prefers_phrase_lines():
+    from keytool.structure import _snap_to_phrases
+    beats = np.arange(0, 200, 0.5)                                              # 120 BPM, bars of 2 s
+    sharp = {16.0: 1.0, 48.0: 1.0, 82.0: 0.7, 80.0: 0.5, 30.0: 0.6}
+
+    def nov_at(t):
+        return sharp.get(round(t, 1), 0.1)
+    out = _snap_to_phrases([16.2, 47.9, 82.1, 30.1], beats, nov_at, np.ones(len(beats)))
+    assert out == [16.0, 30.0, 48.0, 80.0]      # 82 -> phrase line 80 (sharp enough); 30 has none nearby
+
+
 def test_short_or_silent_audio_has_no_sections():
     assert detect_sections(np.zeros(SR * 60, dtype=np.float32), SR) == []
     assert detect_sections(make_track(120, 0, False, seconds=20).astype(np.float32), SR) == []
@@ -126,3 +199,57 @@ def test_deck_shows_sections_only_when_available(tmp_path, monkeypatch):
     assert p.wave.sections == []
     assert pl.parse_sections("not json") == [] and pl.parse_sections(None) == []
     p.deleteLater(); app.processEvents()
+
+
+def test_ids_needing_sections_includes_old_detections(lib):
+    from keytool.db import Query
+    t = lib.search(Query())[0]
+    lib.db.update_track(t["id"], status="ok")
+    assert lib.db.ids_needing_sections() == [t["id"]]                          # none yet
+    old = [dict(start=0.0, end=30.0, group="A", label="intro")]
+    lib.db.update_track(t["id"], sections=json.dumps(old))
+    assert lib.db.ids_needing_sections() == [t["id"]]                          # first detection: again
+    lib.db.update_track(t["id"], sections=json.dumps([dict(old[0], conf=0.8)]))
+    assert lib.db.ids_needing_sections() == []
+    lib.db.update_track(t["id"], sections="[]")
+    assert lib.db.ids_needing_sections() == []                                  # nothing found: stays
+
+
+def test_section_strip_click_jumps_to_section_start(tmp_path, monkeypatch):
+    pytest.importorskip("PySide6")
+    from PySide6.QtCore import QPointF
+    from PySide6.QtWidgets import QApplication
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path))
+    app = QApplication.instance() or QApplication([])
+    import keytool.gui.player as pl
+    w = pl.WaveformView()
+    w.resize(408, 84 + w.STRIP)                                                # 400 px for 100 s
+    w.duration = 100.0
+    w.peaks = np.ones(100, np.float32); w.colors = np.full((100, 3), 128, np.uint8)
+    assert w._wave_height() == w.height()                                       # no sections: no strip
+    w.set_sections([dict(start=0, end=40, group="A", label="verse", conf=0.9),
+                    dict(start=40, end=100, group="B", label="chorus", conf=0.3)])
+    assert w._wave_height() == 84
+    w.grab()                                                                    # paints bands, strip, "?"
+    got = []
+    w.section_clicked.connect(got.append)
+    y_strip = 84 + w.STRIP / 2
+    assert w.section_in_strip(QPointF(250, 40)) is None                         # waveform: normal seeking
+    sec = w.section_in_strip(QPointF(250, y_strip))
+    assert sec["label"] == "chorus"
+
+    class Ev:                                                                   # minimal mouse event
+        def __init__(self, x, y):
+            self._p = QPointF(x, y)
+
+        def position(self):
+            return self._p
+
+        def button(self):
+            from PySide6.QtCore import Qt
+            return Qt.LeftButton
+    w.mousePressEvent(Ev(250, y_strip))
+    assert got == [40000] and abs(w.position - 0.4) < 1e-9
+    w.mouseMoveEvent(Ev(100, y_strip))
+    assert "100" not in w.toolTip() and "90" in w.toolTip()                     # verse, 90 % sure
+    w.deleteLater(); app.processEvents()

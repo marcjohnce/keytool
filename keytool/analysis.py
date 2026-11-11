@@ -310,7 +310,7 @@ def analyze_file(path: str, bpm_min: float = 70, bpm_max: float = 180,
     if do_sections:
         from .structure import detect_sections
         try:
-            sections = detect_sections(y, SR, duration)
+            sections = detect_sections(y, SR, duration, bpm=bpm)   # the tempo steadies the bar grid
         except Exception:                 # sections are an extra: never fail the analysis because of them
             import traceback
             from .library import write_log
