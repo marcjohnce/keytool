@@ -15,6 +15,8 @@ for pkg in ("librosa", "av", "mcp", "soundfile", "lazy_loader", "pooch", "pedalb
         pass
 hidden += collect_submodules("keytool") + collect_submodules("scipy.signal") + collect_submodules("sklearn.utils") + [
     "PySide6.QtMultimedia", "numba", "llvmlite", "mutagen", "pydantic", "anyio", "uvicorn", "starlette",
+    # song sections (keytool/structure.py)
+    "scipy.cluster.vq", "scipy.sparse.csgraph", "scipy.ndimage", "scipy.linalg",
 ]
 datas += [(os.path.join(ROOT, "keytool", "resources"), "keytool/resources")]
 excludes = ["tkinter", "matplotlib", "IPython", "pytest"]

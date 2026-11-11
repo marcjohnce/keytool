@@ -39,6 +39,20 @@ from .theme import CUE_COLOR, CUE_TEXT_COLOR   # all cue points are shown in one
 CUE_FLAG_GROW = 2             # px added to the width and height of the cue flags
 
 
+def parse_sections(value) -> list[dict]:
+    """tracks.sections (JSON text) -> list; [] for not analysed / nothing found / unreadable."""
+    if not value:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        import json
+        data = json.loads(value)
+        return [d for d in data if {"start", "end", "group", "label"} <= set(d)] if isinstance(data, list) else []
+    except (ValueError, TypeError):
+        return []
+
+
 def fmt_time(ms: int | float | None) -> str:
     if not ms or ms < 0:
         return "0:00"
@@ -241,7 +255,21 @@ class WaveformView(QWidget):
         self._drag = False
         self.cues = []                # serato.Cue
         self.loops = []               # serato.Loop
+        self.sections: list[dict] = []   # song sections (structure.py); empty = not analysed / none found
         self._flag_rects: list = []   # (QRectF, cue) for click / hover
+
+    # one muted hue per group (A, B, C ...): same part = same colour; the Camelot colours stay the loud ones
+    SECTION_HUES = (205, 30, 150, 275, 95, 340, 180, 55)
+
+    def set_sections(self, sections):
+        self.sections = list(sections or [])
+        self.update()
+
+    def _section_color(self, group: str, alpha: int) -> QColor:
+        hue = self.SECTION_HUES[(ord(group[:1] or "A") - 65) % len(self.SECTION_HUES)]
+        c = QColor.fromHsl(hue, 80, 105 if self.dark else 185)
+        c.setAlpha(alpha)
+        return c
 
     def set_waveform(self, wf):
         self.peaks, self.colors, self.duration = wf.peaks, wf.colors, wf.duration
@@ -255,6 +283,7 @@ class WaveformView(QWidget):
 
     def clear(self, message: str = ""):
         self.cues, self.loops = [], []
+        self.sections = []
         self.peaks = self.colors = None
         self.duration = 0.0
         self.position = 0.0
@@ -293,6 +322,20 @@ class WaveformView(QWidget):
                 p.fillRect(QRectF(x0, 1, max(2.0, x1 - x0), h - 2), band)
                 c.setAlpha(200)
                 p.fillRect(QRectF(x0, h - 6, max(2.0, x1 - x0), 4), c)
+        # song sections: tinted bands behind the waveform (the one playing now a little stronger)
+        now = self.position * self.duration
+        if self.sections and self.duration:
+            for sec in self.sections:
+                x0 = 4 + sec["start"] / self.duration * inner
+                x1 = 4 + min(sec["end"], self.duration) / self.duration * inner
+                playing = sec["start"] <= now < sec["end"]
+                a = (95 if playing else 60) if self.dark else (120 if playing else 80)
+                p.fillRect(QRectF(x0, 1, max(1.0, x1 - x0), h - 2), self._section_color(sec["group"], a))
+                if sec["start"] > 0:
+                    edge = QColor(pal.color(pal.ColorRole.Text)); edge.setAlpha(45)
+                    p.setPen(edge)
+                    p.drawLine(QPointF(x0, 2), QPointF(x0, h - 2))
+                    p.setPen(Qt.NoPen)
         # resample bins to pixel columns (max of peaks, colour of the loudest bin)
         cols = max(1, int(inner))
         edges = np.linspace(0, n, cols + 1).astype(int)
@@ -312,6 +355,23 @@ class WaveformView(QWidget):
             p.setPen(c)
             hh = max(1.0, level * amp)
             p.drawLine(QPointF(px, mid - hh), QPointF(px, mid + hh))
+        # section names along the bottom edge
+        if self.sections and self.duration:
+            from PySide6.QtGui import QFont
+            f = QFont(self.font()); f.setPointSizeF(max(7.0, f.pointSizeF() * 0.8)); f.setWeight(QFont.DemiBold)
+            p.setFont(f)
+            fm = p.fontMetrics()
+            for sec in self.sections:
+                x0 = 4 + sec["start"] / self.duration * inner
+                x1 = 4 + min(sec["end"], self.duration) / self.duration * inner
+                if x1 - x0 < 24:
+                    continue
+                playing = sec["start"] <= now < sec["end"]
+                col = QColor(pal.color(pal.ColorRole.Text)); col.setAlpha(235 if playing else 165)
+                p.setPen(col)
+                name = fm.elidedText(tr(f"sec_{sec['label']}"), Qt.ElideRight, int(x1 - x0 - 8))
+                p.drawText(QRectF(x0 + 4, h - fm.height() - 3, x1 - x0 - 6, fm.height()), Qt.AlignLeft | Qt.AlignVCenter, name)
+            p.setFont(self.font())
         # beat ticks (from BPM, without phase) every bar as a subtle orientation aid
         if self.bpm and self.duration:
             bar = 4 * 60.0 / self.bpm
@@ -884,6 +944,7 @@ class PlayerPanel(QWidget, Translatable):
         self.cover.set_key(row.get("key") if row else None)
         if same:
             self.wave.bpm = row.get("bpm")
+            self.wave.set_sections(parse_sections(row.get("sections")))   # e.g. after a re-analysis
             if autoplay:
                 self.play()
             return
@@ -910,6 +971,7 @@ class PlayerPanel(QWidget, Translatable):
             self.wave.clear("⚠ " + tr("file_missing"))
             return
         self.wave.clear(tr("waveform_loading"))
+        self.wave.set_sections(parse_sections(row.get("sections")))      # nothing shown if not analysed
         self.pool.start(_WaveformJob(self.path, self.emitter))
         self.source_file = None
         self._want_play = autoplay

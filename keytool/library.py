@@ -60,11 +60,11 @@ def _worker_init() -> None:
 
 
 def _analyze_worker(path: str, bpm_min: float, bpm_max: float, do_bpm: bool = True, do_key: bool = True,
-                    key_method: str = "classic") -> dict:
+                    key_method: str = "classic", do_sections: bool = False) -> dict:
     # Imported lazily so the GUI process starts fast and workers are self-contained
     try:
         from .analysis import analyze_file
-        res = analyze_file(path, bpm_min, bpm_max, do_bpm, do_key, key_method).to_dict()
+        res = analyze_file(path, bpm_min, bpm_max, do_bpm, do_key, key_method, do_sections).to_dict()
     except Exception:
         import traceback
         write_log(f"analysis failed: {path}\n{traceback.format_exc()}")
@@ -74,6 +74,8 @@ def _analyze_worker(path: str, bpm_min: float, bpm_max: float, do_bpm: bool = Tr
         res.pop("bpm"); res.pop("bpm_confidence")
     if not do_key:
         res.pop("key"); res.pop("key_confidence")
+    if not do_sections or res.get("sections") is None:
+        res.pop("sections", None)          # not analysed (or failed): keep what is stored
     return res
 
 
@@ -187,13 +189,19 @@ class Library:
             return not (keep_tag_values and t[f"{field}_source"] in ("tags", "mik") and t[field])
         return needs("bpm"), needs("key")
 
-    def submit_args(self, t: dict, keep_tag_values: bool = True) -> tuple | None:
-        """Arguments for worker_fn, or None if nothing has to be analysed."""
-        do_bpm, do_key = self.job_parts(t, keep_tag_values)
-        if not (do_bpm or do_key):
+    @staticmethod
+    def needs_sections(t: dict) -> bool:
+        return t.get("sections") is None
+
+    def submit_args(self, t: dict, keep_tag_values: bool = True, sections_only: bool = False) -> tuple | None:
+        """Arguments for worker_fn, or None if nothing has to be analysed. Song sections are detected with
+        every analysis (re-analysis: again); sections_only = just the sections (tracks analysed before)."""
+        do_bpm, do_key = (False, False) if sections_only else self.job_parts(t, keep_tag_values)
+        do_sections = sections_only or do_bpm or do_key or not keep_tag_values or self.needs_sections(t)
+        if not (do_bpm or do_key or do_sections):
             return None
         s = self.settings
-        return (t["path"], s.bpm_min, s.bpm_max, do_bpm, do_key, s.key_method)
+        return (t["path"], s.bpm_min, s.bpm_max, do_bpm, do_key, s.key_method, do_sections)
 
     def store_result(self, track_id: int, result: dict | None, error: str | None,
                      keep_tag_values: bool = True) -> None:
@@ -250,7 +258,7 @@ class Library:
                 for tid in remaining:
                     do_bpm, do_key = jobs[tid]
                     futs[pool.submit(self.worker_fn, tracks[tid]["path"], s.bpm_min, s.bpm_max, do_bpm, do_key,
-                                     s.key_method)] = tid
+                                     s.key_method, True)] = tid      # song sections with every analysis
                 pending = set(futs)
                 while pending:
                     if cancel and cancel.is_set():

@@ -30,13 +30,13 @@ def _append_locked(log: str, line: str) -> None:
         os.rmdir(lock)
 
 
-def recording_worker(path, bpm_min, bpm_max, do_bpm=True, do_key=True, key_method="classic"):
+def recording_worker(path, bpm_min, bpm_max, do_bpm=True, do_key=True, key_method="classic", do_sections=False):
     """Logs which parts were requested (file given by KEYTOOL_TEST_LOG), then analyses normally."""
     log = os.environ.get("KEYTOOL_TEST_LOG")
     if log:
         _append_locked(log, f"{os.path.basename(path)}|{int(do_bpm)}|{int(do_key)}\n")
     from keytool.library import _analyze_worker
-    return _analyze_worker(path, bpm_min, bpm_max, do_bpm, do_key, key_method)
+    return _analyze_worker(path, bpm_min, bpm_max, do_bpm, do_key, key_method, do_sections)
 
 
 def slow_recording_worker(path, *args):

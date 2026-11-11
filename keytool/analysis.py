@@ -55,6 +55,7 @@ class AnalysisResult:
     key: str | None          # canonical code "pc:maj|min"
     key_confidence: float
     duration: float
+    sections: list | None = None   # [{start, end, group, label}] (see structure.py); None = not analysed
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -298,10 +299,22 @@ def _detect_key_classic(y: np.ndarray, sr: int = SR, chunk_seconds: float = 45.0
 
 # ----------------------------------------------------------------- entry point
 def analyze_file(path: str, bpm_min: float = 70, bpm_max: float = 180,
-                 do_bpm: bool = True, do_key: bool = True, key_method: str = "classic") -> AnalysisResult:
-    """Analyse tempo and/or key. A part that is switched off is skipped entirely (the key detection
-    is the expensive part, so a BPM-only analysis is several times faster) and returned as None."""
+                 do_bpm: bool = True, do_key: bool = True, key_method: str = "classic",
+                 do_sections: bool = False) -> AnalysisResult:
+    """Analyse tempo, key and/or song sections. A part that is switched off is skipped entirely (the key
+    detection is the expensive part, so a BPM-only analysis is several times faster) and returned as None."""
     y, duration = load_audio(path)
     bpm, bconf = detect_bpm(y, SR, bpm_min, bpm_max) if do_bpm else (None, 0.0)
     key, kconf = detect_key(y, SR, key_method) if do_key else (None, 0.0)
-    return AnalysisResult(bpm=bpm, bpm_confidence=bconf, key=key, key_confidence=kconf, duration=round(duration, 2))
+    sections = None
+    if do_sections:
+        from .structure import detect_sections
+        try:
+            sections = detect_sections(y, SR, duration)
+        except Exception:                 # sections are an extra: never fail the analysis because of them
+            import traceback
+            from .library import write_log
+            write_log(f"song sections failed: {path}\n{traceback.format_exc()}")
+            sections = None
+    return AnalysisResult(bpm=bpm, bpm_confidence=bconf, key=key, key_confidence=kconf, duration=round(duration, 2),
+                          sections=sections)

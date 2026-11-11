@@ -136,8 +136,10 @@ class MainWindow(QMainWindow, Translatable):
         gap()
         # analysis actions grouped in one menu button
         self.analyze_btn = _TB(); self.analyze_btn.setPopupMode(_TB.InstantPopup)
-        am = QMenu(self.analyze_btn)
-        for a in (self.a_pending, self.a_reanalyze, self.a_tags):
+        am = QMenu(self.analyze_btn); am.setToolTipsVisible(True)
+        self.a_sections = self._act("analyze_sections", self.analyze_sections)
+        self.t(self.a_sections.setToolTip, "analyze_sections_tip")
+        for a in (self.a_pending, self.a_reanalyze, self.a_sections, self.a_tags):
             am.addAction(a)
         am.addSeparator()
         self.a_mik = self._act("mik_import", self.import_mik)
@@ -501,7 +503,8 @@ class MainWindow(QMainWindow, Translatable):
         if not cur:
             return
         row = next((r for r in self.model.rows if r["id"] == cur["id"]), None) or self.lib.db.get_track(cur["id"])
-        if row and any(row.get(k) != cur.get(k) for k in ("key", "bpm", "energy", "title", "artist", "album", "year")):
+        if row and any(row.get(k) != cur.get(k)
+                       for k in ("key", "bpm", "energy", "title", "artist", "album", "year", "sections")):
             self.player.set_track(row)
 
     # -- context menu filters
@@ -635,16 +638,22 @@ class MainWindow(QMainWindow, Translatable):
         # explicit re-analysis: really analyse, even if the values came from tags -> end of the queue
         self.enqueue(self.selected_ids(), keep_tag_values=False)
 
+    def analyze_sections(self):
+        """Song sections for the selected tracks, or for every analysed track that has none yet."""
+        ids = self.selected_ids() or [r["id"] for r in self.lib.db.conn().execute(
+            "SELECT id FROM tracks WHERE sections IS NULL AND status='ok' ORDER BY id")]
+        self.enqueue(ids, keep_tag_values=True, sections_only=True)
+
     def analyze_now_selected(self):
         # "analyse now": to the top of the queue
         self.enqueue(self.selected_ids(), keep_tag_values=False, front=True)
 
-    def enqueue(self, ids: list[int], keep_tag_values: bool, front: bool = False):
+    def enqueue(self, ids: list[int], keep_tag_values: bool, front: bool = False, sections_only: bool = False):
         if not ids:
             return
         if not self.queue.is_busy():
             self._batch_done = 0
-        self.queue.add(ids, keep_tag_values=keep_tag_values, front=front)
+        self.queue.add(ids, keep_tag_values=keep_tag_values, front=front, sections_only=sections_only)
         # the queue panel only opens on request; the toolbar button shows that work is pending
         self.update_progress()
         self.refresh()

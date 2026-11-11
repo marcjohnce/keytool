@@ -173,6 +173,11 @@ def get_track(track_id: int | None = None, path: str | None = None, notation: st
         raise ValueError("Track not found")
     r["keywords"] = L.db.keywords_for([r["id"]])[r["id"]]
     out = _track_out(r, notation, full=True)
+    import json
+    try:      # song sections: [{start, end, group, label}] in seconds; null = not analysed, [] = none found
+        out["sections"] = json.loads(r["sections"]) if r.get("sections") else None
+    except ValueError:
+        out["sections"] = None
     try:
         from .serato import read_serato_markers
         out["serato"] = read_serato_markers(r["path"]).to_dict()
