@@ -161,6 +161,68 @@ def _disk_case(path: str) -> str:
     return cur
 
 
+# =========================================================================== user patterns for file names
+# Default: "07 - Artist - Title.flac" or "Artist - Title.mp3" (pattern provided by the user)
+DEFAULT_PATTERNS = [r"^(?:(?<track>\d{2}) - )?(?<artist>.+?) - (?<title>.+)\.(?<ext>flac|mp3|m4a|ogg)$"]
+PATTERN_GROUPS = {"artist": "artist", "title": "title", "album": "album", "album_artist": "album_artist",
+                  "albumartist": "album_artist", "year": "year", "genre": "genre"}   # others (track, ext) ignored
+
+
+def compile_pattern(pattern: str) -> re.Pattern:
+    """Compile a file-name pattern. .NET/PCRE style named groups (?<name>...) are accepted as well as
+    Python's (?P<name>...). Matching ignores case. Raises re.error for an invalid pattern."""
+    py = re.sub(r"\(\?<(?![=!])", "(?P<", pattern)
+    return re.compile(py, re.IGNORECASE)
+
+
+def check_patterns(patterns) -> list[tuple[int, str]]:
+    """[(line number, error)] for patterns that do not compile or have no usable group."""
+    errors = []
+    for i, p in enumerate(patterns or [], 1):
+        if not p.strip():
+            continue
+        try:
+            rx = compile_pattern(p)
+        except re.error as e:
+            errors.append((i, str(e)))
+            continue
+        if not set(rx.groupindex) & set(PATTERN_GROUPS):
+            errors.append((i, "no group named artist, title, album, album_artist, year or genre"))
+    return errors
+
+
+def match_patterns(filename: str, patterns) -> dict:
+    """Fields from the first pattern that matches the file name (with extension). Invalid patterns are
+    skipped. Values are cleaned like the built-in heuristics (download IDs, underscores, feat.)."""
+    for p in patterns or []:
+        if not p.strip():
+            continue
+        try:
+            m = compile_pattern(p).search(filename)
+        except re.error:
+            continue
+        if not m:
+            continue
+        out = {}
+        for group, value in m.groupdict().items():
+            fld = PATTERN_GROUPS.get(group.lower())
+            if fld is None or value is None or not value.strip():
+                continue
+            if fld == "year":
+                y = re.search(r"(?:19|20)\d{2}", value)
+                if y:
+                    out["year"] = int(y.group(0))
+                continue
+            v = clean(value)
+            if fld in ("artist", "title"):
+                v = norm_feat(v)
+            if v:
+                out[fld] = v
+        if out:
+            return out
+    return {}
+
+
 # =========================================================================== file name / folder
 def parse_filename(path: str) -> dict:
     """Guess title, artist, album and year from the file name and its folder.
@@ -472,11 +534,15 @@ def looks_broken(fld: str, value, row: dict) -> bool:
 
 
 def suggest(row: dict, online: bool = True, mb: MusicBrainz | None = None,
-            discogs: Discogs | None = None) -> RetagResult:
-    """Suggestions for one library row (dict with path, filename, title, artist, album, ... , duration)."""
+            discogs: Discogs | None = None, patterns=None) -> RetagResult:
+    """Suggestions for one library row (dict with path, filename, title, artist, album, ... , duration).
+    patterns: the user's file-name patterns (regular expressions); the first match wins over the built-in
+    file-name heuristics. None = DEFAULT_PATTERNS."""
     res = RetagResult()
     path = row.get("path") or ""
-    guessed = parse_filename(_disk_case(path))
+    real = _disk_case(path)
+    guessed = parse_filename(real)
+    guessed.update(match_patterns(os.path.basename(real), DEFAULT_PATTERNS if patterns is None else patterns))
     candidates: dict[str, tuple[object, str]] = {}          # field -> (value, source), best source first
     artist = row.get("artist") if not looks_broken("artist", row.get("artist"), row) else guessed.get("artist")
     title = row.get("title") if not looks_broken("title", row.get("title"), row) else guessed.get("title")

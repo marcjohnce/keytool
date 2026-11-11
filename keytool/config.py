@@ -4,10 +4,15 @@ from __future__ import annotations
 import json
 import os
 import sys
-from dataclasses import dataclass, asdict, fields
+from dataclasses import dataclass, asdict, field, fields
 from pathlib import Path
 
 APP_NAME = "KeyTool"
+
+
+def _default_patterns() -> list[str]:
+    from .retag import DEFAULT_PATTERNS
+    return DEFAULT_PATTERNS
 
 
 def data_dir() -> Path:
@@ -46,6 +51,8 @@ class Settings:
     show_details: bool = True       # right sidebar (metadata, file info, keywords) visible
     research_semitones: bool = True      # also search keys 1 semitone below/above (transposable on KV)
     research_bpm_tolerance: float = 3.0  # +-% around the selected track's BPM
+    # Auto re-tag: regular expressions for file names, first match wins (see retag.match_patterns)
+    retag_patterns: list = field(default_factory=lambda: list(_default_patterns()))
 
     @classmethod
     def load(cls) -> "Settings":

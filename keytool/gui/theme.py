@@ -188,6 +188,7 @@ def apply_theme(app: QApplication, name: str) -> dict:
             background: {_mix(c['base'], c['accent'], 0.12)}; }}
         QLabel#retagBanner {{ background: {_mix(c['base'], c['accent'], 0.14)}; border: 1px solid {c['accent']};
             border-radius: 8px; padding: 8px 10px; color: {c['text']}; }}
+        QLabel#patternError {{ color: {c['danger']}; font-size: 9pt; }}
         QLabel#retagSource {{ color: {c['accent']}; font-size: 8.5pt; font-weight: 600; }}
         QLabel#retagWas {{ color: {c['dim']}; font-size: 8.5pt; }}
         QPushButton#retagUndo {{ border: none; background: transparent; color: {c['dim']}; padding: 0px 4px;

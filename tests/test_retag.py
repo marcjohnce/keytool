@@ -220,7 +220,7 @@ def test_panel_undo_and_discard(panel):
 
 def test_panel_runs_in_background(panel, monkeypatch):
     from PySide6.QtWidgets import QApplication
-    monkeypatch.setattr(retag, "suggest", lambda row, online=True: _result(("artist", "Mara Veil", "filename", "")))
+    monkeypatch.setattr(retag, "suggest", lambda row, **kw: _result(("artist", "Mara Veil", "filename", "")))
     panel.retag_btn.click()
     assert not panel.retag_btn.isEnabled()
     for _ in range(200):
@@ -295,3 +295,43 @@ def test_all_lower_file_name_is_capitalised(tmp_path):
     row = dict(id=1, path=str(f), filename=f.name, title="", artist="", album="", year=None, genre="")
     got = {s.field: (s.value, s.source) for s in suggest(row, online=False).suggestions}
     assert got == {"artist": ("Mara Veil", "filename"), "title": ("Glass Harbour", "filename")}
+
+
+# --------------------------------------------------------------------------- user file-name patterns
+def test_default_pattern_from_the_user():
+    from keytool.retag import DEFAULT_PATTERNS, match_patterns
+    assert match_patterns("07 - Mara Veil - Glass Harbour (Extended Mix).flac", DEFAULT_PATTERNS) == \
+        dict(artist="Mara Veil", title="Glass Harbour (Extended Mix)")
+    assert match_patterns("Kora - Low Tide Signals ft. Selva.MP3", DEFAULT_PATTERNS) == \
+        dict(artist="Kora", title="Low Tide Signals feat. Selva")             # case ignored, feat. unified
+    assert match_patterns("Kora - Low Tide Signals.wav", DEFAULT_PATTERNS) == {}   # .wav not in the pattern
+
+
+def test_custom_patterns_python_and_dotnet_syntax():
+    from keytool.retag import check_patterns, match_patterns
+    pats = [r"^(?P<year>\d{4}) - (?P<album>[^-]+) - (?<artist>.+?) - (?<title>.+)\.\w+$", r"^(?<title>.+)\.\w+$"]
+    assert match_patterns("2021 - Tidal Lines - Mara Veil - Glass Harbour.wav", pats) == \
+        dict(year=2021, album="Tidal Lines", artist="Mara Veil", title="Glass Harbour")
+    assert match_patterns("Just A Title.mp3", pats) == dict(title="Just A Title")   # second pattern
+    assert check_patterns(["(?<artist>.+", r"(\d+)", "", pats[0]]) == [
+        (1, check_patterns(["(?<artist>.+"])[0][1]), (2, "no group named artist, title, album, album_artist, year or genre")]
+
+
+def test_patterns_win_over_the_built_in_heuristics(tmp_path):
+    f = _wav(tmp_path / "Glass Harbour -- Mara Veil.wav")
+    row = dict(id=1, path=str(f), filename=f.name, title="", artist="", album="", year=None, genre="")
+    got = {s.field: s.value for s in suggest(row, online=False, patterns=[r"^(?<title>.+?) -- (?<artist>.+)\.wav$"]).suggestions}
+    assert got == {"title": "Glass Harbour", "artist": "Mara Veil"}
+    got = {s.field: s.value for s in suggest(row, online=False, patterns=["(broken"]).suggestions}
+    assert got == {"title": "Glass Harbour -- Mara Veil"}                       # invalid pattern skipped
+
+
+def test_settings_keep_the_patterns(tmp_path, monkeypatch):
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path))
+    from keytool.config import Settings
+    from keytool.retag import DEFAULT_PATTERNS
+    s = Settings()
+    assert s.retag_patterns == DEFAULT_PATTERNS and s.retag_patterns is not DEFAULT_PATTERNS
+    s.retag_patterns = [r"^(?<title>.+)\.mp3$"]
+    s.save()
+    assert Settings.load().retag_patterns == [r"^(?<title>.+)\.mp3$"]

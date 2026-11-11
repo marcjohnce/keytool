@@ -294,6 +294,7 @@ class MainWindow(QMainWindow, Translatable):
 
         # ---------------- right: details
         self.details = DetailPanel()
+        self.details.retag_patterns = self.s.retag_patterns
         self.details.save_requested.connect(self.save_details)
         self.details.reveal_requested.connect(self.reveal)
         self.details.keywords_added.connect(self.add_keywords)
@@ -878,6 +879,7 @@ class MainWindow(QMainWindow, Translatable):
         dlg = SettingsDialog(self.s, self)
         if dlg.exec():
             dlg.apply()
+            self.details.retag_patterns = self.s.retag_patterns
             set_language(self.s.language)
             self.apply_theme()
             self.set_notation(self.s.notation)
