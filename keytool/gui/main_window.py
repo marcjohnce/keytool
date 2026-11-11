@@ -678,6 +678,35 @@ class MainWindow(QMainWindow, Translatable):
         else:
             self.update_progress()
 
+    # ------------------------------------------------------------------ busy dots for running analyses
+    BUSY_FPS = 24
+    BUSY_CYCLE = 1.2                        # seconds for the light to run through the three dots
+
+    def _update_busy(self):
+        from ..analysis_queue import RUNNING
+        busy = {i.track_id for i in self.queue.items() if i.state == RUNNING}
+        changed = busy ^ self.model.busy_ids
+        self.model.busy_ids = busy
+        if changed:
+            self._repaint_fit(changed)
+        if not hasattr(self, "_busy_timer"):
+            self._busy_timer = QTimer(self, interval=1000 // self.BUSY_FPS, timeout=self._busy_tick)
+        if busy and not self._busy_timer.isActive():
+            self._busy_timer.start()
+        elif not busy:
+            self._busy_timer.stop()
+
+    def _busy_tick(self):
+        self.model.busy_phase = (self.model.busy_phase + 1 / (self.BUSY_FPS * self.BUSY_CYCLE)) % 1.0
+        self._repaint_fit(self.model.busy_ids)
+
+    def _repaint_fit(self, ids):
+        col = TrackModel.COLUMNS.index("fit")
+        for i, r in enumerate(self.model.rows):
+            if r["id"] in ids:
+                idx = self.model.index(i, col)
+                self.model.dataChanged.emit(idx, idx, [Qt.DisplayRole])
+
     def on_queue_event(self, event: str, item):
         if event == "finished" and item is not None:
             self._batch_done += 1
@@ -689,6 +718,7 @@ class MainWindow(QMainWindow, Translatable):
                     self.selection_changed()
                 if self.player.row and self.player.row["id"] == item.track_id:
                     self.sync_deck()
+        self._update_busy()
         self.queue_panel.schedule()
         self.update_progress()
         if not self.queue.is_busy() and event == "finished":

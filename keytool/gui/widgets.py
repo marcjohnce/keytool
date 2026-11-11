@@ -88,6 +88,8 @@ class TrackModel(QAbstractTableModel):
         self.deck_id: int | None = None
         self.deck_key: str | None = None      # key the deck currently sounds in (incl. transposition)
         self.deck_bpm: float | None = None
+        self.busy_ids: set[int] = set()       # tracks the analysis queue is working on (dots in "fit")
+        self.busy_phase = 0.0                 # animation phase of those dots, 0..1
 
     def set_deck(self, track_id: int | None, key_code: str | None, bpm: float | None):
         if (track_id, key_code, bpm) == (self.deck_id, self.deck_key, self.deck_bpm):
@@ -170,6 +172,8 @@ class TrackModel(QAbstractTableModel):
             return harmonic_fit(r.get("key"), self.deck_key)
         if col == "fit":
             fit = harmonic_fit(r.get("key"), self.deck_key)
+            if role in (Qt.ToolTipRole, Qt.AccessibleTextRole) and r["id"] in self.busy_ids:
+                return tr("analyzing_now")
             if role == SORT_ROLE:
                 return -1 if is_deck else (3 if fit is None else 2 - fit)
             if role == Qt.ToolTipRole and fit is not None:
@@ -265,6 +269,22 @@ class TrackModel(QAbstractTableModel):
         return None
 
 
+# =========================================================================== busy indicator
+def paint_busy_dots(painter, center, phase: float, color, gap: float = 6.0, radius: float = 2.2):
+    """Three dots that light up one after the other (track being analysed). phase: 0..1, one full cycle."""
+    import math
+    from PySide6.QtCore import QPointF
+    painter.save()
+    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setPen(Qt.NoPen)
+    for i in range(3):
+        wave = 0.5 + 0.5 * math.cos(2 * math.pi * (phase - i / 3))      # 1 = brightest
+        c = QColor(color); c.setAlphaF(0.25 + 0.75 * wave)
+        painter.setBrush(c)
+        painter.drawEllipse(QPointF(center.x() + (i - 1) * gap, center.y()), radius, radius)
+    painter.restore()
+
+
 # =========================================================================== table delegate
 class TrackDelegate(QStyledItemDelegate):
     """Paints the redesigned cells: fit glyph, key chip, energy meter and the deck marker."""
@@ -297,7 +317,9 @@ class TrackDelegate(QStyledItemDelegate):
             fit = index.data(FIT_ROLE)
             c = r.center()
             rad = 6.5
-            if fit == 2:
+            if index.data(ID_ROLE) in self.m.busy_ids:          # being analysed right now: running dots
+                paint_busy_dots(painter, c, self.m.busy_phase, text_col)
+            elif fit == 2:
                 painter.setPen(Qt.NoPen); painter.setBrush(text_col)
                 painter.drawEllipse(c, rad, rad)
             elif fit == 1:

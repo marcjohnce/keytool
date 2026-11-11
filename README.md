@@ -127,7 +127,8 @@ executables" → Run workflow.
   does not overwrite them, "Re-analyze" does. Mixed In Key itself is not changed (the database is copied before
   reading). Without the UI: `KeyTool-MCP.exe --import-mik [MIKStore.db] [--add-missing] [--fill-only] [--no-keywords]`.
 * **Analysis queue** ("Queue" in the toolbar, opens only when clicked; while analyses run or wait, the button is
-  highlighted in amber and shows the count): all analyses – import, "Analyze pending", "Re-analyze" – go into a
+  highlighted in amber and shows the count; tracks being analysed right now show three running dots in the
+  "Fits" column): all analyses – import, "Analyze pending", "Re-analyze" – go into a
   queue that is worked through from top to bottom (with several parallel analyses the topmost waiting tracks always
   start first; with "Parallel analyses = 1" strictly one after another).
   * **Analyse now** (right-click in the list or in the queue) moves tracks to the top.

@@ -60,6 +60,7 @@ _T: dict[str, tuple[str, str]] = {
     "fit": ("Passt", "Fits"),
     "delta_deck": ("zum Deck", "vs. deck"),
     "fit_same": ("Gleiche Tonart wie im Deck", "Same key as the deck"),
+    'analyzing_now': ('Wird gerade analysiert', 'Being analysed right now'),
     "fit_near": ("Harmonischer Nachbar zum Deck (±1 oder Dur/Moll)", "Harmonic neighbour of the deck (±1 or relative)"),
     "fit_none": ("Passt harmonisch nicht zum Deck", "Does not mix harmonically with the deck"),
     "in_deck": ("im Deck", "in deck"),

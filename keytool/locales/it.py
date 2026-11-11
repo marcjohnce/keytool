@@ -44,6 +44,7 @@ STRINGS: dict[str, str] = {
     "fit": "Compat.",
     "delta_deck": "vs deck",
     "fit_same": "Stessa tonalità del deck",
+    "analyzing_now": 'In analisi',
     "fit_near": "Vicina armonica del deck (±1 o relativa)",
     "fit_none": "Non si mixa armonicamente con il deck",
     "in_deck": "nel deck",
