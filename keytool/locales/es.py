@@ -3,7 +3,6 @@
 STRINGS: dict[str, str] = {
     # deck, fit columns
     "deck": "Deck",
-    "load_deck": "Cargar en el deck",
     "album_artist": "Artista del álbum",
     "queue_busy_tip": "Análisis en curso: {running} activos, {waiting} en espera. Haz clic para abrir la cola.",
     "queue_idle_tip": "Abrir la cola de análisis",
@@ -35,9 +34,6 @@ STRINGS: dict[str, str] = {
     "mik_done": "Mixed In Key: {updated} pistas actualizadas, {added} añadidas, {keywords} palabras clave asignadas",
     "mik_error": "No se pudo leer la biblioteca de Mixed In Key: {e}",
     "from_mik": "de Mixed In Key",
-    "filter_artist": "Filtrar por artista",
-    "filter_album": "Filtrar por álbum",
-    "filter_key": "Filtrar por tonalidad",
     "details_toggle": "Detalles",
     "details_toggle_tip": "Mostrar/ocultar el panel con metadatos, información del archivo y palabras clave "
                           "(Ctrl+I)",
@@ -63,7 +59,8 @@ STRINGS: dict[str, str] = {
     "reanalyze": "Volver a analizar",
     "write_tags": "Escribir etiquetas en el archivo",
     "remove": "Quitar de la biblioteca",
-    "cleanup": "Quitar archivos que faltan",
+    "filter_by": "Filtrar por",
+    "filter_key_semitones": "Tonalidad ±1 semitono",
     "settings": "Ajustes",
     "theme_light": "Modo claro",
     "theme_dark": "Modo oscuro",
@@ -117,7 +114,6 @@ STRINGS: dict[str, str] = {
                       "uno, solo ese se completa con el análisis. «Volver a analizar» siempre analiza.",
     "reset_manual": "Restablecer valores manuales",
     "open_folder": "Mostrar en el Explorador",
-    "copy_path": "Copiar ruta",
     "tag_values": "En las etiquetas del archivo",
     # status
     "st_ok": "analizado",
@@ -201,7 +197,6 @@ STRINGS: dict[str, str] = {
     "keyword_new_name": "Nuevo nombre:",
     "rename": "Renombrar …",
     "delete_everywhere": "Quitar en todas partes",
-    "filter_by": "Filtrar por esto",
     "about": "Acerca de",
     # analysis queue
     "queue": "Cola",
@@ -272,7 +267,6 @@ STRINGS: dict[str, str] = {
                      "los archivos",
     # Karaoke-Version research
     "research": "Buscar en Karaoke-Version",
-    "research_similar": "Buscar pistas compatibles en Karaoke-Version",
     'research_title': 'Buscar en Karaoke-Version',
     "research_extend": "Añadir tonalidades armónicas",
     "research_none": "Elige al menos una tonalidad o un rango de BPM.",

@@ -38,3 +38,40 @@ def test_key_block_stays_put(tmp_path, monkeypatch, lang):
         p.deleteLater(); app.processEvents()
     finally:
         set_language("de")
+
+
+@pytest.mark.parametrize("notation", ["camelot", "sharps", "flats", "openkey"])
+def test_key_chip_has_one_width(tmp_path, monkeypatch, notation):
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path))
+    app = QApplication.instance() or QApplication([])
+    import keytool.gui.player as pl
+    monkeypatch.setattr(pl, "HAVE_MULTIMEDIA", False)
+    from keytool.config import Settings
+    from keytool.keys import all_keys
+    p = pl.PlayerPanel(Settings())
+    p.set_notation(notation)
+    p.show(); app.processEvents()
+    widths = set()
+    for k in list(all_keys()) + [None]:
+        p.set_track(dict(id=1, path="/x.mp3", title="T", artist="A", key=k.code if k else None, bpm=120.0))
+        app.processEvents()
+        widths.add(p.key_chip.width())
+    assert len(widths) == 1, widths
+    from PySide6.QtGui import QFontMetrics
+    fm = QFontMetrics(p.key_chip.big)
+    assert widths.pop() >= max(fm.horizontalAdvance(k.format(notation)) for k in all_keys()) + 30
+    p.deleteLater(); app.processEvents()
+
+
+def test_transpose_buttons_without_zero(tmp_path, monkeypatch):
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path))
+    app = QApplication.instance() or QApplication([])
+    import keytool.gui.player as pl
+    monkeypatch.setattr(pl, "HAVE_MULTIMEDIA", False)
+    from keytool.config import Settings
+    p = pl.PlayerPanel(Settings())
+    p.set_track(dict(id=1, path="/x.mp3", title="T", artist="A", key=Key.parse("8A").code, bpm=120.0))
+    assert [p.tp_buttons[s].text() for s in (-1, 0, 1)] == ["−1  1A", "8A", "+1  3A"]
+    p.set_track(dict(id=2, path="/y.mp3", title="T", artist="A", key=None, bpm=120.0))
+    assert [p.tp_buttons[s].text() for s in (-1, 0, 1)] == ["−1", "–", "+1"]
+    p.deleteLater(); app.processEvents()

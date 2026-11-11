@@ -511,9 +511,15 @@ class MainWindow(QMainWindow, Translatable):
     def filter_by_album(self, row: dict):
         self.f_album.setText(row.get("album") or "")
 
-    def filter_by_key(self, row: dict):
+    def filter_by_key(self, row: dict, semitones: bool = False):
+        """Key filter = the track's key; with semitones also the keys 1 semitone lower and higher."""
         if row.get("key"):
-            self.f_keys.set_selected([row["key"]])
+            codes = [row["key"]]
+            if semitones:
+                from ..keys import Key
+                k = Key.from_code(row["key"])
+                codes += [k.transpose(-1).code, k.transpose(1).code]
+            self.f_keys.set_selected(codes)
 
     def set_details_visible(self, on: bool):
         """Show/hide the right sidebar; the track list takes the freed space. Remembered across starts."""
@@ -841,36 +847,39 @@ class MainWindow(QMainWindow, Translatable):
 
     # ------------------------------------------------------------------ context menu
     def table_menu(self, pos):
+        menu = self.build_track_menu()
+        if menu is not None:
+            menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def build_track_menu(self) -> QMenu | None:
+        """Context menu of the track list:
+        Play | Filter by > Artist, Album, Key, Key ±1 semitone | Analyse now, Re-analyse, Write tags,
+        Reset manual values, Add keyword | Remove from library."""
         rows = self.selected_rows()
         if not rows:
-            return
+            return None
+        r0 = self._menu_row()
         m = QMenu(self)
         m.addAction("▶  " + tr("play"), lambda: self.load_into_deck(autoplay=True))
-        m.addAction(tr("load_deck"), self.load_into_deck)
+        m.addSeparator()
+        fm = m.addMenu(tr("filter_by"))
+        a = fm.addAction(tr("artist"), lambda: self.filter_by_artist(r0))
+        a.setEnabled(bool(r0 and r0.get("artist")))
+        a = fm.addAction(tr("album"), lambda: self.filter_by_album(r0))
+        a.setEnabled(bool(r0 and r0.get("album")))
+        a = fm.addAction(tr("key"), lambda: self.filter_by_key(r0))
+        a.setEnabled(bool(r0 and r0.get("key")))
+        a = fm.addAction(tr("filter_key_semitones"), lambda: self.filter_by_key(r0, semitones=True))
+        a.setEnabled(bool(r0 and r0.get("key")))
         m.addSeparator()
         m.addAction("⚡  " + tr("analyze_now"), self.analyze_now_selected)
         m.addAction(tr("reanalyze"), self.reanalyze_selected)
         m.addAction(tr("write_tags"), self.write_tags_selected)
         m.addAction(tr("reset_manual"), lambda: (self.lib.reset_manual(self.selected_ids()), self.reanalyze_selected()))
-        m.addAction("🔎  " + tr("research_similar"), lambda: self.open_research(True))
-        m.addSeparator()
-        r0 = self._menu_row()
-        a = m.addAction(tr("filter_artist"), lambda: self.filter_by_artist(r0))
-        a.setEnabled(bool(r0 and r0.get("artist")))
-        a = m.addAction(tr("filter_album"), lambda: self.filter_by_album(r0))
-        a.setEnabled(bool(r0 and r0.get("album")))
-        a = m.addAction(tr("filter_key"), lambda: self.filter_by_key(r0))
-        a.setEnabled(bool(r0 and r0.get("key")))
-        m.addSeparator()
         m.addAction(tr("add_keyword"), self._prompt_keywords)
         m.addSeparator()
-        if len(rows) == 1:
-            m.addAction(tr("open_folder"), lambda: self.reveal(rows[0]["path"]))
-            m.addAction(tr("copy_path"), lambda: QApplication.clipboard().setText(rows[0]["path"]))
-            m.addSeparator()
-        m.addAction(tr("cleanup"), self.remove_missing)
         m.addAction(tr("remove"), self.remove_selected)
-        m.exec(self.table.viewport().mapToGlobal(pos))
+        return m
 
     def _prompt_keywords(self):
         text, ok = QInputDialog.getText(self, tr("keywords"), tr("add_keyword"))

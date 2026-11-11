@@ -3,7 +3,6 @@
 STRINGS: dict[str, str] = {
     # deck, fit columns
     "deck": "Deck",
-    "load_deck": "Carica nel deck",
     "album_artist": "Artista dell'album",
     "queue_busy_tip": "Analisi in corso: {running} attive, {waiting} in attesa. Fai clic per aprire la coda.",
     "queue_idle_tip": "Apri la coda di analisi",
@@ -31,9 +30,6 @@ STRINGS: dict[str, str] = {
     "mik_done": 'Mixed In Key: {updated} brani aggiornati, {added} aggiunti, {keywords} parole chiave assegnate',
     "mik_error": 'Impossibile leggere la libreria Mixed In Key: {e}',
     "from_mik": 'da Mixed In Key',
-    "filter_artist": "Filtra per artista",
-    "filter_album": "Filtra per album",
-    "filter_key": "Filtra per tonalità",
     "details_toggle": "Dettagli",
     "details_toggle_tip": "Mostra/nascondi il pannello con metadati, info file e parole chiave (Ctrl+I)",
     "analysis_menu": "Analizza",
@@ -58,7 +54,8 @@ STRINGS: dict[str, str] = {
     "reanalyze": "Rianalizza",
     "write_tags": "Scrivi i tag nel file",
     "remove": "Rimuovi dalla libreria",
-    "cleanup": "Rimuovi i file mancanti",
+    "filter_by": "Filtra per",
+    "filter_key_semitones": "Tonalità ±1 semitono",
     "settings": "Impostazioni",
     "theme_light": "Modalità chiara",
     "theme_dark": "Modalità scura",
@@ -112,7 +109,6 @@ STRINGS: dict[str, str] = {
                       "solo quello viene completato dall'analisi. «Rianalizza» analizza sempre.",
     "reset_manual": "Ripristina i valori manuali",
     "open_folder": "Mostra in Esplora file",
-    "copy_path": "Copia percorso",
     "tag_values": "Nei tag del file",
     # status
     "st_ok": "analizzato",
@@ -192,7 +188,6 @@ STRINGS: dict[str, str] = {
     "keyword_new_name": "Nuovo nome:",
     "rename": "Rinomina …",
     "delete_everywhere": "Rimuovi ovunque",
-    "filter_by": "Filtra per questo",
     "about": "Informazioni",
     # analysis queue
     "queue": "Coda",
@@ -262,7 +257,6 @@ STRINGS: dict[str, str] = {
     "s_write_edits": "Scrivi i metadati modificati (titolo, artista, album, genere, commento, energia) nei file",
     # Karaoke-Version research
     "research": "Cerca su Karaoke-Version",
-    "research_similar": "Trova brani compatibili su Karaoke-Version",
     'research_title': 'Cerca su Karaoke-Version',
     "research_extend": "Aggiungi tonalità armoniche",
     "research_none": "Scegli almeno una tonalità o un intervallo di BPM.",
