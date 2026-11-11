@@ -135,7 +135,8 @@ def test_context_menu_order(win):
     m = win.build_track_menu()
     items = [("-" if a.isSeparator() else a.text()) for a in m.actions()]
     assert items == ["▶  " + tr("play"), "-", tr("filter_by"), "-", "⚡  " + tr("analyze_now"), tr("reanalyze"),
-                     tr("write_tags"), tr("reset_manual"), tr("add_keyword"), "-", tr("remove")]
+                     tr("write_tags"), tr("reset_manual"), tr("sec_delete_selected"), tr("add_keyword"), "-",
+                     tr("remove")]
     sub = m.actions()[2].menu()
     assert [a.text() for a in sub.actions()] == [tr("artist"), tr("album"), tr("key"), tr("filter_key_semitones")]
     sub.actions()[3].trigger()                                    # A1 is 8A -> 8A, 1A (−1), 3A (+1)

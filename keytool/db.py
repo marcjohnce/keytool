@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS tracks (
     bitrate         INTEGER,
     cue_count       INTEGER,            -- Serato cue points in the file; NULL = not read yet
     sections        TEXT,               -- song sections as JSON (structure.py); NULL = not analysed
+    sections_manual INTEGER DEFAULT 0,  -- sections edited by hand: an analysis does not replace them
     status          TEXT DEFAULT 'pending',
     error           TEXT DEFAULT '',
     added_at        REAL,
@@ -63,7 +64,7 @@ CREATE INDEX IF NOT EXISTS ix_keywords_kw ON keywords(keyword COLLATE NOCASE);
 TRACK_COLUMNS = [
     "id", "path", "folder", "filename", "ext", "size", "mtime", "title", "artist", "album", "album_artist", "year",
     "genre", "duration", "bpm", "bpm_confidence", "key", "key_confidence", "bpm_manual", "key_manual",
-    "tag_bpm", "tag_key", "bpm_source", "key_source", "comment", "energy", "bitrate", "cue_count", "sections", "status", "error", "added_at", "analyzed_at", "analyzed_ok_at",
+    "tag_bpm", "tag_key", "bpm_source", "key_source", "comment", "energy", "bitrate", "cue_count", "sections", "sections_manual", "status", "error", "added_at", "analyzed_at", "analyzed_ok_at",
 ]
 
 SORTABLE = {"title", "artist", "album", "year", "bpm", "key", "duration", "added_at", "filename", "genre", "energy",
@@ -120,7 +121,8 @@ class Database:
                           ("analyzed_ok_at", "REAL"),
                           ("album_artist", "TEXT"),       # NULL = not read yet (filled lazily from the file)
                           ("cue_count", "INTEGER"),       # NULL = not read yet (filled in the background)
-                          ("sections", "TEXT")):          # NULL = not analysed yet
+                          ("sections", "TEXT"),           # NULL = not analysed yet
+                          ("sections_manual", "INTEGER DEFAULT 0")):   # edited by hand: analysis keeps them
             if col not in cols:
                 c.execute(f"ALTER TABLE tracks ADD COLUMN {col} {decl}")
         # path_key: case-insensitive lookup key on Windows. Older libraries stored the path itself in lower
@@ -198,7 +200,7 @@ class Database:
     def ids_needing_sections(self) -> list[int]:
         """Analysed tracks without song sections, or with sections from the first detection (no "conf")."""
         return [r[0] for r in self.conn().execute(
-            "SELECT id FROM tracks WHERE status='ok' AND (sections IS NULL OR "
+            "SELECT id FROM tracks WHERE status='ok' AND NOT COALESCE(sections_manual, 0) AND (sections IS NULL OR "
             "(sections <> '[]' AND sections NOT LIKE '%\"conf\"%')) ORDER BY id")]
 
     def update_track(self, track_id: int, **fields_: Any) -> None:
@@ -224,7 +226,7 @@ class Database:
             upd.update(key=result.get("key"), key_confidence=result.get("key_confidence"), key_source="analysis")
         if result.get("duration") and not t["duration"]:
             upd["duration"] = result["duration"]
-        if result.get("sections") is not None:
+        if result.get("sections") is not None and not t.get("sections_manual"):   # edited by hand: kept
             import json
             upd["sections"] = json.dumps(result["sections"], separators=(",", ":"))
         self.update_track(track_id, **upd)

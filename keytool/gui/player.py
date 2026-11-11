@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QStyle,
 
 from ..i18n import fmt_number, tr
 from ..keys import Key
+from .. import section_edit as se
 from .widgets import Translatable, fmt_duration
 
 try:
@@ -242,6 +243,9 @@ class WaveformView(QWidget):
     seek_requested = Signal(float)    # fraction 0..1
     cue_clicked = Signal(int)         # exact cue position in ms
     section_clicked = Signal(int)     # start of the clicked song section in ms
+    sections_edited = Signal(list)    # song sections changed by hand (complete new list)
+    cues_edited = Signal(list)        # cue points changed by hand (complete new list of serato.Cue)
+    redetect_requested = Signal()     # "detect the sections again" for the loaded track
     STRIP = 18                        # height of the section-name strip below the waveform
 
     def __init__(self, parent=None):
@@ -261,6 +265,10 @@ class WaveformView(QWidget):
         self.loops = []               # serato.Loop
         self.sections: list[dict] = []   # song sections (structure.py); empty = not analysed / none found
         self._flag_rects: list = []   # (QRectF, cue) for click / hover
+        self.editable = False         # a library track is loaded: cues and sections can be edited
+        self._bdrag: int | None = None    # section whose start is being dragged
+        self._cdrag: list | None = None   # [cue, press x, moved?] while a cue flag is held
+        self._edit_before: list = []
 
     # one muted hue per group (A, B, C ...): same part = same colour; the Camelot colours stay the loud ones
     SECTION_HUES = (205, 30, 150, 275, 95, 340, 180, 55)
@@ -305,6 +313,8 @@ class WaveformView(QWidget):
         self.update()
 
     def clear(self, message: str = ""):
+        self.editable = False
+        self._bdrag = self._cdrag = None
         self.cues, self.loops = [], []
         self.sections = []
         self.peaks = self.colors = None
@@ -398,7 +408,7 @@ class WaveformView(QWidget):
                 col = QColor(pal.color(pal.ColorRole.Text))
                 col.setAlpha((235 if playing else 175) - (60 if unsure else 0))
                 p.setPen(col)
-                label = tr(f"sec_{sec['label']}") + ("?" if unsure else "")
+                label = se.display_name(sec, tr) + ("?" if unsure else "")
                 name = fm.elidedText(label, Qt.ElideRight, int(x1 - x0 - 8))
                 p.drawText(QRectF(x0 + 4, h, x1 - x0 - 6, full - h), Qt.AlignLeft | Qt.AlignVCenter, name)
             p.setFont(self.font())
@@ -452,6 +462,9 @@ class WaveformView(QWidget):
     def _frac(self, x: float) -> float:
         return min(max((x - 4) / max(1, self.width() - 8), 0.0), 1.0)
 
+    def _x_of(self, seconds: float) -> float:
+        return 4 + seconds / self.duration * (self.width() - 8) if self.duration else 4.0
+
     def _cue_at(self, pos):
         """Cue under the mouse: its flag, or anywhere within 5 px of its line (nearest one wins)."""
         for rect, cue in self._flag_rects:
@@ -464,38 +477,210 @@ class WaveformView(QWidget):
                 best, dist = cue, d
         return best
 
+    def _boundary_at(self, pos) -> int | None:
+        """Index of the section whose start line (not the first) is within 4 px, in the name strip."""
+        if not (self.editable and self.sections and self.duration) or pos.y() < self._wave_height():
+            return None
+        for i, sec in enumerate(self.sections[1:], 1):
+            if abs(pos.x() - self._x_of(sec["start"])) <= 4:
+                return i
+        return None
+
+    def _grid_anchor(self) -> float:
+        """A time that lies on a bar line: a detected section boundary, else the first cue, else 0."""
+        starts = [s["start"] for s in self.sections if s["start"] > 0]
+        if starts:
+            return starts[0]
+        return self.cues[0].position_ms / 1000.0 if self.cues else 0.0
+
+    def snap(self, seconds: float, beats: int, free: bool = False) -> float:
+        """Round to the beat grid (beats=4: bars) from the tempo; free (Alt held) or no tempo: unchanged."""
+        if free or not self.bpm or not self.duration:
+            return min(max(seconds, 0.0), self.duration)
+        step = beats * 60.0 / float(self.bpm)
+        a = self._grid_anchor()
+        t = a + round((seconds - a) / step) * step
+        if t > self.duration:
+            t -= step
+        if t < 0:
+            t += step
+        return min(max(t, 0.0), self.duration)
+
+    @staticmethod
+    def _free(e) -> bool:
+        return bool(e.modifiers() & Qt.AltModifier) if hasattr(e, "modifiers") else False
+
+    # editing: every change goes out as the complete new list (sections_edited / cues_edited)
+    def edit_sections(self, sections: list[dict]):
+        self.sections = list(sections)
+        self.update()
+        self.sections_edited.emit(list(sections))
+
+    def edit_cues(self, cues: list):
+        self.cues = sorted(cues, key=lambda c: c.index)
+        self.update()
+        self.cues_edited.emit(list(self.cues))
+
+    def add_cue_at(self, seconds: float):
+        from ..serato import FREE_COLORS, Cue, next_free_slot
+        slot = next_free_slot(self.cues)
+        if slot is not None:
+            self.edit_cues(self.cues + [Cue(slot, int(round(seconds * 1000)), FREE_COLORS[slot])])
+
+    def move_cue(self, index: int, ms: int):
+        from dataclasses import replace
+        self.edit_cues([replace(c, position_ms=int(ms)) if c.index == index else c for c in self.cues])
+
+    def rename_cue(self, index: int, name: str):
+        from dataclasses import replace
+        self.edit_cues([replace(c, name=name.strip()) if c.index == index else c for c in self.cues])
+
+    def delete_cue(self, index: int):
+        self.edit_cues([c for c in self.cues if c.index != index])
+
+    def _ask_cue_name(self, cue):
+        from PySide6.QtWidgets import QInputDialog
+        text, ok = QInputDialog.getText(self, tr("cue_rename"), tr("cue_name_prompt", n=cue.index + 1), text=cue.name)
+        if ok:
+            self.rename_cue(cue.index, text)
+
+    def _ask_section_name(self, i: int):
+        from PySide6.QtWidgets import QInputDialog
+        from ..structure import LABELS
+        names = [tr(f"sec_{l}") for l in LABELS]
+        cur = se.display_name(self.sections[i], tr)
+        text, ok = QInputDialog.getItem(self, tr("sec_rename"), tr("sec_name_prompt"), names,
+                                        names.index(cur) if cur in names else 0, True)
+        if ok and text.strip():
+            text = text.strip()
+            if text in names:
+                self.edit_sections(se.rename(self.sections, i, label=LABELS[names.index(text)]))
+            else:
+                self.edit_sections(se.rename(self.sections, i, name=text))
+
+    def _confirm(self, text: str) -> bool:
+        from PySide6.QtWidgets import QMessageBox
+        return QMessageBox.question(self, tr("app_title"), text) == QMessageBox.Yes
+
+    def build_menu(self, pos, free: bool = False):
+        """Right-click menu for the position under the mouse (cue points and song sections)."""
+        from PySide6.QtWidgets import QMenu
+        from ..serato import next_free_slot
+        from ..structure import LABELS
+        m = QMenu(self)
+        t = self._frac(pos.x()) * self.duration
+        cue = self._cue_at(pos)
+        if cue is not None:
+            n = cue.index + 1
+            m.addAction(tr("cue_rename_n", n=n), lambda: self._ask_cue_name(cue))
+            m.addAction(tr("cue_delete_n", n=n), lambda: self.delete_cue(cue.index))
+        else:
+            full = next_free_slot(self.cues) is None
+            a = m.addAction(tr("cue_add_full") if full else tr("cue_add_here"),
+                            lambda: self.add_cue_at(self.snap(t, 1, free)))
+            a.setEnabled(not full)                              # Serato has 8 hot cue slots
+        if self.cues:
+            m.addAction(tr("cue_delete_all"),
+                        lambda: self._confirm(tr("cue_delete_all_ask")) and self.edit_cues([]))
+        m.addSeparator()
+        i = se.index_at(self.sections, t) if self.sections else None
+        if i is not None:
+            sec = self.sections[i]
+            rn = m.addMenu(tr("sec_rename_as", name=se.display_name(sec, tr)))
+            for lab in LABELS:
+                act = rn.addAction(tr(f"sec_{lab}"), lambda lab=lab, i=i: self.edit_sections(se.rename(self.sections, i, label=lab)))
+                act.setCheckable(True)
+                act.setChecked(sec["label"] == lab and not sec.get("name"))
+            rn.addSeparator()
+            rn.addAction(tr("sec_custom_name"), lambda i=i: self._ask_section_name(i))
+            bt = self.snap(t, 4, free)
+            a = m.addAction(tr("sec_split_here"), lambda: self.edit_sections(se.split(self.sections, bt)))
+            a.setEnabled(se.split(self.sections, bt) != self.sections)
+            m.addAction(tr("sec_delete_one", name=se.display_name(sec, tr)),
+                        lambda i=i: self.edit_sections(se.delete(self.sections, i)))
+            m.addAction(tr("sec_delete_all"),
+                        lambda: self._confirm(tr("sec_delete_all_ask")) and self.edit_sections([]))
+        else:
+            bt = self.snap(t, 4, free)
+            m.addAction(tr("sec_create"), lambda: self.edit_sections(
+                se.split([], bt, self.duration) if 1.0 <= bt <= self.duration - 1.0 else se.create(self.duration)))
+        m.addAction(tr("sec_redetect"), self.redetect_requested.emit)
+        return m
+
+    def contextMenuEvent(self, e):
+        if not (self.editable and self.peaks is not None and self.duration):
+            return
+        from PySide6.QtGui import QGuiApplication
+        free = bool(QGuiApplication.keyboardModifiers() & Qt.AltModifier)
+        self.build_menu(QPointF(e.pos()), free).exec(e.globalPos())
+
+    def mouseDoubleClickEvent(self, e):
+        if not (self.editable and self.peaks is not None) or e.button() != Qt.LeftButton:
+            return
+        sec = self.section_in_strip(e.position())
+        cue = None if sec is not None else self._cue_at(e.position())
+        if sec is not None:
+            self._ask_section_name(self.sections.index(sec))
+        elif cue is not None:
+            self._ask_cue_name(cue)
+
     def mousePressEvent(self, e):
-        sec = self.section_in_strip(e.position()) if self.peaks is not None else None
-        if sec is not None and e.button() == Qt.LeftButton:     # name strip: jump to the section's start
+        if self.peaks is None or e.button() != Qt.LeftButton:
+            return
+        b = self._boundary_at(e.position())
+        if b is not None:                                       # drag a section boundary
+            self._bdrag = b
+            self._edit_before = self.sections
+            return
+        sec = self.section_in_strip(e.position())
+        if sec is not None:                                     # name strip: jump to the section's start
             self.set_position(sec["start"] / self.duration)
             self.section_clicked.emit(int(round(sec["start"] * 1000)))
             return
-        cue = self._cue_at(e.position()) if self.peaks is not None else None
-        if cue is not None and e.button() == Qt.LeftButton:
-            if self.duration:
-                self.set_position(cue.position_ms / (self.duration * 1000.0))
-            self.cue_clicked.emit(cue.position_ms)
+        cue = self._cue_at(e.position())
+        if cue is not None:                                     # cue: jump on release, drag to move
+            self._cdrag = [cue, e.position().x(), False]
             return
-        if self.peaks is not None and e.button() == Qt.LeftButton:
-            self._drag = True
-            f = self._frac(e.position().x())
-            self.set_position(f)
-            self.seek_requested.emit(f)
+        self._drag = True
+        f = self._frac(e.position().x())
+        self.set_position(f)
+        self.seek_requested.emit(f)
 
     def mouseMoveEvent(self, e):
         if self.peaks is None:
             return
-        self.hover = self._frac(e.position().x())
-        sec = None if self._drag else self.section_in_strip(e.position())
-        cue = None if sec is not None else self._cue_at(e.position())
-        if sec is not None:
-            self.setToolTip(tr("sec_tip").format(name=tr(f"sec_{sec['label']}"), group=sec["group"],
+        pos = e.position()
+        self.hover = self._frac(pos.x())
+        free = self._free(e)
+        if self._bdrag is not None:
+            self.sections = se.move_boundary(self._edit_before, self._bdrag,
+                                             self.snap(self.hover * self.duration, 4, free))
+            self.update()
+            return
+        if self._cdrag is not None:
+            cue, x0, moved = self._cdrag
+            if self.editable and (moved or abs(pos.x() - x0) > 3):
+                from dataclasses import replace
+                ms = int(round(self.snap(self.hover * self.duration, 1, free) * 1000))
+                self._cdrag[2] = True
+                self.cues = [replace(c, position_ms=ms) if c.index == cue.index else c for c in self.cues]
+                self.update()
+            return
+        b = None if self._drag else self._boundary_at(pos)
+        sec = None if (self._drag or b is not None) else self.section_in_strip(pos)
+        cue = None if (sec is not None or b is not None) else self._cue_at(pos)
+        if b is not None:
+            self.setToolTip(tr("sec_drag_tip"))
+            self.setCursor(Qt.SizeHorCursor)
+        elif sec is not None:
+            self.setToolTip(tr("sec_tip").format(name=se.display_name(sec, tr), group=sec["group"],
                                                  start=fmt_time(sec["start"] * 1000), end=fmt_time(sec["end"] * 1000),
                                                  conf=int(round(100 * float(sec.get("conf", 1.0))))))
             self.setCursor(Qt.PointingHandCursor)
         elif cue is not None:
             name = f" – {cue.name}" if cue.name else ""
-            self.setToolTip(f"Cue {cue.index + 1}{name} · {fmt_time(cue.position_ms)}")
+            self.setToolTip(f"Cue {cue.index + 1}{name} · {fmt_time(cue.position_ms)}"
+                            + ("\n" + tr("cue_drag_tip") if self.editable else ""))
             self.setCursor(Qt.PointingHandCursor)
         else:
             loop = next((l for l in self.loops if self.duration and
@@ -511,6 +696,19 @@ class WaveformView(QWidget):
 
     def mouseReleaseEvent(self, _):
         self._drag = False
+        if self._bdrag is not None:
+            before, self._bdrag = self._edit_before, None
+            if self.sections != before:
+                self.edit_sections(self.sections)
+            return
+        if self._cdrag is not None:
+            cue, _, moved = self._cdrag
+            self._cdrag = None
+            if moved:
+                self.edit_cues(self.cues)
+            elif self.duration:
+                self.set_position(cue.position_ms / (self.duration * 1000.0))
+                self.cue_clicked.emit(cue.position_ms)
 
     def leaveEvent(self, _):
         self.hover = None
@@ -684,6 +882,9 @@ class PlayerPanel(QWidget, Translatable):
     next_requested = Signal(bool)
     deck_changed = Signal()           # loaded track, its key/bpm or the transposition changed
     cues_read = Signal(str, int)      # path, number of cue points found in the loaded file
+    sections_edited = Signal(int, list)   # track id, song sections changed by hand in the waveform
+    cues_edited = Signal(int, list)       # track id, cue points changed by hand (to be written into the file)
+    redetect_sections = Signal(int)       # track id: detect the song sections again
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
@@ -809,6 +1010,9 @@ class PlayerPanel(QWidget, Translatable):
         self.wave.seek_requested.connect(self.seek_fraction)
         self.wave.cue_clicked.connect(self.seek_ms)
         self.wave.section_clicked.connect(self.seek_ms)
+        self.wave.sections_edited.connect(self._sections_edited)
+        self.wave.cues_edited.connect(self._cues_edited)
+        self.wave.redetect_requested.connect(lambda: self.row and self.redetect_sections.emit(self.row["id"]))
         root.addWidget(self.wave)
 
         self.player = None
@@ -1013,6 +1217,7 @@ class PlayerPanel(QWidget, Translatable):
             self.wave.clear("⚠ " + tr("file_missing"))
             return
         self.wave.clear(tr("waveform_loading"))
+        self.wave.editable = row.get("id") is not None                   # library track: cues/sections editable
         self.wave.set_sections(parse_sections(row.get("sections")))      # nothing shown if not analysed
         self.pool.start(_WaveformJob(self.path, self.emitter))
         self.source_file = None
@@ -1125,6 +1330,49 @@ class PlayerPanel(QWidget, Translatable):
 
     def _cue_positions(self) -> list[int]:
         return sorted({c.position_ms for c in self.markers.cues}) if self.markers else []
+
+    # -- editing in the waveform
+    def _sections_edited(self, sections: list):
+        if self.row and self.row.get("id") is not None:
+            import json
+            self.row = dict(self.row, sections=json.dumps(sections, separators=(",", ":")), sections_manual=1)
+            self.sections_edited.emit(self.row["id"], sections)
+
+    def _cues_edited(self, cues: list):
+        from ..serato import SeratoMarkers
+        if self.markers is None:
+            self.markers = SeratoMarkers()
+        self.markers.cues = list(cues)
+        self._update_cue_buttons()
+        self._update_title()
+        if self.row and self.row.get("id") is not None:
+            self.cues_edited.emit(self.row["id"], list(cues))
+
+    def run_on_file(self, path: str, fn):
+        """Run fn (e.g. writing tags) on a file; if the player holds the file open (Windows locks it), let go of
+        it for the write and continue at the same position afterwards."""
+        try:
+            return fn()
+        except OSError:
+            if self.player is None or self.source_file is None or \
+                    os.path.normcase(self.source_file) != os.path.normcase(path):
+                raise
+        pos, playing = self._position_ms(), self.is_playing()
+        self.player.stop()
+        self.player.setSource(QUrl())
+        self.source_file = None
+        try:
+            return fn()
+        finally:
+            self._want_play = False
+            self._switch_source(path, keep_position=False)
+            self._pending = (pos, playing) if (pos or playing) else None
+
+    def reload_markers(self):
+        """Read the cue points of the loaded file again (e.g. after a failed write)."""
+        if self.path:
+            from ..serato import read_serato_markers
+            self._markers_ready(self.path, read_serato_markers(self.path))
 
     def _update_cue_buttons(self):
         """Cue buttons work only when the loaded track has cue points."""

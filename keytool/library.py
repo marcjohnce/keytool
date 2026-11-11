@@ -191,13 +191,14 @@ class Library:
 
     @staticmethod
     def needs_sections(t: dict) -> bool:
-        return t.get("sections") is None
+        return t.get("sections") is None and not t.get("sections_manual")
 
     def submit_args(self, t: dict, keep_tag_values: bool = True, sections_only: bool = False) -> tuple | None:
         """Arguments for worker_fn, or None if nothing has to be analysed. Song sections are detected with
         every analysis (re-analysis: again); sections_only = just the sections (tracks analysed before)."""
         do_bpm, do_key = (False, False) if sections_only else self.job_parts(t, keep_tag_values)
-        do_sections = sections_only or do_bpm or do_key or not keep_tag_values or self.needs_sections(t)
+        do_sections = (sections_only or do_bpm or do_key or not keep_tag_values or self.needs_sections(t)) \
+            and not t.get("sections_manual")          # sections edited by hand are kept
         if not (do_bpm or do_key or do_sections):
             return None
         s = self.settings
@@ -411,7 +412,35 @@ class Library:
 
     def reset_manual(self, track_ids: Iterable[int]) -> None:
         for tid in track_ids:
-            self.db.update_track(tid, bpm_manual=0, key_manual=0, status="pending")
+            self.db.update_track(tid, bpm_manual=0, key_manual=0, sections_manual=0, status="pending")
+
+    # ----------------------------------------------------------- editing sections and cue points
+    def set_sections(self, track_id: int, sections: list[dict]) -> None:
+        """Song sections edited by hand; an analysis does not replace them ("reset manual values" does)."""
+        import json
+        self.db.update_track(track_id, sections=json.dumps(sections or [], separators=(",", ":")),
+                             sections_manual=1)
+
+    def clear_sections(self, track_ids: Iterable[int]) -> None:
+        """Delete the song sections; they stay deleted until they are detected again on request."""
+        for tid in track_ids:
+            self.db.update_track(tid, sections="[]", sections_manual=1)
+
+    def allow_section_detection(self, track_ids: Iterable[int]) -> None:
+        """Release hand-edited / deleted sections so the next analysis detects them again."""
+        for tid in track_ids:
+            self.db.update_track(tid, sections_manual=0)
+
+    def set_cues(self, track_id: int, cues: list) -> int:
+        """Write Serato hot cues into the file (see serato.write_cues); returns the number of cues."""
+        from .serato import write_cues
+        t = self.db.get_track(track_id)
+        if not t:
+            raise KeyError(track_id)
+        write_cues(t["path"], list(cues))
+        st = os.stat(t["path"])
+        self.db.update_track(track_id, size=st.st_size, mtime=st.st_mtime, cue_count=len(cues))
+        return len(cues)
 
     # ----------------------------------------------------------- queries
     def search(self, q: Query) -> list[dict]:

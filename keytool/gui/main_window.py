@@ -270,6 +270,9 @@ class MainWindow(QMainWindow, Translatable):
         self.player = PlayerPanel(self.s)
         self.player.deck_changed.connect(self.update_deck)
         self.player.cues_read.connect(self._deck_cues_read)
+        self.player.sections_edited.connect(self._deck_sections_edited)
+        self.player.cues_edited.connect(self._deck_cues_edited)
+        self.player.redetect_sections.connect(self.redetect_sections)
         self.table.doubleClicked.connect(lambda idx: self.load_into_deck(autoplay=True, track_id=idx.data(ID_ROLE)))
         for k in (Qt.Key_Return, Qt.Key_Enter):
             QShortcut(QKeySequence(k), self.table, activated=lambda: self.load_into_deck(autoplay=True),
@@ -641,7 +644,15 @@ class MainWindow(QMainWindow, Translatable):
     def analyze_sections(self):
         """Song sections for the selected tracks, or for every analysed track that has none yet (or only
         sections from the first detection, which had no confidence values)."""
-        ids = self.selected_ids() or self.lib.db.ids_needing_sections()
+        ids = self.selected_ids()
+        if ids:                     # explicitly chosen: also tracks whose sections were edited by hand
+            manual = [t for t in self.lib.db.get_tracks(ids) if t.get("sections_manual") and t.get("sections") != "[]"]
+            if manual and QMessageBox.question(self, tr("app_title"), tr("sec_redetect_manual_ask", n=len(manual))) \
+                    != QMessageBox.Yes:
+                ids = [i for i in ids if i not in {t["id"] for t in manual}]
+            self.lib.allow_section_detection(ids)
+        else:
+            ids = self.lib.db.ids_needing_sections()
         self.enqueue(ids, keep_tag_values=True, sections_only=True)
 
     def analyze_now_selected(self):
@@ -885,6 +896,7 @@ class MainWindow(QMainWindow, Translatable):
         m.addAction(tr("reanalyze"), self.reanalyze_selected)
         m.addAction(tr("write_tags"), self.write_tags_selected)
         m.addAction(tr("reset_manual"), lambda: (self.lib.reset_manual(self.selected_ids()), self.reanalyze_selected()))
+        m.addAction(tr("sec_delete_selected"), self.clear_sections_selected)
         m.addAction(tr("add_keyword"), self._prompt_keywords)
         m.addSeparator()
         m.addAction(tr("remove"), self.remove_selected)
@@ -992,6 +1004,46 @@ class MainWindow(QMainWindow, Translatable):
                 r["cue_count"] = n
                 idx = self.model.index(i, col)
                 self.model.dataChanged.emit(idx, idx)
+
+    def _update_rows(self, track_id: int, **values):
+        """Change a few values of one list row in place (no full refresh)."""
+        for i, r in enumerate(self.model.rows):
+            if r["id"] == track_id:
+                r.update(values)
+                self.model.dataChanged.emit(self.model.index(i, 0), self.model.index(i, self.model.columnCount() - 1))
+
+    def _deck_sections_edited(self, track_id: int, sections: list):
+        """Song sections edited in the deck waveform: stored as hand-edited (an analysis keeps them)."""
+        import json
+        self.lib.set_sections(track_id, sections)
+        self._update_rows(track_id, sections=json.dumps(sections, separators=(",", ":")), sections_manual=1)
+
+    def _deck_cues_edited(self, track_id: int, cues: list):
+        """Cue points edited in the deck waveform: written into the file's Serato tag."""
+        t = self.lib.db.get_track(track_id)
+        if not t:
+            return
+        try:
+            n = self.player.run_on_file(t["path"], lambda: self.lib.set_cues(track_id, cues))
+        except Exception as e:
+            QMessageBox.warning(self, tr("app_title"), tr("cue_write_failed", file=t["filename"], error=str(e)))
+            self.player.reload_markers()          # show what is really in the file
+            return
+        self._update_rows(track_id, cue_count=n)
+
+    def redetect_sections(self, track_id: int):
+        """Detect the song sections of a track again (also after editing or deleting them by hand)."""
+        self.lib.allow_section_detection([track_id])
+        self.enqueue([track_id], keep_tag_values=True, sections_only=True)
+
+    def clear_sections_selected(self):
+        ids = self.selected_ids()
+        if not ids:
+            return
+        self.lib.clear_sections(ids)
+        for tid in ids:
+            self._update_rows(tid, sections="[]", sections_manual=1)
+        self.sync_deck()
 
     def _deck_cues_read(self, path: str, n: int):
         """The deck read the cue points of its file anyway: keep the stored count up to date."""

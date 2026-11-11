@@ -228,3 +228,127 @@ def dump_vorbis_value(m: SeratoMarkers) -> str:
     wrapped = _MIME_HEADER + b"\x00" + b"Serato Markers2\x00" + dump_tag_data(m)
     b64 = base64.b64encode(wrapped).rstrip(b"=")
     return b"\n".join(b64[i:i + 72] for i in range(0, len(b64), 72)).decode("ascii")
+
+
+# ------------------------------------------------------------------ writing cue points into files
+def _split_entries(payload: bytes) -> list[tuple[str, bytes]]:
+    """Decoded Markers2 content -> [(name, raw payload)] in file order, every entry type kept as it is."""
+    if payload[:2] != b"\x01\x01":
+        raise ValueError("not a Serato Markers2 payload")
+    out, pos, n = [], 2, len(payload)
+    while pos < n:
+        end = payload.find(b"\x00", pos)
+        if end < 0 or end == pos:
+            break
+        name = payload[pos:end].decode("ascii", "replace")
+        pos = end + 1
+        if pos + 4 > n:
+            break
+        (length,) = struct.unpack(">I", payload[pos:pos + 4])
+        out.append((name, payload[pos + 4:pos + 4 + length]))
+        pos += 4 + length
+    return out
+
+
+def _cue_payload(c: Cue, old: bytes | None = None) -> bytes:
+    """CUE entry; bytes we do not interpret (e.g. after the name) are kept from the old entry."""
+    body = (b"\x00" + bytes([c.index]) + struct.pack(">I", max(0, int(c.position_ms))) + b"\x00"
+            + bytes.fromhex(c.color.lstrip("#")[:6].ljust(6, "0")) + b"\x00\x00" + c.name.encode("utf-8") + b"\x00")
+    if old and len(old) >= 12:
+        rest = old[12:].split(b"\x00", 1)
+        if len(rest) == 2 and rest[1]:
+            body += rest[1]
+    return body
+
+
+def replace_cues(payload: bytes | None, cues: list[Cue]) -> bytes:
+    """New decoded Markers2 content with these hot cues. Loops, colours, flips and unknown entries stay
+    byte for byte and in their order; the cues go where the first cue was (else after COLOR)."""
+    entries = _split_entries(payload) if payload else []
+    old_cues = {e[1][1]: e[1] for e in entries if e[0] == "CUE" and len(e[1]) >= 2}
+    new = [("CUE", _cue_payload(c, old_cues.get(c.index))) for c in sorted(cues, key=lambda c: c.index)]
+    first = next((i for i, e in enumerate(entries) if e[0] == "CUE"), None)
+    kept = [e for e in entries if e[0] != "CUE"]
+    if first is None:
+        first = next((i + 1 for i, e in enumerate(kept) if e[0] == "COLOR"), 0)
+    else:
+        first = sum(1 for e in entries[:first] if e[0] != "CUE")
+    entries = kept[:first] + new + kept[first:]
+    return b"\x01\x01" + b"".join(n.encode("ascii") + b"\x00" + struct.pack(">I", len(d)) + d
+                                  for n, d in entries) + b"\x00"
+
+
+def _encode_tag_data(payload: bytes) -> bytes:
+    b64 = bytearray(base64.b64encode(payload).replace(b"=", b"A"))
+    i = 72
+    while i < len(b64):
+        b64.insert(i, 0x0A)
+        i += 73
+    data = b"\x01\x01" + bytes(b64)
+    return data + b"\x00" * max(1, 470 - len(data))
+
+
+def _encode_vorbis(payload: bytes) -> str:
+    wrapped = _MIME_HEADER + b"\x00" + b"Serato Markers2\x00" + _encode_tag_data(payload)
+    b64 = base64.b64encode(wrapped).rstrip(b"=")
+    return "\n".join(b64[i:i + 72].decode("ascii") for i in range(0, len(b64), 72))
+
+
+def _decoded(data: bytes) -> bytes | None:
+    """Raw tag data (GEOB, or MIME-wrapped) -> decoded Markers2 content."""
+    if data.startswith(_MIME_HEADER):
+        data = data[len(_MIME_HEADER) + 1:]
+        data = data.split(b"\x00", 1)[1] if b"\x00" in data else data
+    if data[:2] != b"\x01\x01":
+        return None
+    return _b64decode_lenient(data[2:].split(b"\x00", 1)[0])
+
+
+def write_cues(path: str, cues: list[Cue]) -> None:
+    """Write Serato hot cues into the file's "Serato Markers2" tag (Serato DJ, Mixed In Key and KeyTool read
+    it). Everything else in that tag (loops, track colour, flips ...) and all other tags stay as they are.
+    Supported: MP3, WAV, AIFF (ID3 GEOB), FLAC, Ogg (Vorbis comment), M4A/MP4 (freeform atom)."""
+    import mutagen
+
+    f = mutagen.File(path)
+    if f is None:
+        raise ValueError(f"unsupported file: {os.path.basename(path)}")
+    if f.tags is None:
+        f.add_tags()
+    tags = f.tags
+    if hasattr(tags, "getall"):                                       # ID3: MP3, WAV, AIFF
+        from mutagen.id3 import GEOB
+        old = next((fr.data for fr in tags.getall("GEOB") if fr.desc == "Serato Markers2"), None)
+        payload = replace_cues(_decoded(old) if old else None, cues)
+        for key in [k for k, fr in tags.items() if k.startswith("GEOB") and fr.desc == "Serato Markers2"]:
+            del tags[key]
+        tags.add(GEOB(encoding=0, mime="application/octet-stream", filename="", desc="Serato Markers2",
+                      data=_encode_tag_data(payload)))
+    elif type(tags).__name__ == "MP4Tags":
+        from mutagen.mp4 import MP4FreeForm
+        key = "----:com.serato.dj:markersv2"
+        v = tags.get(key)
+        old = _decoded(_b64decode_lenient(bytes(v[0]))) if v else None
+        tags[key] = [MP4FreeForm(_encode_vorbis(replace_cues(old, cues)).encode("ascii"))]
+    else:                                                             # Vorbis comments: FLAC, Ogg
+        key, old = "SERATO_MARKERS_V2", None
+        for k in ("SERATO_MARKERS_V2", "serato_markers_v2", "serato_markers2", "SERATO_MARKERS2"):
+            try:
+                v = tags.get(k)
+            except Exception:
+                v = None
+            if v:
+                key = k
+                raw = v[0].encode("ascii", "ignore") if isinstance(v[0], str) else bytes(v[0])
+                old = _decoded(raw if raw[:2] == b"\x01\x01" else _b64decode_lenient(raw))
+                break
+        tags[key] = [_encode_vorbis(replace_cues(old, cues))]
+    f.save()
+
+
+FREE_COLORS = ("#cc0000", "#cc8800", "#0000cc", "#cccc00", "#00cc00", "#cc00cc", "#00cccc", "#8800cc")  # Serato slots 1-8
+
+
+def next_free_slot(cues: list[Cue]) -> int | None:
+    used = {c.index for c in cues}
+    return next((i for i in range(8) if i not in used), None)
