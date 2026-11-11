@@ -178,6 +178,8 @@ class SettingsDialog(QDialog):
         row(v, tr("s_use_tags_short"), tr("s_use_tags_tip"), self.use_tags)
         self.reanalyze = check(settings.reanalyze_existing)
         row(v, tr("s_reanalyze_short"), tr("sd_reanalyze"), self.reanalyze)
+        self.detect_sections = check(settings.detect_sections)
+        row(v, tr("s_sections_short"), tr("sd_sections"), self.detect_sections)
         v.addStretch(1)
 
         # ---------------- files & tags
@@ -294,5 +296,6 @@ class SettingsDialog(QDialog):
         s.write_edits = self.write_edits.isChecked()
         s.tag_key_notation = self.tag_notation.currentData()
         s.reanalyze_existing = self.reanalyze.isChecked()
+        s.detect_sections = self.detect_sections.isChecked()
         s.retag_patterns = self.pattern_lines()
         s.save()

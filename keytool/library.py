@@ -197,8 +197,9 @@ class Library:
         """Arguments for worker_fn, or None if nothing has to be analysed. Song sections are detected with
         every analysis (re-analysis: again); sections_only = just the sections (tracks analysed before)."""
         do_bpm, do_key = (False, False) if sections_only else self.job_parts(t, keep_tag_values)
-        do_sections = (sections_only or do_bpm or do_key or not keep_tag_values or self.needs_sections(t)) \
-            and not t.get("sections_manual")          # sections edited by hand are kept
+        # with every analysis only if switched on in the settings; "Analyse song sections" works anyway
+        auto = (do_bpm or do_key or not keep_tag_values or self.needs_sections(t)) and self.settings.detect_sections
+        do_sections = (sections_only or auto) and not t.get("sections_manual")   # hand-edited ones are kept
         if not (do_bpm or do_key or do_sections):
             return None
         s = self.settings

@@ -253,3 +253,16 @@ def test_section_strip_click_jumps_to_section_start(tmp_path, monkeypatch):
     w.mouseMoveEvent(Ev(100, y_strip))
     assert "100" not in w.toolTip() and "90" in w.toolTip()                     # verse, 90 % sure
     w.deleteLater(); app.processEvents()
+
+
+def test_setting_switches_off_sections_with_every_analysis(lib):
+    from keytool.db import Query
+    t = lib.search(Query())[0]
+    lib.settings.detect_sections = False
+    args = lib.submit_args(t)
+    assert args[3] and args[4] and args[-1] is False                         # BPM + key, no sections
+    assert lib.submit_args(t, sections_only=True)[-1] is True                 # the menu command works anyway
+    lib.db.update_track(t["id"], bpm=120, bpm_source="tags", key="9:min", key_source="tags")
+    assert lib.submit_args(lib.db.get_track(t["id"])) is None                 # nothing left to do
+    lib.settings.detect_sections = True
+    assert lib.submit_args(lib.db.get_track(t["id"]))[-1] is True             # on: missing sections count
