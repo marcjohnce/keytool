@@ -308,7 +308,8 @@ class WaveformView(QWidget):
         self.update()
 
     def set_markers(self, markers):
-        self.cues = list(markers.cues) if markers else []
+        from ..serato import number_by_position
+        self.cues = number_by_position(markers.cues) if markers else []      # numbered by position
         self.loops = list(markers.loops) if markers else []
         self.update()
 
@@ -517,7 +518,8 @@ class WaveformView(QWidget):
         self.sections_edited.emit(list(sections))
 
     def edit_cues(self, cues: list):
-        self.cues = sorted(cues, key=lambda c: c.index)
+        from ..serato import number_by_position
+        self.cues = number_by_position(cues)          # numbers follow the position in the track
         self.update()
         self.cues_edited.emit(list(self.cues))
 
@@ -531,18 +533,8 @@ class WaveformView(QWidget):
         from dataclasses import replace
         self.edit_cues([replace(c, position_ms=int(ms)) if c.index == index else c for c in self.cues])
 
-    def rename_cue(self, index: int, name: str):
-        from dataclasses import replace
-        self.edit_cues([replace(c, name=name.strip()) if c.index == index else c for c in self.cues])
-
     def delete_cue(self, index: int):
         self.edit_cues([c for c in self.cues if c.index != index])
-
-    def _ask_cue_name(self, cue):
-        from PySide6.QtWidgets import QInputDialog
-        text, ok = QInputDialog.getText(self, tr("cue_rename"), tr("cue_name_prompt", n=cue.index + 1), text=cue.name)
-        if ok:
-            self.rename_cue(cue.index, text)
 
     def _ask_section_name(self, i: int):
         from PySide6.QtWidgets import QInputDialog
@@ -572,7 +564,6 @@ class WaveformView(QWidget):
         cue = self._cue_at(pos)
         if cue is not None:
             n = cue.index + 1
-            m.addAction(tr("cue_rename_n", n=n), lambda: self._ask_cue_name(cue))
             m.addAction(tr("cue_delete_n", n=n), lambda: self.delete_cue(cue.index))
         else:
             full = next_free_slot(self.cues) is None
@@ -618,11 +609,8 @@ class WaveformView(QWidget):
         if not (self.editable and self.peaks is not None) or e.button() != Qt.LeftButton:
             return
         sec = self.section_in_strip(e.position())
-        cue = None if sec is not None else self._cue_at(e.position())
         if sec is not None:
             self._ask_section_name(self.sections.index(sec))
-        elif cue is not None:
-            self._ask_cue_name(cue)
 
     def mousePressEvent(self, e):
         if self.peaks is None or e.button() != Qt.LeftButton:
@@ -1294,6 +1282,9 @@ class PlayerPanel(QWidget, Translatable):
 
     def _markers_ready(self, path: str, markers):
         if path == self.path:
+            if markers:
+                from ..serato import number_by_position
+                markers.cues = number_by_position(markers.cues)     # cue n = n-th cue in the track
             self.markers = markers
             self.wave.set_markers(markers)
             self._update_cue_buttons()

@@ -349,6 +349,14 @@ def write_cues(path: str, cues: list[Cue]) -> None:
 FREE_COLORS = ("#cc0000", "#cc8800", "#0000cc", "#cccc00", "#00cc00", "#cc00cc", "#00cccc", "#8800cc")  # Serato slots 1-8
 
 
+def number_by_position(cues: list[Cue]) -> list[Cue]:
+    """KeyTool numbers cue points by their position in the track: the first cue is 1 (slot 0), and so on.
+    Serato has 8 hot cue slots, so at most 8 cues are kept."""
+    from dataclasses import replace
+    ordered = sorted(cues, key=lambda c: (c.position_ms, c.index))[:8]
+    return [replace(c, index=i) for i, c in enumerate(ordered)]
+
+
 def next_free_slot(cues: list[Cue]) -> int | None:
     used = {c.index for c in cues}
     return next((i for i in range(8) if i not in used), None)

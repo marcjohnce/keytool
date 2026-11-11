@@ -301,3 +301,26 @@ def test_main_window_stores_edits(tmp_path, monkeypatch):
     assert lib.db.get_track(tid)["sections_manual"] == 0
     win._cue_cancel.set()
     win.player.shutdown(); win.queue.shutdown(); win.deleteLater(); app.processEvents()
+
+
+def test_cues_are_numbered_by_position(wave):
+    from keytool.serato import number_by_position
+    got = number_by_position([Cue(5, 30000, "#cc0000", "late"), Cue(0, 20000, "#00cc00"), Cue(2, 5000, "#0000cc")])
+    assert [(c.index, c.position_ms) for c in got] == [(0, 5000), (1, 20000), (2, 30000)]
+    assert got[2].name == "late" and got[2].color == "#cc0000"               # name and colour stay with the cue
+    assert len(number_by_position([Cue(i, i * 100, "#cc0000") for i in range(10)])) == 8   # Serato: 8 slots
+    wave.set_markers(SeratoMarkers(cues=[Cue(3, 30000, "#cc0000"), Cue(1, 10000, "#cc0000")]))
+    assert [(c.index, c.position_ms) for c in wave.cues] == [(0, 10000), (1, 30000)]
+    moved = []
+    wave.cues_edited.connect(moved.append)
+    wave.grab()
+    wave.mousePressEvent(Ev(x(10), 20))                                     # cue 1 dragged behind cue 2
+    wave.mouseMoveEvent(Ev(x(40), 20))
+    wave.mouseReleaseEvent(None)
+    assert [(c.index, c.position_ms) for c in moved[-1]] == [(0, 30000), (1, 40000)]
+    wave.add_cue_at(5.0)                                                     # new first cue: all move up
+    assert [(c.index, c.position_ms) for c in moved[-1]] == [(0, 5000), (1, 30000), (2, 40000)]
+    from PySide6.QtCore import QPointF
+    from keytool.i18n import tr
+    assert not any("…" in a.text() and "Cue 1" in a.text()
+                   for a in wave.build_menu(QPointF(x(5), 10)).actions())     # no rename entry any more
