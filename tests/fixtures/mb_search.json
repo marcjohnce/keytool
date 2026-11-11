@@ -1,0 +1,20 @@
+{
+  "created": "2026-11-11T10:00:00.000Z",
+  "count": 3,
+  "offset": 0,
+  "recordings": [
+    {"id": "x1", "score": 100, "title": "Low Tide Signals", "length": 400000,
+     "artist-credit": [{"name": "Kora", "joinphrase": " feat. ", "artist": {"name": "Kora"}},
+                       {"name": "Selva", "joinphrase": "", "artist": {"name": "Selva"}}],
+     "releases": [{"id": "r9", "title": "Low Tide Signals (Remixes)", "status": "Official", "date": "2023-02-01"}]},
+    {"id": "x2", "score": 100, "title": "Low Tide Signals", "length": 268500,
+     "first-release-date": "2022-05-06",
+     "artist-credit": [{"name": "Kora", "joinphrase": " feat. ", "artist": {"name": "Kora"}},
+                       {"name": "Selva", "joinphrase": "", "artist": {"name": "Selva"}}],
+     "tags": [{"name": "deep house", "count": 1}],
+     "releases": [{"id": "r8", "title": "Dawn Patrol", "status": "Official", "date": "2022-05-06",
+                   "artist-credit": [{"name": "Kora", "joinphrase": ""}],
+                   "release-group": {"primary-type": "Album"}}]},
+    {"id": "x3", "score": 62, "title": "Low Tide", "artist-credit": [{"name": "Someone Else", "joinphrase": ""}]}
+  ]
+}

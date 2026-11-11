@@ -113,6 +113,13 @@ class _SpinBoxInset(QObject):
 _spin_inset: _SpinBoxInset | None = None
 
 
+def _mix(a: str, b: str, t: float) -> str:
+    """Colour between a and b (t = share of b)."""
+    ca, cb = QColor(a), QColor(b)
+    return QColor(round(ca.red() + (cb.red() - ca.red()) * t), round(ca.green() + (cb.green() - ca.green()) * t),
+                  round(ca.blue() + (cb.blue() - ca.blue()) * t)).name()
+
+
 def apply_theme(app: QApplication, name: str) -> dict:
     global _spin_inset
     if _spin_inset is None:
@@ -176,6 +183,16 @@ def apply_theme(app: QApplication, name: str) -> dict:
         QAbstractSpinBox::up-arrow, QAbstractSpinBox::down-arrow {{ width: 0px; height: 0px; }}
         QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus, QTextEdit:focus, QPlainTextEdit:focus {{
             border-color: {c['accent']}; }}
+        /* Auto re-tag: fields holding a suggestion, and the summary above them */
+        QLineEdit[suggested="true"], QComboBox[suggested="true"] {{ border-color: {c['accent']};
+            background: {_mix(c['base'], c['accent'], 0.12)}; }}
+        QLabel#retagBanner {{ background: {_mix(c['base'], c['accent'], 0.14)}; border: 1px solid {c['accent']};
+            border-radius: 8px; padding: 8px 10px; color: {c['text']}; }}
+        QLabel#retagSource {{ color: {c['accent']}; font-size: 8.5pt; font-weight: 600; }}
+        QLabel#retagWas {{ color: {c['dim']}; font-size: 8.5pt; }}
+        QPushButton#retagUndo {{ border: none; background: transparent; color: {c['dim']}; padding: 0px 4px;
+            min-height: 0px; font-size: 11pt; }}
+        QPushButton#retagUndo:hover {{ color: {c['text']}; }}
         QPushButton {{ background: {c['button']}; border: 1px solid {c['border']}; border-radius: 8px; padding: 7px 14px; }}
         QPushButton:hover {{ background: {c['hover']}; }}
         QPushButton:focus {{ border-color: {c['accent']}; }}
