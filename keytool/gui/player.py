@@ -936,27 +936,41 @@ class CircleButton(QPushButton):
 
 
 class KeyChip(QWidget):
-    """Large key label on its Camelot colour (the deck's memorable element)."""
+    """Large key label on its Camelot colour (the deck's memorable element): the key on the left, its name
+    ("A minor") small at the bottom right. One width for every key (see fit_to)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         from .theme import styled_font
+        from PySide6.QtGui import QFont
         self.code: str | None = None
         self.text = "–"
+        self.name = ""
         self.dark = True
         self.big = styled_font(self.font(), size=27, weight=800, width=125)   # painted, not styled by the QSS
+        self.small = QFont(self.font()); self.small.setPointSizeF(10.5); self.small.setWeight(QFont.DemiBold)
         self.setFixedHeight(56)
         self.fit_to(["12A"])
 
-    def fit_to(self, texts):
-        """One width for every key: as wide as the widest label of the notation in use."""
+    def code_width(self, texts) -> int:
         from PySide6.QtGui import QFontMetrics
         fm = QFontMetrics(self.big)
-        self.setFixedWidth(max(70, max(fm.horizontalAdvance(t) for t in list(texts) + ["–"]) + 30))
+        return max(fm.horizontalAdvance(t) for t in list(texts) + ["–"])
 
-    def set_key(self, code: str | None, text: str):
-        self.code, self.text = code, text or "–"
+    def fit_to(self, texts, width: int = 0):
+        """One width for every key: at least the widest label of the notation in use, else `width`
+        (the deck passes the width of the transposition buttons below the chip)."""
+        self.setFixedWidth(max(70, self.code_width(texts) + 30, width))
+
+    def set_key(self, code: str | None, text: str, name: str = ""):
+        self.code, self.text, self.name = code, text or "–", name
         self.update()
+
+    def shown_name(self) -> str:
+        """The key name as painted (shortened with "…" if it does not fit next to the key)."""
+        from PySide6.QtGui import QFontMetrics
+        room = self.width() - QFontMetrics(self.big).horizontalAdvance(self.text) - 14 - 12 - 10
+        return QFontMetrics(self.small).elidedText(self.name, Qt.ElideRight, max(0, room)) if self.name else ""
 
     def paintEvent(self, _):
         from .theme import CHIP_TEXT, camelot_color
@@ -969,9 +983,15 @@ class KeyChip(QWidget):
         else:
             p.setPen(QPen(self.palette().color(self.palette().ColorRole.Mid), 1)); p.setBrush(Qt.NoBrush)
         p.drawRoundedRect(r, 10, 10)
+        ink = QColor(CHIP_TEXT) if col is not None else self.palette().color(self.palette().ColorRole.PlaceholderText)
         p.setFont(self.big)
-        p.setPen(CHIP_TEXT if col is not None else self.palette().color(self.palette().ColorRole.PlaceholderText))
-        p.drawText(r, Qt.AlignCenter, self.text)
+        p.setPen(ink)
+        p.drawText(r.adjusted(14, 0, 0, 0), Qt.AlignLeft | Qt.AlignVCenter, self.text)
+        name = self.shown_name()
+        if name:
+            ink.setAlpha(200)
+            p.setFont(self.small); p.setPen(ink)
+            p.drawText(r.adjusted(0, 0, -12, -9), Qt.AlignRight | Qt.AlignBottom, name)
 
 
 # =========================================================================== player panel
@@ -1082,10 +1102,9 @@ class PlayerPanel(QWidget, Translatable):
         self.tp_emitter.done.connect(self._transpose_done)
         keyb = QGridLayout(); keyb.setHorizontalSpacing(4); keyb.setVerticalSpacing(6)
         self.key_caption = QLabel(); self.key_caption.setObjectName("deckCaption")
-        self.key_chip = KeyChip()
-        self.key_name = QLabel(); self.key_name.setObjectName("deckArtist")
-        chip_row = QHBoxLayout(); chip_row.setSpacing(10)
-        chip_row.addWidget(self.key_chip); chip_row.addWidget(self.key_name, 0, Qt.AlignBottom); chip_row.addStretch(1)
+        self.key_chip = KeyChip()                 # key + its name, as wide as the transposition buttons
+        chip_row = QHBoxLayout(); chip_row.setSpacing(0)
+        chip_row.addWidget(self.key_chip); chip_row.addStretch(1)
         keyb.addWidget(self.key_caption, 0, 0, 1, 3)
         keyb.addLayout(chip_row, 1, 0, 1, 3)
         self.tp_group = QButtonGroup(self)
@@ -1216,30 +1235,19 @@ class PlayerPanel(QWidget, Translatable):
             QTimer.singleShot(0, self._fit_cover)
             QTimer.singleShot(0, self._refit)
 
-    KEY_NAME_MAX = 170          # px; longer key names are shortened with "…" (full name in the tooltip)
-
     def _fix_widths(self):
-        """Give the tempo column and the key name a fixed width for the current language and fonts, so the
-        deck does not shift when the tempo has two instead of three digits or the key name changes length."""
-        for lbl in (self.bpm_lbl, self.bpm_sub, self.tempo_caption, self.key_name):
+        """Give the tempo column a fixed width for the current language and fonts (the tempo is shown rounded,
+        so three digits), so the deck does not shift when the tempo has two instead of three digits."""
+        for lbl in (self.bpm_lbl, self.bpm_sub, self.tempo_caption):
             lbl.ensurePolished()
         num = self.bpm_lbl.fontMetrics()
         small = self.bpm_sub.fontMetrics()
-        w = max(num.horizontalAdvance(fmt_number(888.8)), num.horizontalAdvance("–"),
+        w = max(num.horizontalAdvance("888"), num.horizontalAdvance("–"),
                 small.horizontalAdvance(tr("bpm_energy", e=10)),
                 self.tempo_caption.fontMetrics().horizontalAdvance(self.tempo_caption.text())) + 4
         for lbl in (self.tempo_caption, self.bpm_lbl, self.bpm_sub):
             lbl.setFixedWidth(w)
-        fm = self.key_name.fontMetrics()
-        longest = max(fm.horizontalAdvance(f"{Key(pc, minor).long_name(tr.lang)}, +1")
-                      for pc in range(12) for minor in (False, True))
-        self.key_name.setFixedWidth(min(self.KEY_NAME_MAX, longest + 2))
         self._fit_chip()
-
-    def _set_key_name(self, text: str):
-        fm = self.key_name.fontMetrics()
-        self.key_name.setText(fm.elidedText(text, Qt.ElideRight, self.key_name.width()))
-        self.key_name.setToolTip(text if self.key_name.text() != text else "")
 
     def set_dark(self, dark: bool):
         self.wave.dark = dark
@@ -1256,8 +1264,17 @@ class PlayerPanel(QWidget, Translatable):
         self._update_title()
 
     def _fit_chip(self):
+        """Transposition buttons: one width for every key of the notation; the chip above them is exactly as
+        wide as the three buttons together, so key and buttons form one block that never changes size."""
         from ..keys import all_keys
-        self.key_chip.fit_to([k.format(self.notation) for k in all_keys()])
+        codes = [k.format(self.notation) for k in all_keys()]
+        b0 = self.tp_buttons[0]
+        b0.ensurePolished()
+        fm = b0.fontMetrics()
+        bw = max(58, max(fm.horizontalAdvance(f"−1  {c}") for c in codes) + 18)
+        for b in self.tp_buttons.values():
+            b.setFixedWidth(bw)
+        self.key_chip.fit_to(codes, 3 * bw + 2 * 4)        # grid spacing 4 px
 
     def _update_title(self):
         r = self.row
@@ -1272,8 +1289,9 @@ class PlayerPanel(QWidget, Translatable):
             self.title.setText(tr("no_selection"))
             self.artist_lbl.setText("")
             self.key_chip.set_key(None, "")
-            self.key_name.setText("")
+            self.key_chip.setToolTip("")
             self.bpm_lbl.setText("–")
+            self.bpm_lbl.setToolTip("")
             self.bpm_sub.setText("")
             return
         self.title.setText(r.get("title") or r.get("filename") or "")
@@ -1286,14 +1304,16 @@ class PlayerPanel(QWidget, Translatable):
         self.artist_lbl.setToolTip(self.artist_lbl.text())
         playing_key = k.transpose(st) if (k and st) else k
         if playing_key:
-            self.key_chip.set_key(playing_key.code, playing_key.format(self.notation))
             name = playing_key.long_name(tr.lang)
-            self._set_key_name(name if not st else f"{name}, {st:+d}")
+            name = name if not st else f"{name}, {st:+d}"
+            self.key_chip.set_key(playing_key.code, playing_key.format(self.notation), name)
+            self.key_chip.setToolTip(name if self.key_chip.shown_name() != name else "")
         else:
             self.key_chip.set_key(None, "–")
-            self.key_name.setText("")
+            self.key_chip.setToolTip("")
         bpm = r.get("bpm")
-        self.bpm_lbl.setText(fmt_number(bpm) if bpm else "–")
+        self.bpm_lbl.setText(str(int(round(bpm))) if bpm else "–")          # rounded; exact in the tooltip
+        self.bpm_lbl.setToolTip(f"{fmt_number(bpm, 2)} BPM" if bpm else "")
         e = r.get("energy")
         self.bpm_sub.setText(tr("bpm_energy", e=e) if e else "BPM")
 

@@ -282,7 +282,7 @@ def main():
         (pos(d.play_btn, d, 0.5, 1.0, 0, -1), "Play / pause (Space)", "bottom"),
         (pos(d.zoom_lbl, d, 0.5, 0.0, 0, 1), "Waveform zoom (100 % = whole track); mouse wheel zooms, Shift+wheel scrolls", "top"),
         (pos(d.mute_btn, d, 0.5, 0.0, 0, 1), "Mute and volume", "top"),
-        (pos(d.key_chip, d, 0.5, 0.0, 0, 1), "Key of the deck, in the Camelot colour", "top"),
+        (pos(d.key_chip, d, 0.5, 0.0, 0, 1), "Key of the deck with its name, in the Camelot colour", "top"),
         (pos(d.tp_buttons[1], d, 0.5, 0.0, 0, 1), "Transpose −1 / +1 semitone at the original tempo (middle: original key)", "top"),
         (pos(d.bpm_lbl, d, 1.0, 0.5, -2), "Tempo", "right"),
         (pos(d.wave, d, 0.75, 1.0, 0, -24), "Waveform with Serato cue points: click a flag to jump, drag to move, right-click to add or delete; numbered by position", "bottom"),

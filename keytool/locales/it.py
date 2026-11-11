@@ -35,7 +35,7 @@ STRINGS: dict[str, str] = {
     "analysis_menu": "Analizza",
     "deck_caption": "Nel deck",
     "tempo_short": "Tempo",
-    "bpm_energy": "BPM, energia {e}",
+    "bpm_energy": "BPM · energia {e}",
     "time_of": "{a} di {b}",
     "fit": "Compat.",
     "delta_deck": "vs deck",
