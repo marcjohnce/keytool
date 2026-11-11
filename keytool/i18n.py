@@ -281,6 +281,8 @@ _T: dict[str, tuple[str, str]] = {
               "Not reachable: {names} – no suggestions from there."),
     "retag_src_discogs": ("Discogs",
               "Discogs"),
+    "retag_src_case": ("Groß-/Kleinschreibung",
+              "capitalisation"),
     "retag_tip": ("Schlägt Titel, Interpret, Album, Album-Interpret, Jahr und Genre vor – aus Discogs, dem ISRC-Code (MusicBrainz), einer MusicBrainz-Suche und dem Dateinamen. Speichern übernimmt die Vorschläge, Verwerfen holt die alten Werte zurück.",
               "Suggests title, artist, album, album artist, year and genre from Discogs, the ISRC code (MusicBrainz), a MusicBrainz search and the file name. Save takes the suggestions over, Discard brings back the old values."),
     "retag_running": ("Suche Tags …",

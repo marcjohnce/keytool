@@ -228,6 +228,7 @@ STRINGS: dict[str, str] = {
     'retag_btn': 'Tag automatici',
     'retag_unreachable': 'Non raggiungibile: {names} – mancano i suoi suggerimenti.',
     'retag_src_discogs': 'Discogs',
+    "retag_src_case": "maiuscole/minuscole",
     'retag_tip': "Suggerisce titolo, artista, album, artista dell'album, anno e genere da Discogs, dal codice ISRC (MusicBrainz), da una ricerca su MusicBrainz e dal nome del file. Salva accetta i suggerimenti, Annulla modifiche ripristina i valori precedenti.",
     'retag_running': 'Ricerca dei tag …',
     'retag_found': '{n} suggerimenti da: {sources}. Salva li accetta, Annulla modifiche ripristina i valori precedenti.',

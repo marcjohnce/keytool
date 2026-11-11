@@ -234,3 +234,64 @@ def test_panel_runs_in_background(panel, monkeypatch):
 def test_button_only_for_one_track(panel):
     panel.set_rows(panel.rows + [dict(panel.rows[0], id=8)])
     assert not panel.retag_btn.isEnabled()
+
+
+# --------------------------------------------------------------------------- capitalisation
+@pytest.mark.parametrize("text, expected", [
+    ("midnight avenue (extended mix) feat. kora", "Midnight Avenue (Extended Mix) feat. Kora"),
+    ("DON'T STOP ME NOW", "Don't Stop Me Now"),
+    ("hip-hop hooray", "Hip-Hop Hooray"),
+    ("rocky ii", "Rocky II"),
+    ("dj koze - pick up", "DJ Koze - Pick Up"),
+    ("kora x selva", "Kora x Selva"),
+    ("deep house", "Deep House"),
+])
+def test_smart_case(text, expected):
+    assert retag.bad_case(text) and retag.smart_case(text) == expected
+
+
+def test_single_upper_case_word_is_not_bad():
+    assert not retag.bad_case("MGMT") and not retag.bad_case("Glass Harbour") and not retag.bad_case("x")
+
+
+def _row(tmp_path, **kw):
+    f = _wav(tmp_path / "Mara Veil - Glass Harbour.wav")
+    row = dict(id=1, path=str(f), filename=f.name, title="", artist="", album="", album_artist=None, year=None,
+               genre="", duration=247.0)
+    row.update(kw)
+    return row
+
+
+def test_case_is_fixed_even_without_other_sources(tmp_path):
+    row = _row(tmp_path, title="glass harbour", artist="MARA VEIL BAND", album="Tidal Lines", genre="deep house",
+               year=2021)
+    got = {s.field: (s.value, s.source) for s in suggest(row, online=False).suggestions}
+    assert got == {"title": ("Glass Harbour", "filename"), "artist": ("Mara Veil Band", "case"),
+                   "genre": ("Deep House", "case")}   # title spelled so in the file name; "Tidal Lines" was fine
+
+
+def test_online_spelling_wins_and_confirms(tmp_path):
+    rec = json.loads((FIX / "mb_search.json").read_text())
+    rec["recordings"][1]["artist-credit"] = [{"name": "deadmau5", "joinphrase": ""}]
+    rec["recordings"][1]["title"] = "Low Tide SIGNALS"
+    row = _row(tmp_path, title="low tide signals", artist="deadmau5", duration=268.0)
+    res = suggest(row, mb=MusicBrainz(fetcher=Fake({"/recording?": json.dumps(rec)})), discogs=_no_discogs())
+    got = {s.field: (s.value, s.source) for s in res.suggestions}
+    assert got["title"] == ("Low Tide SIGNALS", "musicbrainz")         # the database's spelling, not a guess
+    assert "artist" not in got                                         # deadmau5 is confirmed as written
+
+
+def test_lower_case_path_from_an_old_library_gives_proper_case(tmp_path):
+    f = _wav(tmp_path / "Mara Veil - Glass Harbour.wav")
+    lower = str(f.parent / f.name.lower())                            # as stored by older KeyTool versions
+    row = dict(id=1, path=lower if os.path.exists(lower) else str(f), filename=f.name.lower(), title="",
+               artist="", album="", year=None, genre="")
+    got = {s.field: s.value for s in suggest(row, online=False).suggestions}
+    assert got == {"artist": "Mara Veil", "title": "Glass Harbour"}
+
+
+def test_all_lower_file_name_is_capitalised(tmp_path):
+    f = _wav(tmp_path / "mara veil - glass harbour.wav")
+    row = dict(id=1, path=str(f), filename=f.name, title="", artist="", album="", year=None, genre="")
+    got = {s.field: (s.value, s.source) for s in suggest(row, online=False).suggestions}
+    assert got == {"artist": ("Mara Veil", "filename"), "title": ("Glass Harbour", "filename")}
