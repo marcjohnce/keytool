@@ -142,3 +142,25 @@ def test_context_menu_order(win):
     sub.actions()[3].trigger()                                    # A1 is 8A -> 8A, 1A (−1), 3A (+1)
     from keytool.keys import Key
     assert sorted(Key.from_code(c).camelot() for c in win.f_keys.selected()) == ["1A", "3A", "8A"]
+
+
+def test_toolbar_has_no_context_menu(tmp_path, monkeypatch):
+    pytest.importorskip("PySide6")
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path / "data"))
+    QApplication.instance() or QApplication([])
+    import keytool.gui.player as pl
+    monkeypatch.setattr(pl, "HAVE_MULTIMEDIA", False)
+    from keytool.config import Settings
+    from keytool.db import Database
+    from keytool.gui.main_window import MainWindow
+    from keytool.library import Library
+    w = MainWindow(Library(Database(tmp_path / "lib.sqlite3"), Settings(write_tags=False)))
+    try:
+        assert w.createPopupMenu() is None
+        assert w.toolbar.contextMenuPolicy() == Qt.PreventContextMenu
+        assert not w.toolbar.toggleViewAction().isEnabled()
+    finally:
+        w._cue_cancel.set()
+        w.player.shutdown(); w.queue.shutdown(); w.deleteLater()
