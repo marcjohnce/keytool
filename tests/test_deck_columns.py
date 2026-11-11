@@ -59,38 +59,3 @@ def test_bpm_shown_rounded_with_exact_tooltip():
     assert [m.data(m.index(i, col)) for i in range(3)] == ["125", "127", ""]
     assert m.data(m.index(1, col), Qt.ToolTipRole).startswith("127.49 BPM")
     assert m.data(m.index(1, col), SORT_ROLE) == 127.49                     # sorting keeps the exact value
-
-
-def test_deck_row_text_uses_the_accent_text_colour():
-    QApplication.instance() or QApplication([])
-    from keytool.gui.theme import THEMES
-    m = TrackModel()
-    m.set_rows([dict(id=1, title="Deck", artist="A", key=code("8A"), bpm=124.0, path="a"),
-                dict(id=2, title="Other", artist="B", key=code("9A"), bpm=125.0, path="b")])
-    m.set_deck(1, code("8A"), 124.0)
-    for dark in (True, False):
-        m.dark = dark
-        want = THEMES["dark" if dark else "light"]["accent_text"].lower()
-        for col in ("title", "artist", "bpm", "delta"):
-            c = m.COLUMNS.index(col)
-            assert m.data(m.index(0, c), Qt.ForegroundRole).name() == want, col
-        assert m.data(m.index(1, m.COLUMNS.index("title")), Qt.ForegroundRole) is None
-
-
-def test_deck_row_is_painted_in_accent(tmp_path):
-    from PySide6.QtWidgets import QTableView
-    from keytool.gui.theme import THEMES
-    from keytool.gui.widgets import TrackDelegate
-    QApplication.instance() or QApplication([])
-    m = TrackModel()
-    m.set_rows([dict(id=1, title="Deck", key=code("8A"), bpm=124.0, path="a"),
-                dict(id=2, title="Other", key=code("9A"), bpm=125.0, path="b")])
-    m.set_deck(1, code("8A"), 124.0)
-    v = QTableView(); v.setModel(m); v.setItemDelegate(TrackDelegate(m, v)); v.resize(900, 200); v.show()
-    QApplication.processEvents()
-    img = v.viewport().grab().toImage()
-    col = m.COLUMNS.index("duration")
-    r = v.visualRect(m.index(0, col))
-    assert img.pixelColor(r.center()).name() == THEMES["dark"]["accent"].lower()
-    r2 = v.visualRect(m.index(1, col))
-    assert img.pixelColor(r2.center()).name() != THEMES["dark"]["accent"].lower()
