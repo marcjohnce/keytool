@@ -127,3 +127,17 @@ def test_toolbar_buttons_share_font_and_height(win):
     btn.setProperty("busy", True); btn.style().unpolish(btn); btn.style().polish(btn)
     QApplication.processEvents()
     assert len({b.sizeHint().height() for b in btns}) == 1
+
+
+def test_context_menu_order(win):
+    from keytool.i18n import tr
+    _click(win, "A1")
+    m = win.build_track_menu()
+    items = [("-" if a.isSeparator() else a.text()) for a in m.actions()]
+    assert items == ["▶  " + tr("play"), "-", tr("filter_by"), "-", "⚡  " + tr("analyze_now"), tr("reanalyze"),
+                     tr("write_tags"), tr("reset_manual"), tr("add_keyword"), "-", tr("remove")]
+    sub = m.actions()[2].menu()
+    assert [a.text() for a in sub.actions()] == [tr("artist"), tr("album"), tr("key"), tr("filter_key_semitones")]
+    sub.actions()[3].trigger()                                    # A1 is 8A -> 8A, 1A (−1), 3A (+1)
+    from keytool.keys import Key
+    assert sorted(Key.from_code(c).camelot() for c in win.f_keys.selected()) == ["1A", "3A", "8A"]

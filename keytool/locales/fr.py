@@ -3,7 +3,6 @@
 STRINGS: dict[str, str] = {
     # deck, fit columns
     "deck": "Deck",
-    "load_deck": "Charger dans le deck",
     "album_artist": "Artiste de l'album",
     "queue_busy_tip": "Analyse en cours : {running} active(s), {waiting} en attente. Cliquez pour ouvrir la file.",
     "queue_idle_tip": "Ouvrir la file d'analyse",
@@ -31,9 +30,6 @@ STRINGS: dict[str, str] = {
     "mik_done": 'Mixed In Key : {updated} morceaux mis à jour, {added} ajoutés, {keywords} mots-clés attribués',
     "mik_error": 'Impossible de lire la bibliothèque Mixed In Key : {e}',
     "from_mik": 'depuis Mixed In Key',
-    "filter_artist": "Filtrer par artiste",
-    "filter_album": "Filtrer par album",
-    "filter_key": "Filtrer par tonalité",
     "details_toggle": "Détails",
     "details_toggle_tip": "Afficher/masquer le panneau des métadonnées, infos fichier et mots-clés (Ctrl+I)",
     "analysis_menu": "Analyser",
@@ -58,7 +54,8 @@ STRINGS: dict[str, str] = {
     "reanalyze": "Réanalyser",
     "write_tags": "Écrire les tags dans le fichier",
     "remove": "Retirer de la bibliothèque",
-    "cleanup": "Retirer les fichiers introuvables",
+    "filter_by": "Filtrer par",
+    "filter_key_semitones": "Tonalité ±1 demi-ton",
     "settings": "Paramètres",
     "theme_light": "Mode clair",
     "theme_dark": "Mode sombre",
@@ -113,7 +110,6 @@ STRINGS: dict[str, str] = {
                       "toujours.",
     "reset_manual": "Réinitialiser les valeurs manuelles",
     "open_folder": "Afficher dans l'Explorateur",
-    "copy_path": "Copier le chemin",
     "tag_values": "Dans les tags du fichier",
     # status
     "st_ok": "analysé",
@@ -197,7 +193,6 @@ STRINGS: dict[str, str] = {
     "keyword_new_name": "Nouveau nom :",
     "rename": "Renommer …",
     "delete_everywhere": "Retirer partout",
-    "filter_by": "Filtrer par ceci",
     "about": "À propos",
     # analysis queue
     "queue": "File d'attente",
@@ -269,7 +264,6 @@ STRINGS: dict[str, str] = {
                      "les fichiers",
     # Karaoke-Version research
     "research": "Rechercher sur Karaoke-Version",
-    "research_similar": "Trouver des morceaux compatibles sur Karaoke-Version",
     'research_title': 'Rechercher sur Karaoke-Version',
     "research_extend": "Ajouter les tonalités harmoniques",
     "research_none": "Choisissez au moins une tonalité ou une plage de BPM.",

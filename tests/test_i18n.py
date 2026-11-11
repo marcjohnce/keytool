@@ -57,3 +57,16 @@ def test_numbers_dates_and_key_names():
     assert Key.parse("12A").long_name("es") == "Do sostenido menor"
     k = Key.parse("8A")
     assert (k.long_name("de"), k.long_name("fr"), k.long_name("it")) == ("a-Moll", "la mineur", "La minore")
+
+
+def test_no_duplicate_keys_in_string_tables():
+    """A key defined twice silently overrides the first one (that hid a new menu text once)."""
+    import ast
+    import collections
+    from pathlib import Path
+    root = Path(i18n.__file__).parent
+    for f in [root / "i18n.py", *sorted((root / "locales").glob("*.py"))]:
+        for node in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Dict) and len(node.keys) > 50:
+                c = collections.Counter(k.value for k in node.keys if isinstance(k, ast.Constant))
+                assert not [k for k, n in c.items() if n > 1], f.name

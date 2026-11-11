@@ -98,7 +98,7 @@ executables" → Run workflow.
   the deck shows the new values right away. ⏮/⏭ (Ctrl+←/→ or media keys) go from the deck track to the
   previous/next one in the current sort order and filter; after the first 3 seconds ⏮ restarts the track first.
   At the end of a track the next one plays; at the end of the list the player stops. Clicking the cover enlarges it.
-* **Transpose:** choose "−1 / 0 / +1" in the player. The track keeps playing while the transposed version is
+* **Transpose:** choose "−1" or "+1" in the player (the middle button, labelled with the original key, goes back). The track keeps playing while the transposed version is
   computed in the background (on all CPU cores; progress next to the time), then playback switches seamlessly at
   the same position. The tempo stays exactly the same; the display shows the new key (e.g. "8A → 3A (+1)"). The
   setting also applies to the next tracks; computed versions are cached (the last 12, in the data folder under
@@ -111,8 +111,7 @@ executables" → Run workflow.
   the "Serato Markers2" tag (format description: Holzhaus/serato-tags) and never changes it – not even when writing
   BPM, key or metadata. If tags are written during playback, the player releases the file briefly and continues at
   the same position.
-* **Karaoke-Version research** ("Search Karaoke-Version" in the toolbar or right-click "Find matching tracks on
-  Karaoke-Version"): choose keys on the Camelot wheel ("Add harmonic keys" adds the neighbours, a click in the centre clears all keys – as in the main window), set a BPM range and
+* **Karaoke-Version research** ("Search Karaoke-Version" in the toolbar): choose keys on the Camelot wheel ("Add harmonic keys" adds the neighbours, a click in the centre clears all keys – as in the main window), set a BPM range and
   click "Search in browser". The dialog is prefilled with the current key/BPM filter or with the key and BPM (±3 %)
   of the selected track, and shows which keys and which tempo range the search covers.
   * Karaoke-Version only serves search results to real web browsers (bot protection, Fastly "Client Challenge",
@@ -145,8 +144,9 @@ executables" → Run workflow.
 * **Drag tracks into other apps:** drag selected tracks (also several) from the list into a browser (e.g. an
   upload field), an audio player, Explorer or DJ software – the original files are passed on. Dragging them back
   into the KeyTool window does nothing.
-* **Context menu of the list:** play, load into deck, filter by artist / album / key, re-analyse, write tags, show
-  in Explorer, remove from library (the files themselves are never deleted).
+* **Context menu of the list:** Play · Filter by ▸ Artist / Album / Key / Key ±1 semitone · Analyse now,
+  Re-analyse, Write tags to file, Reset manual values, Add keyword · Remove from library (the files themselves are
+  never deleted). "Open folder" is in the details sidebar.
 * **Settings:** language, colour scheme, notation, BPM range, analysis method, automatic tag writing and which
   notation goes into the key tag (default: sharps, e.g. "F#m" – compatible with rekordbox/Serato/Traktor), MCP.
 
