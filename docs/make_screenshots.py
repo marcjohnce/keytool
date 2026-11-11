@@ -284,8 +284,8 @@ def main():
         (pos(d.key_chip, d, 0.5, 0.0, 0, 1), "Key of the deck, in the Camelot colour", "top"),
         (pos(d.tp_buttons[1], d, 0.5, 0.0, 0, 1), "Transpose −1 / +1 semitone at the original tempo (middle: original key)", "top"),
         (pos(d.bpm_lbl, d, 1.0, 0.5, -2), "Tempo", "right"),
-        (pos(d.wave, d, 0.75, 1.0, 0, -24), "Waveform with Serato cue points; click a flag to jump there", "bottom"),
-        (pos(d.wave, d, 0.02, 1.0, 30, -8), "Song sections: same colour = same part, \"?\" = unsure; click a name to jump there", "bottom"),
+        (pos(d.wave, d, 0.75, 1.0, 0, -24), "Waveform with Serato cue points: click a flag to jump, drag to move, right-click to add, rename or delete", "bottom"),
+        (pos(d.wave, d, 0.02, 1.0, 30, -8), "Song sections: same colour = same part, \"?\" = unsure; click a name to jump, drag a border, right-click to edit", "bottom"),
     ], "02-deck.png", "Deck")
 
     # 3) key filter ------------------------------------------------------------
