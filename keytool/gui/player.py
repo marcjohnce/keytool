@@ -693,6 +693,9 @@ class PlayerPanel(QWidget, Translatable):
         self.bpm_sub = QLabel(); self.bpm_sub.setObjectName("deckSmall")
         tempo.addWidget(self.tempo_caption); tempo.addWidget(self.bpm_lbl); tempo.addWidget(self.bpm_sub)
         tempo.addStretch(1)
+        # fixed width, right-aligned: a two-digit tempo must not move the key block (see _fix_widths)
+        for lbl in (self.tempo_caption, self.bpm_lbl, self.bpm_sub):
+            lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         top.addLayout(tempo, 0)
 
         self.wave = WaveformView()
@@ -733,6 +736,7 @@ class PlayerPanel(QWidget, Translatable):
         self.key_caption.setText(tr("key"))
         self.key_caption.setToolTip(tr("transpose"))
         self.tempo_caption.setText(tr("tempo_short"))
+        self._fix_widths()
         self.caption.setText(tr("deck_caption"))
         self.prev_btn.setToolTip(tr("prev_track") + " (Ctrl+←)")
         self.next_btn.setToolTip(tr("next_track") + " (Ctrl+→)")
@@ -771,12 +775,42 @@ class PlayerPanel(QWidget, Translatable):
     def showEvent(self, e):
         super().showEvent(e)
         QTimer.singleShot(0, self._fit_cover)
+        QTimer.singleShot(0, self._refit)
+
+    def _refit(self):
+        self._fix_widths()
+        self._update_title()
 
     def changeEvent(self, e):
         super().changeEvent(e)
         from PySide6.QtCore import QEvent
         if e.type() in (QEvent.FontChange, QEvent.StyleChange):
             QTimer.singleShot(0, self._fit_cover)
+            QTimer.singleShot(0, self._refit)
+
+    KEY_NAME_MAX = 170          # px; longer key names are shortened with "…" (full name in the tooltip)
+
+    def _fix_widths(self):
+        """Give the tempo column and the key name a fixed width for the current language and fonts, so the
+        deck does not shift when the tempo has two instead of three digits or the key name changes length."""
+        for lbl in (self.bpm_lbl, self.bpm_sub, self.tempo_caption, self.key_name):
+            lbl.ensurePolished()
+        num = self.bpm_lbl.fontMetrics()
+        small = self.bpm_sub.fontMetrics()
+        w = max(num.horizontalAdvance(fmt_number(888.8)), num.horizontalAdvance("–"),
+                small.horizontalAdvance(tr("bpm_energy", e=10)),
+                self.tempo_caption.fontMetrics().horizontalAdvance(self.tempo_caption.text())) + 4
+        for lbl in (self.tempo_caption, self.bpm_lbl, self.bpm_sub):
+            lbl.setFixedWidth(w)
+        fm = self.key_name.fontMetrics()
+        longest = max(fm.horizontalAdvance(f"{Key(pc, minor).long_name(tr.lang)}, +1")
+                      for pc in range(12) for minor in (False, True))
+        self.key_name.setFixedWidth(min(self.KEY_NAME_MAX, longest + 2))
+
+    def _set_key_name(self, text: str):
+        fm = self.key_name.fontMetrics()
+        self.key_name.setText(fm.elidedText(text, Qt.ElideRight, self.key_name.width()))
+        self.key_name.setToolTip(text if self.key_name.text() != text else "")
 
     def set_dark(self, dark: bool):
         self.wave.dark = dark
@@ -818,7 +852,7 @@ class PlayerPanel(QWidget, Translatable):
         if playing_key:
             self.key_chip.set_key(playing_key.code, playing_key.format(self.notation))
             name = playing_key.long_name(tr.lang)
-            self.key_name.setText(name if not st else f"{name}, {st:+d}")
+            self._set_key_name(name if not st else f"{name}, {st:+d}")
         else:
             self.key_chip.set_key(None, "–")
             self.key_name.setText("")
