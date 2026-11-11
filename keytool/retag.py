@@ -42,6 +42,7 @@ SOURCE_FILENAME = "filename"
 SOURCE_ISRC = "isrc"
 SOURCE_SEARCH = "musicbrainz"
 SOURCE_DISCOGS = "discogs"
+SOURCE_CASE = "case"                  # only the capitalisation of the current value was fixed
 DISCOGS_ROOT = "https://api.discogs.com"
 DISCOGS_MIN_INTERVAL = 2.5            # seconds; anonymous Discogs clients: 25 requests per minute
 
@@ -97,6 +98,67 @@ def fold(text: str) -> str:
     t = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().lower()
     t = re.sub(r"\b(?:feat|ft|featuring)\b.*$", "", t)
     return re.sub(r"[^a-z0-9]+", "", t)
+
+
+# =========================================================================== capitalisation
+TEXT_FIELDS = ("title", "artist", "album", "album_artist", "genre")
+_KEEP_UPPER = {"DJ", "MC", "UK", "USA", "US", "EP", "LP", "TV", "NYC", "LA", "OK", "UFO", "RnB", "R&B",
+               "II", "III", "IV", "VI", "VII", "VIII", "IX", "XI", "XII", "XIII", "XIV", "XV", "XX", "AC/DC",
+               "EDM", "IDM", "EBM", "UKG", "DnB", "D&B", "NRJ"}
+_KEEP_LOWER = {"feat.", "ft.", "vs.", "vs", "x"}
+_WORD = re.compile(r"[^\W\d_]", re.U)
+
+
+def bad_case(text) -> bool:
+    """All lower case, or ALL UPPER CASE over several words (a single upper-case word may be an acronym or
+    a stylised name such as MGMT, so it is left alone)."""
+    t = str(text or "")
+    letters = _WORD.findall(t)
+    if len(letters) < 2:
+        return False
+    if t == t.lower():
+        return True
+    return t == t.upper() and len(t.split()) >= 2
+
+
+def smart_case(text: str) -> str:
+    """'midnight avenue (extended mix) feat. kora' -> 'Midnight Avenue (Extended Mix) feat. Kora';
+    'DON'T STOP' -> "Don't Stop"; 'hip-hop' -> 'Hip-Hop'; acronyms and roman numerals stay upper case."""
+    def word(w: str) -> str:
+        lead = re.match(r"^[\(\[\{\"'“‘]*", w).group(0)
+        trail = re.search(r"[\)\]\}\"'”’,;:!?]*$", w[len(lead):]).group(0)
+        core = w[len(lead):len(w) - len(trail)] if trail else w[len(lead):]
+        if not core:
+            return w
+        low = core.lower()
+        if low in _KEEP_LOWER:
+            core = low
+        elif core.upper() in {k.upper() for k in _KEEP_UPPER}:
+            core = next(k for k in _KEEP_UPPER if k.upper() == core.upper())
+        else:
+            core = "-".join(part[:1].upper() + part[1:].lower() for part in core.split("-"))
+        return lead + core + trail
+    out = " ".join(word(w) for w in text.split(" "))
+    # first word always capitalised, even "feat." / "x" at the start
+    return out[:1].upper() + out[1:] if out else out
+
+
+def _disk_case(path: str) -> str:
+    """The path with the letter case it really has on disk (older libraries stored Windows paths in lower
+    case; parsing such a file name would suggest lower-case tags)."""
+    if not path or not os.path.exists(path):
+        return path
+    drive, rest = os.path.splitdrive(os.path.abspath(path))
+    cur = drive + os.sep
+    for part in [p for p in rest.split(os.sep) if p]:
+        try:
+            names = os.listdir(cur)
+        except OSError:
+            return path
+        match = next((n for n in names if n == part), None) or \
+            next((n for n in names if n.casefold() == part.casefold()), part)
+        cur = os.path.join(cur, match)
+    return cur
 
 
 # =========================================================================== file name / folder
@@ -414,7 +476,7 @@ def suggest(row: dict, online: bool = True, mb: MusicBrainz | None = None,
     """Suggestions for one library row (dict with path, filename, title, artist, album, ... , duration)."""
     res = RetagResult()
     path = row.get("path") or ""
-    guessed = parse_filename(path)
+    guessed = parse_filename(_disk_case(path))
     candidates: dict[str, tuple[object, str]] = {}          # field -> (value, source), best source first
     artist = row.get("artist") if not looks_broken("artist", row.get("artist"), row) else guessed.get("artist")
     title = row.get("title") if not looks_broken("title", row.get("title"), row) else guessed.get("title")
@@ -453,13 +515,26 @@ def suggest(row: dict, online: bool = True, mb: MusicBrainz | None = None,
         candidates.setdefault(k, (v, SOURCE_FILENAME))
 
     for fld in FIELDS:
-        if fld not in candidates:
-            continue
-        value, src = candidates[fld]
         cur = row.get(fld)
+        value, src = candidates.get(fld, (None, ""))
+        text_field = fld in TEXT_FIELDS
+        if value is not None and text_field and bad_case(value) and src == SOURCE_FILENAME:
+            value = smart_case(str(value))                  # file names are often all lower case
         if not looks_broken(fld, cur, row):
+            if not text_field:
+                continue
+            cur_s = str(cur)
+            if value is not None and str(value) == cur_s and src != SOURCE_FILENAME:
+                continue                                    # Discogs/MusicBrainz spell it exactly so (deadmau5)
+            if value is not None and str(value).lower() == cur_s.lower() and str(value) != cur_s \
+                    and not bad_case(value):
+                res.suggestions.append(Suggestion(fld, value, src, cur))       # same text, proper case
+            elif bad_case(cur_s):
+                fixed = smart_case(cur_s)
+                if fixed != cur_s:
+                    res.suggestions.append(Suggestion(fld, fixed, SOURCE_CASE, cur))
             continue
-        if cur not in (None, "") and str(cur) == str(value):
+        if value is None or (cur not in (None, "") and str(cur) == str(value)):
             continue
         res.suggestions.append(Suggestion(fld, value, src, cur))
     return res
