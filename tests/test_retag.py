@@ -10,8 +10,12 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 
 from keytool import retag
-from keytool.retag import (MusicBrainz, MusicBrainzError, best_search_match, looks_broken, parse_filename,
-                           read_isrc, recording_tags, suggest)
+from keytool.retag import (Discogs, DiscogsError, MusicBrainz, MusicBrainzError, best_search_match, discogs_tags,
+                           looks_broken, parse_filename, read_isrc, recording_tags, suggest)
+
+
+def _no_discogs():
+    return Discogs(fetcher=lambda url: "{}")
 
 FIX = Path(__file__).parent / "fixtures"
 
@@ -90,7 +94,7 @@ def test_suggest_via_isrc(tmp_path):
     row = dict(id=1, path=str(f), filename=f.name, title=f.stem, artist="", album="", album_artist=None,
                year=None, genre="", duration=247.0)
     fake = Fake({"/isrc/GBXYZ2100417": (FIX / "mb_isrc.json").read_text()})
-    res = suggest(row, mb=MusicBrainz(fetcher=fake))
+    res = suggest(row, mb=MusicBrainz(fetcher=fake), discogs=_no_discogs())
     got = {s.field: (s.value, s.source) for s in res.suggestions}
     assert got == {"title": ("Glass Harbour (Extended Mix)", "isrc"), "artist": ("Mara Veil", "isrc"),
                    "album": ("Tidal Lines", "isrc"), "album_artist": ("Mara Veil", "isrc"),
@@ -104,7 +108,7 @@ def test_suggest_via_search_keeps_good_values(tmp_path):
     row = dict(id=2, path=str(f), filename=f.name, title="Low Tide Signals", artist="Kora feat. Selva",
                album="", album_artist=None, year=None, genre="My Genre", duration=268.0)
     fake = Fake({"/recording?": (FIX / "mb_search.json").read_text()})
-    res = suggest(row, mb=MusicBrainz(fetcher=fake))
+    res = suggest(row, mb=MusicBrainz(fetcher=fake), discogs=_no_discogs())
     got = {s.field: (s.value, s.source) for s in res.suggestions}
     assert got == {"album": ("Dawn Patrol", "musicbrainz"), "album_artist": ("Kora", "musicbrainz"),
                    "year": (2022, "musicbrainz")}            # title, artist and genre were fine already
@@ -114,11 +118,51 @@ def test_suggest_via_search_keeps_good_values(tmp_path):
 def test_offline_falls_back_to_file_name(tmp_path):
     f = _wav(tmp_path / "Kora_-_Low_Tide_Signals.wav")
     row = dict(id=3, path=str(f), filename=f.name, title="", artist="", album="", year=None, genre="")
-    res = suggest(row, mb=MusicBrainz(fetcher=Fake({"musicbrainz": MusicBrainzError("no internet")})))
+    res = suggest(row, mb=MusicBrainz(fetcher=Fake({"musicbrainz": MusicBrainzError("no internet")})),
+                  discogs=Discogs(fetcher=Fake({"discogs": DiscogsError("no internet")})))
     assert {s.field: s.value for s in res.suggestions} == {"title": "Low Tide Signals", "artist": "Kora"}
     assert res.online_error and all(s.source == "filename" for s in res.suggestions)
+    assert res.unreachable == ["Discogs", "MusicBrainz"]
     res = suggest(row, online=False)
     assert not res.online and len(res.suggestions) == 2
+
+
+# --------------------------------------------------------------------------- Discogs
+def _discogs_fake():
+    return Fake({"/database/search": (FIX / "discogs_search.json").read_text(),
+                 "/releases/9002": (FIX / "discogs_release_9002.json").read_text()})
+
+
+def test_discogs_tags_skip_compilations_and_check_the_tracklist():
+    fake = _discogs_fake()
+    got = discogs_tags(Discogs(fetcher=fake), "Mara Veil", "Glass Harbour (Extended Mix)", 247.0)
+    assert got == dict(title="Glass Harbour (Extended Mix)", artist="Mara Veil", album="Tidal Lines",
+                       album_artist="Mara Veil", year=2021, genre="Deep House")
+    assert not any("/releases/9001" in u for u in fake.urls)          # "Various - ..." not even opened
+    assert "track=Glass+Harbour" in fake.urls[0] and "token" not in fake.urls[0]   # anonymous
+    assert discogs_tags(Discogs(fetcher=_discogs_fake()), "Mara Veil", "Glass Harbour (Extended Mix)", 400.0) == {}
+
+
+def test_discogs_comes_first(tmp_path):
+    d = tmp_path / "x"; d.mkdir()
+    f = _wav(d / "Mara Veil - Glass Harbour (Extended Mix).wav", "GBXYZ2100417")
+    row = dict(id=1, path=str(f), filename=f.name, title="", artist="", album="", album_artist=None,
+               year=None, genre="", duration=247.0)
+    isrc = json.loads((FIX / "mb_isrc.json").read_text())
+    isrc["recordings"][0]["releases"][1]["date"] = "2020-01-01"          # MusicBrainz says 2020
+    res = suggest(row, mb=MusicBrainz(fetcher=Fake({"/isrc/": json.dumps(isrc)})), discogs=Discogs(fetcher=_discogs_fake()))
+    got = {s.field: (s.value, s.source) for s in res.suggestions}
+    assert got["year"] == (2021, "discogs") and got["genre"] == ("Deep House", "discogs")
+    assert all(src == "discogs" for _, src in got.values())
+
+
+def test_discogs_sign_in_required_is_reported(tmp_path):
+    f = _wav(tmp_path / "Kora - Low Tide Signals.wav")
+    row = dict(id=2, path=str(f), filename=f.name, title="", artist="", album="", year=None, genre="", duration=268.0)
+    dc = Discogs(fetcher=lambda url: '{"message": "You must authenticate to access this resource."}')
+    res = suggest(row, mb=MusicBrainz(fetcher=Fake({"/recording?": (FIX / "mb_search.json").read_text()})), discogs=dc)
+    assert res.unreachable == ["Discogs"] and "authenticate" in res.online_error
+    assert {s.field for s in res.suggestions} >= {"title", "artist"}
 
 
 # --------------------------------------------------------------------------- details panel
@@ -155,6 +199,8 @@ def test_panel_shows_suggestions_and_saves_them(panel):
     assert panel._meta_form.isRowVisible(panel.retag_hints["artist"])
     assert not panel._meta_form.isRowVisible(panel.retag_hints["album"])
     assert "GBXYZ2100417" in panel.retag_banner.text() and panel.save_btn.isEnabled()
+    panel._last_retag.unreachable = ["Discogs"]; panel._summary()
+    assert "Discogs" in panel.retag_banner.text()
     panel.save()
     assert saved == [dict(title="Glass Harbour", artist="Mara Veil", year=2021, genre="Deep House")]
 

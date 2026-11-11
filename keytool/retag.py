@@ -1,9 +1,11 @@
 """Auto re-tag: suggest title, artist, album, album artist, year and genre for one track.
 
-Sources, most reliable first:
-  1. ISRC code from the file tags -> MusicBrainz ISRC lookup (identifies the recording exactly)
-  2. MusicBrainz recording search with artist + title (from the tags, or parsed from the file name)
-  3. File name and folder heuristics ("03 - Artist - Title [123456]", "Album (2021) [WEB]")
+Sources, in this order (the first one that has a value for a field wins):
+  1. Discogs database search with artist + track, checked against the release's tracklist
+     (preferred by the user: Discogs styles such as "Deep House" are precise for DJs)
+  2. ISRC code from the file tags -> MusicBrainz ISRC lookup (identifies the recording exactly)
+  3. MusicBrainz recording search with artist + title (from the tags, or parsed from the file name)
+  4. File name and folder heuristics ("03 - Artist - Title [123456]", "Album (2021) [WEB]")
 
 Only empty fields and fields that are obviously broken (e.g. a title that is just the file name) get a
 suggestion; sensible values are left alone. Nothing is written here - the caller shows the suggestions and
@@ -11,6 +13,8 @@ the user saves or discards them.
 
 MusicBrainz (https://musicbrainz.org/doc/MusicBrainz_API): free, no key, max. one request per second,
 requests must identify the application. Responses are JSON (fmt=json).
+Discogs (https://www.discogs.com/developers): used without a token, as decided by the user; anonymous
+clients get 25 requests per minute. If Discogs asks for sign-in (401/403), it is skipped and reported.
 """
 from __future__ import annotations
 
@@ -37,6 +41,9 @@ DURATION_TOLERANCE = 10.0             # seconds
 SOURCE_FILENAME = "filename"
 SOURCE_ISRC = "isrc"
 SOURCE_SEARCH = "musicbrainz"
+SOURCE_DISCOGS = "discogs"
+DISCOGS_ROOT = "https://api.discogs.com"
+DISCOGS_MIN_INTERVAL = 2.5            # seconds; anonymous Discogs clients: 25 requests per minute
 
 
 @dataclass
@@ -51,8 +58,9 @@ class Suggestion:
 class RetagResult:
     suggestions: list[Suggestion] = field(default_factory=list)
     isrc: str = ""
-    online: bool = False              # MusicBrainz was asked
-    online_error: str = ""            # e.g. no internet; file-name suggestions are still there
+    online: bool = False              # online sources were asked
+    online_error: str = ""            # details of the failures below
+    unreachable: list[str] = field(default_factory=list)   # services that failed ("MusicBrainz", "Discogs")
 
     def by_field(self) -> dict[str, Suggestion]:
         return {s.field: s for s in self.suggestions}
@@ -290,6 +298,103 @@ def best_search_match(recs: list[dict], artist: str, title: str, duration: float
     return None
 
 
+# =========================================================================== Discogs
+class DiscogsError(MusicBrainzError):
+    pass
+
+
+class Discogs:
+    """Anonymous Discogs client (no token): database search + release lookup, throttled."""
+
+    _lock = threading.Lock()
+    _last = 0.0
+
+    def __init__(self, fetcher=None, timeout: float = 10.0):
+        self.fetcher = fetcher or self._fetch
+        self.timeout = timeout
+
+    def _fetch(self, url: str) -> str:
+        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                return r.read().decode("utf-8")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return "{}"
+            if e.code in (401, 403):
+                raise DiscogsError("Discogs requires signing in for searches") from e
+            raise DiscogsError(f"Discogs: HTTP {e.code}") from e
+        except (urllib.error.URLError, OSError) as e:
+            raise DiscogsError(f"Discogs not reachable ({getattr(e, 'reason', e)})") from e
+
+    def _get(self, path: str, **params) -> dict:
+        url = f"{DISCOGS_ROOT}/{path}" + (f"?{urllib.parse.urlencode(params)}" if params else "")
+        with Discogs._lock:
+            wait = Discogs._last + DISCOGS_MIN_INTERVAL - time.monotonic()
+            if wait > 0 and self.fetcher == self._fetch:
+                time.sleep(wait)
+            Discogs._last = time.monotonic()
+        text = self.fetcher(url)
+        try:
+            data = json.loads(text or "{}")
+        except ValueError as e:
+            raise DiscogsError("Discogs: unexpected answer") from e
+        if isinstance(data, dict) and data.get("message") and not data.get("results") and not data.get("id"):
+            raise DiscogsError(f"Discogs: {data['message']}")   # e.g. "You must authenticate to access this resource."
+        return data
+
+    def search(self, artist: str, track: str) -> list[dict]:
+        return self._get("database/search", artist=artist, track=track, type="release", per_page="10").get("results") or []
+
+    def release(self, release_id) -> dict:
+        return self._get(f"releases/{release_id}")
+
+
+def _dc_name(name: str) -> str:
+    """Discogs disambiguates artists as 'Name (2)' and marks the main name with '*'."""
+    return re.sub(r"\s*\(\d+\)$", "", (name or "").strip()).rstrip("*").strip()
+
+
+def _dc_artists(artists) -> str:
+    """'Kora', join 'Feat.', 'Selva' -> 'Kora Feat. Selva' (join ',' -> 'A, B')."""
+    out = ""
+    for a in artists or []:
+        out += a.get("anv") or _dc_name(a.get("name"))
+        j = (a.get("join") or "").strip()
+        out += ", " if j == "," else f" {j} " if j else ""
+    return re.sub(r"\s+", " ", out).strip(" ,")
+
+
+def discogs_tags(dc: Discogs, artist: str, title: str, duration: float | None) -> dict:
+    """Tags from the first Discogs release (not a compilation) whose tracklist has this track."""
+    tried = 0
+    for hit in dc.search(artist, title):
+        if tried >= 3:
+            break
+        rel_artist = (hit.get("title") or "").split(" - ", 1)[0]
+        if fold(rel_artist) in ("various", "variousartists"):
+            continue                                                  # prefer the artist's own release
+        tried += 1
+        rel = dc.release(hit.get("id"))
+        for tr_ in rel.get("tracklist") or []:
+            if tr_.get("type_", "track") != "track" or fold(tr_.get("title")) != fold(title):
+                continue
+            if duration and tr_.get("duration"):
+                m = re.match(r"(\d+):(\d{2})$", tr_["duration"])
+                if m and abs(int(m.group(1)) * 60 + int(m.group(2)) - duration) > DURATION_TOLERANCE:
+                    continue
+            album_artist = _dc_artists(rel.get("artists"))
+            track_artist = _dc_artists(tr_.get("artists")) or album_artist
+            if fold(track_artist) != fold(artist) and fold(album_artist) != fold(artist):
+                continue
+            styles, genres = rel.get("styles") or hit.get("style") or [], rel.get("genres") or hit.get("genre") or []
+            out = {"title": tr_.get("title"), "artist": track_artist, "album": rel.get("title"),
+                   "album_artist": album_artist, "year": int(rel["year"]) if str(rel.get("year") or "").isdigit()
+                   and int(rel["year"]) > 0 else None, "genre": (styles or genres or [""])[0]}
+            return {k: v for k, v in out.items() if v}
+    return {}
+
+
 # =========================================================================== suggestions
 def looks_broken(fld: str, value, row: dict) -> bool:
     """Empty, or clearly not a real tag value (title = file name, track number / download ID in it)."""
@@ -304,13 +409,25 @@ def looks_broken(fld: str, value, row: dict) -> bool:
     return bool(_ID_BRACKETS.search(v)) or "_" in v
 
 
-def suggest(row: dict, online: bool = True, mb: MusicBrainz | None = None) -> RetagResult:
+def suggest(row: dict, online: bool = True, mb: MusicBrainz | None = None,
+            discogs: Discogs | None = None) -> RetagResult:
     """Suggestions for one library row (dict with path, filename, title, artist, album, ... , duration)."""
     res = RetagResult()
     path = row.get("path") or ""
     guessed = parse_filename(path)
     candidates: dict[str, tuple[object, str]] = {}          # field -> (value, source), best source first
+    artist = row.get("artist") if not looks_broken("artist", row.get("artist"), row) else guessed.get("artist")
+    title = row.get("title") if not looks_broken("title", row.get("title"), row) else guessed.get("title")
+    errors: list[str] = []
 
+    if online and artist and title:
+        res.online = True
+        try:
+            for k, v in discogs_tags(discogs or Discogs(), artist, title, row.get("duration")).items():
+                candidates.setdefault(k, (v, SOURCE_DISCOGS))
+        except DiscogsError as e:
+            res.unreachable.append("Discogs")
+            errors.append(str(e))
     if online:
         mb = mb or MusicBrainz()
         res.online = True
@@ -323,15 +440,15 @@ def suggest(row: dict, online: bool = True, mb: MusicBrainz | None = None) -> Re
                 if len(recs) >= 1:
                     rec, src = recs[0], SOURCE_ISRC
             if rec is None:
-                artist = row.get("artist") if not looks_broken("artist", row.get("artist"), row) else guessed.get("artist")
-                title = row.get("title") if not looks_broken("title", row.get("title"), row) else guessed.get("title")
                 if artist and title:
                     rec = best_search_match(mb.search(artist, title), artist, title, row.get("duration"))
             if rec is not None:
                 for k, v in recording_tags(rec).items():
                     candidates.setdefault(k, (v, src))
         except MusicBrainzError as e:
-            res.online_error = str(e)
+            res.unreachable.append("MusicBrainz")
+            errors.append(str(e))
+    res.online_error = "; ".join(errors)
     for k, v in guessed.items():
         candidates.setdefault(k, (v, SOURCE_FILENAME))
 

@@ -1,0 +1,11 @@
+{
+  "pagination": {"page": 1, "pages": 1, "per_page": 10, "items": 3, "urls": {}},
+  "results": [
+    {"id": 9001, "type": "release", "title": "Various - Summer Sessions 2022", "year": "2022",
+     "genre": ["Electronic"], "style": ["House"], "format": ["File", "FLAC", "Compilation"]},
+    {"id": 9002, "type": "release", "title": "Mara Veil (2) - Tidal Lines", "year": "2021",
+     "genre": ["Electronic"], "style": ["Deep House", "Downtempo"], "format": ["File", "FLAC", "Album"]},
+    {"id": 9003, "type": "release", "title": "Mara Veil (2) - Glass Harbour", "year": "2020",
+     "genre": ["Electronic"], "style": ["Deep House"], "format": ["Vinyl", "12\""]}
+  ]
+}
