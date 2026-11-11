@@ -195,6 +195,12 @@ class Database:
         return [(r[0], r[1]) for r in self.conn().execute(
             "SELECT id, path FROM tracks WHERE cue_count IS NULL ORDER BY id LIMIT ?", (limit,))]
 
+    def ids_needing_sections(self) -> list[int]:
+        """Analysed tracks without song sections, or with sections from the first detection (no "conf")."""
+        return [r[0] for r in self.conn().execute(
+            "SELECT id FROM tracks WHERE status='ok' AND (sections IS NULL OR "
+            "(sections <> '[]' AND sections NOT LIKE '%\"conf\"%')) ORDER BY id")]
+
     def update_track(self, track_id: int, **fields_: Any) -> None:
         fields_ = {k: v for k, v in fields_.items() if k in TRACK_COLUMNS and k != "id"}
         if not fields_:

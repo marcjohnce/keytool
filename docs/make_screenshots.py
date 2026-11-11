@@ -131,9 +131,10 @@ def build_library(tmp: str):
             lib.db.add_keywords([t["id"]], kws)
     # song sections for the deck track (made up to match the demo audio's intro / build / drop shape)
     dur = TRACKS[DECK][-1]
-    plan = [(0.0, 0.12, "A", "intro"), (0.12, 0.30, "B", "verse"), (0.30, 0.46, "C", "chorus"),
-            (0.46, 0.60, "D", "break"), (0.60, 0.90, "C", "chorus"), (0.90, 1.0, "E", "outro")]
-    sections = [dict(start=round(a * dur, 2), end=round(b * dur, 2), group=g, label=lab) for a, b, g, lab in plan]
+    plan = [(0.0, 0.12, "A", "intro", 0.9), (0.12, 0.30, "B", "buildup", 0.8), (0.30, 0.46, "C", "drop", 0.95),
+            (0.46, 0.60, "D", "break", 0.4), (0.60, 0.90, "C", "drop", 0.95), (0.90, 1.0, "E", "outro", 0.85)]
+    sections = [dict(start=round(a * dur, 2), end=round(b * dur, 2), group=g, label=lab, conf=c)
+                for a, b, g, lab, c in plan]
     lib.db.set_analysis(lib.db.get_track_by_path(paths[DECK])["id"], dict(sections=sections))
     return lib, paths
 
@@ -283,8 +284,8 @@ def main():
         (pos(d.key_chip, d, 0.5, 0.0, 0, 1), "Key of the deck, in the Camelot colour", "top"),
         (pos(d.tp_buttons[1], d, 0.5, 0.0, 0, 1), "Transpose −1 / +1 semitone at the original tempo (middle: original key)", "top"),
         (pos(d.bpm_lbl, d, 1.0, 0.5, -2), "Tempo", "right"),
-        (pos(d.wave, d, 0.75, 1.0, 0, -2), "Waveform with Serato cue points; click a flag to jump there", "bottom"),
-        (pos(d.wave, d, 0.02, 1.0, 30, -8), "Song sections (intro, verse, chorus …), same colour = same part", "bottom"),
+        (pos(d.wave, d, 0.75, 1.0, 0, -24), "Waveform with Serato cue points; click a flag to jump there", "bottom"),
+        (pos(d.wave, d, 0.02, 1.0, 30, -8), "Song sections: same colour = same part, \"?\" = unsure; click a name to jump there", "bottom"),
     ], "02-deck.png", "Deck")
 
     # 3) key filter ------------------------------------------------------------

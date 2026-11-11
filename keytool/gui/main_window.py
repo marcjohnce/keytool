@@ -639,9 +639,9 @@ class MainWindow(QMainWindow, Translatable):
         self.enqueue(self.selected_ids(), keep_tag_values=False)
 
     def analyze_sections(self):
-        """Song sections for the selected tracks, or for every analysed track that has none yet."""
-        ids = self.selected_ids() or [r["id"] for r in self.lib.db.conn().execute(
-            "SELECT id FROM tracks WHERE sections IS NULL AND status='ok' ORDER BY id")]
+        """Song sections for the selected tracks, or for every analysed track that has none yet (or only
+        sections from the first detection, which had no confidence values)."""
+        ids = self.selected_ids() or self.lib.db.ids_needing_sections()
         self.enqueue(ids, keep_tag_values=True, sections_only=True)
 
     def analyze_now_selected(self):

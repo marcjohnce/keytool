@@ -36,6 +36,8 @@ def tinted(icon, color: QColor, size: int = 20):
 
 BTN = 40                      # diameter of all round control buttons
 from .theme import CUE_COLOR, CUE_TEXT_COLOR   # all cue points are shown in one colour
+
+UNSURE = 0.5            # song sections below this confidence get a "?" and a fainter name
 CUE_FLAG_GROW = 2             # px added to the width and height of the cue flags
 
 
@@ -239,6 +241,8 @@ class _TransposeJob(QRunnable):
 class WaveformView(QWidget):
     seek_requested = Signal(float)    # fraction 0..1
     cue_clicked = Signal(int)         # exact cue position in ms
+    section_clicked = Signal(int)     # start of the clicked song section in ms
+    STRIP = 18                        # height of the section-name strip below the waveform
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -265,11 +269,30 @@ class WaveformView(QWidget):
         self.sections = list(sections or [])
         self.update()
 
-    def _section_color(self, group: str, alpha: int) -> QColor:
+    def _section_color(self, group: str, alpha: int, conf: float = 1.0) -> QColor:
+        """Muted colour per group; unsure sections (low "conf") are drawn fainter."""
         hue = self.SECTION_HUES[(ord(group[:1] or "A") - 65) % len(self.SECTION_HUES)]
         c = QColor.fromHsl(hue, 80, 105 if self.dark else 185)
-        c.setAlpha(alpha)
+        c.setAlpha(int(alpha * (0.45 + 0.55 * min(max(conf, 0.0), 1.0))))
         return c
+
+    def _wave_height(self) -> int:
+        """Height of the waveform itself: the strip below is reserved for section names when there are any."""
+        return self.height() - self.STRIP if self.sections and self.duration else self.height()
+
+    def _section_x(self, sec) -> tuple[float, float]:
+        inner = self.width() - 8
+        return (4 + sec["start"] / self.duration * inner, 4 + min(sec["end"], self.duration) / self.duration * inner)
+
+    def section_in_strip(self, pos) -> dict | None:
+        """The section whose name strip (below the waveform) is under the mouse."""
+        if not (self.sections and self.duration) or pos.y() < self._wave_height():
+            return None
+        for sec in self.sections:
+            x0, x1 = self._section_x(sec)
+            if x0 <= pos.x() < x1:
+                return sec
+        return None
 
     def set_waveform(self, wf):
         self.peaks, self.colors, self.duration = wf.peaks, wf.colors, wf.duration
@@ -303,7 +326,8 @@ class WaveformView(QWidget):
         p.setPen(Qt.NoPen)
         p.setBrush(pal.color(pal.ColorRole.Window).darker(108) if self.dark else pal.color(pal.ColorRole.Base))
         p.drawRoundedRect(QRectF(r), 6, 6)
-        w, h = self.width(), self.height()
+        w, full = self.width(), self.height()
+        h = self._wave_height() if self.peaks is not None else full     # waveform area (strip below it)
         mid = h / 2
         if self.peaks is None or not len(self.peaks):
             p.setPen(pal.color(pal.ColorRole.PlaceholderText))
@@ -321,20 +345,24 @@ class WaveformView(QWidget):
                 band = QColor(c); band.setAlpha(55)
                 p.fillRect(QRectF(x0, 1, max(2.0, x1 - x0), h - 2), band)
                 c.setAlpha(200)
-                p.fillRect(QRectF(x0, h - 6, max(2.0, x1 - x0), 4), c)
-        # song sections: tinted bands behind the waveform (the one playing now a little stronger)
+                p.fillRect(QRectF(x0, h - 6, max(2.0, x1 - x0), 4), c)       # at the waveform's bottom
+        # song sections: tinted bands behind the waveform that reach down into the name strip below it
+        # (the one playing now a little stronger, the strip stronger still: it is the clickable part)
         now = self.position * self.duration
         if self.sections and self.duration:
             for sec in self.sections:
-                x0 = 4 + sec["start"] / self.duration * inner
-                x1 = 4 + min(sec["end"], self.duration) / self.duration * inner
+                x0, x1 = self._section_x(sec)
+                conf = float(sec.get("conf", 1.0))
                 playing = sec["start"] <= now < sec["end"]
                 a = (95 if playing else 60) if self.dark else (120 if playing else 80)
-                p.fillRect(QRectF(x0, 1, max(1.0, x1 - x0), h - 2), self._section_color(sec["group"], a))
+                p.fillRect(QRectF(x0, 1, max(1.0, x1 - x0), h - 1), self._section_color(sec["group"], a, conf))
+                strip_a = (150 if playing else 105) if self.dark else (175 if playing else 130)
+                p.fillRect(QRectF(x0, h, max(1.0, x1 - x0), full - h - 1),
+                           self._section_color(sec["group"], strip_a, conf))
                 if sec["start"] > 0:
                     edge = QColor(pal.color(pal.ColorRole.Text)); edge.setAlpha(45)
                     p.setPen(edge)
-                    p.drawLine(QPointF(x0, 2), QPointF(x0, h - 2))
+                    p.drawLine(QPointF(x0, 2), QPointF(x0, full - 2))
                     p.setPen(Qt.NoPen)
         # resample bins to pixel columns (max of peaks, colour of the loudest bin)
         cols = max(1, int(inner))
@@ -355,22 +383,24 @@ class WaveformView(QWidget):
             p.setPen(c)
             hh = max(1.0, level * amp)
             p.drawLine(QPointF(px, mid - hh), QPointF(px, mid + hh))
-        # section names along the bottom edge
+        # section names in the strip below the waveform ("?" = unsure)
         if self.sections and self.duration:
             from PySide6.QtGui import QFont
             f = QFont(self.font()); f.setPointSizeF(max(7.0, f.pointSizeF() * 0.8)); f.setWeight(QFont.DemiBold)
             p.setFont(f)
             fm = p.fontMetrics()
             for sec in self.sections:
-                x0 = 4 + sec["start"] / self.duration * inner
-                x1 = 4 + min(sec["end"], self.duration) / self.duration * inner
+                x0, x1 = self._section_x(sec)
                 if x1 - x0 < 24:
                     continue
                 playing = sec["start"] <= now < sec["end"]
-                col = QColor(pal.color(pal.ColorRole.Text)); col.setAlpha(235 if playing else 165)
+                unsure = float(sec.get("conf", 1.0)) < UNSURE
+                col = QColor(pal.color(pal.ColorRole.Text))
+                col.setAlpha((235 if playing else 175) - (60 if unsure else 0))
                 p.setPen(col)
-                name = fm.elidedText(tr(f"sec_{sec['label']}"), Qt.ElideRight, int(x1 - x0 - 8))
-                p.drawText(QRectF(x0 + 4, h - fm.height() - 3, x1 - x0 - 6, fm.height()), Qt.AlignLeft | Qt.AlignVCenter, name)
+                label = tr(f"sec_{sec['label']}") + ("?" if unsure else "")
+                name = fm.elidedText(label, Qt.ElideRight, int(x1 - x0 - 8))
+                p.drawText(QRectF(x0 + 4, h, x1 - x0 - 6, full - h), Qt.AlignLeft | Qt.AlignVCenter, name)
             p.setFont(self.font())
         # beat ticks (from BPM, without phase) every bar as a subtle orientation aid
         if self.bpm and self.duration:
@@ -413,10 +443,10 @@ class WaveformView(QWidget):
             hc = QColor(pal.color(pal.ColorRole.Text)); hc.setAlpha(90)
             p.setPen(QPen(hc, 1))
             hx = 4 + self.hover * inner
-            p.drawLine(QPointF(hx, 2), QPointF(hx, h - 2))
+            p.drawLine(QPointF(hx, 2), QPointF(hx, full - 2))
             p.drawText(QRectF(hx + 4, 2, 70, 16), Qt.AlignLeft, fmt_time(self.hover * self.duration * 1000))
         p.setPen(QPen(pal.color(pal.ColorRole.Link), 2))     # amber playhead
-        p.drawLine(QPointF(played_x, 1), QPointF(played_x, h - 1))
+        p.drawLine(QPointF(played_x, 1), QPointF(played_x, full - 1))
 
     # -- interaction
     def _frac(self, x: float) -> float:
@@ -435,6 +465,11 @@ class WaveformView(QWidget):
         return best
 
     def mousePressEvent(self, e):
+        sec = self.section_in_strip(e.position()) if self.peaks is not None else None
+        if sec is not None and e.button() == Qt.LeftButton:     # name strip: jump to the section's start
+            self.set_position(sec["start"] / self.duration)
+            self.section_clicked.emit(int(round(sec["start"] * 1000)))
+            return
         cue = self._cue_at(e.position()) if self.peaks is not None else None
         if cue is not None and e.button() == Qt.LeftButton:
             if self.duration:
@@ -451,8 +486,14 @@ class WaveformView(QWidget):
         if self.peaks is None:
             return
         self.hover = self._frac(e.position().x())
-        cue = self._cue_at(e.position())
-        if cue is not None:
+        sec = None if self._drag else self.section_in_strip(e.position())
+        cue = None if sec is not None else self._cue_at(e.position())
+        if sec is not None:
+            self.setToolTip(tr("sec_tip").format(name=tr(f"sec_{sec['label']}"), group=sec["group"],
+                                                 start=fmt_time(sec["start"] * 1000), end=fmt_time(sec["end"] * 1000),
+                                                 conf=int(round(100 * float(sec.get("conf", 1.0))))))
+            self.setCursor(Qt.PointingHandCursor)
+        elif cue is not None:
             name = f" – {cue.name}" if cue.name else ""
             self.setToolTip(f"Cue {cue.index + 1}{name} · {fmt_time(cue.position_ms)}")
             self.setCursor(Qt.PointingHandCursor)
@@ -764,9 +805,10 @@ class PlayerPanel(QWidget, Translatable):
         top.addLayout(tempo, 0)
 
         self.wave = WaveformView()
-        self.wave.setFixedHeight(84)
+        self.wave.setFixedHeight(84 + WaveformView.STRIP)    # one height: the deck does not jump with sections
         self.wave.seek_requested.connect(self.seek_fraction)
         self.wave.cue_clicked.connect(self.seek_ms)
+        self.wave.section_clicked.connect(self.seek_ms)
         root.addWidget(self.wave)
 
         self.player = None
