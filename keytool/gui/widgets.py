@@ -1011,8 +1011,8 @@ class DetailPanel(QWidget, Translatable):
             text = tr("retag_found", n=n, sources=", ".join(srcs))
         else:
             text = tr("retag_none")
-        if res is not None and res.online_error:
-            text += "\n" + tr("retag_offline")
+        if res is not None and res.unreachable:
+            text += "\n" + tr("retag_unreachable", names=", ".join(res.unreachable))
         self._banner(text)
 
     def _banner(self, text: str):

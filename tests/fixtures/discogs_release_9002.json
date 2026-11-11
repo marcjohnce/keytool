@@ -1,0 +1,10 @@
+{
+  "id": 9002, "title": "Tidal Lines", "year": 2021,
+  "artists": [{"name": "Mara Veil (2)", "anv": "", "join": ""}],
+  "genres": ["Electronic"], "styles": ["Deep House", "Downtempo"],
+  "tracklist": [
+    {"position": "1", "type_": "track", "title": "Low Water", "duration": "5:02"},
+    {"position": "2", "type_": "heading", "title": "Side B", "duration": ""},
+    {"position": "3", "type_": "track", "title": "Glass Harbour (Extended Mix)", "duration": "4:07"}
+  ]
+}

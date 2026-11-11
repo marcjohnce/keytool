@@ -148,8 +148,9 @@ def import_mixed_in_key(db_path: str | None = None, add_missing: bool = False, c
 
 @mcp.tool()
 def suggest_tags(track_id: int, online: bool = True) -> dict:
-    """Suggest title, artist, album, album_artist, year and genre for one track (Auto re-tag): from the ISRC
-    code in the file (MusicBrainz lookup), a MusicBrainz search and the file/folder name. Only empty or
+    """Suggest title, artist, album, album_artist, year and genre for one track (Auto re-tag): from Discogs
+    (anonymous search, checked against the tracklist), the ISRC code in the file (MusicBrainz lookup), a
+    MusicBrainz search and the file/folder name - in this order. Only empty or
     obviously broken fields get a suggestion. Nothing is written; apply with update_metadata.
     online=False uses the file name only."""
     from .retag import suggest
@@ -158,6 +159,7 @@ def suggest_tags(track_id: int, online: bool = True) -> dict:
         raise ValueError(f"track {track_id} not found")
     res = suggest(t, online=online)
     return dict(track_id=track_id, isrc=res.isrc or None, online_error=res.online_error or None,
+                unreachable=res.unreachable,
                 suggestions=[dict(field=s.field, value=s.value, source=s.source, old=s.old) for s in res.suggestions])
 
 
