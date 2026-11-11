@@ -548,11 +548,16 @@ class KeyChip(QWidget):
         self.dark = True
         self.big = styled_font(self.font(), size=27, weight=800, width=125)   # painted, not styled by the QSS
         self.setFixedHeight(56)
+        self.fit_to(["12A"])
+
+    def fit_to(self, texts):
+        """One width for every key: as wide as the widest label of the notation in use."""
+        from PySide6.QtGui import QFontMetrics
+        fm = QFontMetrics(self.big)
+        self.setFixedWidth(max(70, max(fm.horizontalAdvance(t) for t in list(texts) + ["–"]) + 30))
 
     def set_key(self, code: str | None, text: str):
         self.code, self.text = code, text or "–"
-        from PySide6.QtGui import QFontMetrics
-        self.setFixedWidth(max(70, QFontMetrics(self.big).horizontalAdvance(self.text) + 30))
         self.update()
 
     def paintEvent(self, _):
@@ -806,6 +811,7 @@ class PlayerPanel(QWidget, Translatable):
         longest = max(fm.horizontalAdvance(f"{Key(pc, minor).long_name(tr.lang)}, +1")
                       for pc in range(12) for minor in (False, True))
         self.key_name.setFixedWidth(min(self.KEY_NAME_MAX, longest + 2))
+        self._fit_chip()
 
     def _set_key_name(self, text: str):
         fm = self.key_name.fontMetrics()
@@ -823,15 +829,22 @@ class PlayerPanel(QWidget, Translatable):
 
     def set_notation(self, notation: str):
         self.notation = notation
+        self._fit_chip()
         self._update_title()
+
+    def _fit_chip(self):
+        from ..keys import all_keys
+        self.key_chip.fit_to([k.format(self.notation) for k in all_keys()])
 
     def _update_title(self):
         r = self.row
         st = getattr(self, "semitones", 0)
         k = Key.from_code(r.get("key")) if r else None
         for s_, b in self.tp_buttons.items():
-            sign = "0" if s_ == 0 else ("+1" if s_ > 0 else "−1")
-            b.setText(f"{sign}  {k.transpose(s_).format(self.notation)}" if k else sign)
+            # original key without a sign ("8A"), the neighbours with it ("−1  1A", "+1  3A")
+            sign = "" if s_ == 0 else ("+1" if s_ > 0 else "−1")
+            name = k.transpose(s_).format(self.notation) if k else ""
+            b.setText(f"{sign}  {name}".strip() if (sign or name) else "–")
         if not r:
             self.title.setText(tr("no_selection"))
             self.artist_lbl.setText("")
