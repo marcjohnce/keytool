@@ -59,7 +59,8 @@ class SortProxy(QSortFilterProxyModel):
 # =========================================================================== main window
 class MainWindow(QMainWindow, Translatable):
     # default widths of the compact columns (widened if the header needs more room in the UI language)
-    NARROW_COLUMNS = {"fit": 44, "key": 62, "bpm": 60, "delta": 78, "energy": 80, "duration": 56, "year": 52}
+    NARROW_COLUMNS = {"fit": 44, "key": 62, "bpm": 60, "delta": 78, "energy": 80, "duration": 56, "cues": 52,
+                      "year": 52}
 
     def __init__(self, library: Library):
         super().__init__()
@@ -97,6 +98,7 @@ class MainWindow(QMainWindow, Translatable):
         self.retranslate()
         self.refresh_keywords()
         self.refresh()
+        self._start_cue_counter()
 
     # ------------------------------------------------------------------ UI build
     def _act(self, key: str, slot, icon_text: str = "") -> QAction:
@@ -245,7 +247,7 @@ class MainWindow(QMainWindow, Translatable):
         hh.setSectionResizeMode(QHeaderView.Interactive)
         hh.setStretchLastSection(True)
         for col, w in zip(range(len(TrackModel.COLUMNS)),
-                          (44, 210, 140, 140, 62, 60, 78, 80, 56, 52, 150, 100, 160, 56, 64, 90, 120, 300)):
+                          (44, 210, 140, 140, 62, 60, 78, 80, 56, 52, 52, 150, 100, 160, 56, 64, 90, 120, 300)):
             self.table.setColumnWidth(col, w)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.table_menu)
@@ -265,6 +267,7 @@ class MainWindow(QMainWindow, Translatable):
         self.center.addWidget(hint_wrap)
         self.player = PlayerPanel(self.s)
         self.player.deck_changed.connect(self.update_deck)
+        self.player.cues_read.connect(self._deck_cues_read)
         self.table.doubleClicked.connect(lambda idx: self.load_into_deck(autoplay=True, track_id=idx.data(ID_ROLE)))
         for k in (Qt.Key_Return, Qt.Key_Enter):
             QShortcut(QKeySequence(k), self.table, activated=lambda: self.load_into_deck(autoplay=True),
@@ -898,6 +901,57 @@ class MainWindow(QMainWindow, Translatable):
             e.acceptProposedAction()
             self.start_import(paths)
 
+    # ------------------------------------------------------------------ cue counts
+    def _start_cue_counter(self):
+        """Count the Serato cue points of tracks that have none stored yet (libraries from before the cue
+        column), in the background and in small batches, updating the list as results come in."""
+        import threading
+        from PySide6.QtCore import QObject, Signal
+        from ..library import write_log
+
+        class _Bridge(QObject):
+            batch = Signal(object)          # [(track_id, count)]
+
+        self._cue_cancel = threading.Event()
+        self._cue_bridge = _Bridge()
+        self._cue_bridge.batch.connect(self._cue_counts_ready)
+        cancel, bridge, lib = self._cue_cancel, self._cue_bridge, self.lib
+
+        def work():
+            while not cancel.is_set():
+                try:
+                    done = lib.fill_cue_counts(batch=100, cancel=cancel)
+                except Exception as e:                  # never let this break the app
+                    write_log(f"cue count: {type(e).__name__}: {e}")
+                    return
+                if not done:
+                    return
+                try:
+                    bridge.batch.emit(done)
+                except RuntimeError:                    # window already gone
+                    return
+        self._cue_thread = threading.Thread(target=work, daemon=True, name="cue-count")
+        self._cue_thread.start()
+
+    def _cue_counts_ready(self, done):
+        counts = dict(done)
+        col = TrackModel.COLUMNS.index("cues")
+        for i, r in enumerate(self.model.rows):
+            n = counts.get(r["id"])
+            if n is not None and r.get("cue_count") != n:
+                r["cue_count"] = n
+                idx = self.model.index(i, col)
+                self.model.dataChanged.emit(idx, idx)
+
+    def _deck_cues_read(self, path: str, n: int):
+        """The deck read the cue points of its file anyway: keep the stored count up to date."""
+        for i, r in enumerate(self.model.rows):
+            if r.get("path") == path and r.get("cue_count") != n:
+                self.lib.db.update_track(r["id"], cue_count=n)
+                r["cue_count"] = n
+                idx = self.model.index(i, TrackModel.COLUMNS.index("cues"))
+                self.model.dataChanged.emit(idx, idx)
+
     def closeEvent(self, e):
         if self.details.has_unsaved():
             if QMessageBox.question(self, tr("app_title"), tr("ask_save_changes"),
@@ -905,6 +959,7 @@ class MainWindow(QMainWindow, Translatable):
                 self.details.save()
         self.player.shutdown()
         self.queue.shutdown()
+        self._cue_cancel.set()
         self.s.save()
         if self.worker:
             self.worker.cancel.set()

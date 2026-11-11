@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS tracks (
     comment         TEXT DEFAULT '',
     energy          INTEGER,
     bitrate         INTEGER,
+    cue_count       INTEGER,            -- Serato cue points in the file; NULL = not read yet
     status          TEXT DEFAULT 'pending',
     error           TEXT DEFAULT '',
     added_at        REAL,
@@ -61,11 +62,11 @@ CREATE INDEX IF NOT EXISTS ix_keywords_kw ON keywords(keyword COLLATE NOCASE);
 TRACK_COLUMNS = [
     "id", "path", "folder", "filename", "ext", "size", "mtime", "title", "artist", "album", "album_artist", "year",
     "genre", "duration", "bpm", "bpm_confidence", "key", "key_confidence", "bpm_manual", "key_manual",
-    "tag_bpm", "tag_key", "bpm_source", "key_source", "comment", "energy", "bitrate", "status", "error", "added_at", "analyzed_at", "analyzed_ok_at",
+    "tag_bpm", "tag_key", "bpm_source", "key_source", "comment", "energy", "bitrate", "cue_count", "status", "error", "added_at", "analyzed_at", "analyzed_ok_at",
 ]
 
 SORTABLE = {"title", "artist", "album", "year", "bpm", "key", "duration", "added_at", "filename", "genre", "energy",
-            "comment", "bitrate", "size", "analyzed_ok_at"}
+            "comment", "bitrate", "size", "analyzed_ok_at", "cue_count"}
 
 
 def norm_path(p: str | os.PathLike) -> str:
@@ -116,7 +117,8 @@ class Database:
         for col, decl in (("bpm_source", "TEXT DEFAULT ''"), ("key_source", "TEXT DEFAULT ''"),
                           ("comment", "TEXT DEFAULT ''"), ("energy", "INTEGER"), ("bitrate", "INTEGER"),
                           ("analyzed_ok_at", "REAL"),
-                          ("album_artist", "TEXT")):      # NULL = not read yet (filled lazily from the file)
+                          ("album_artist", "TEXT"),       # NULL = not read yet (filled lazily from the file)
+                          ("cue_count", "INTEGER")):      # NULL = not read yet (filled in the background)
             if col not in cols:
                 c.execute(f"ALTER TABLE tracks ADD COLUMN {col} {decl}")
         # path_key: case-insensitive lookup key on Windows. Older libraries stored the path itself in lower
@@ -185,6 +187,11 @@ class Database:
         cols = ", ".join(vals)
         cur = c.execute(f"INSERT INTO tracks ({cols}) VALUES ({','.join('?' * len(vals))})", tuple(vals.values()))
         return int(cur.lastrowid)
+
+    def ids_without_cue_count(self, limit: int = 200) -> list[tuple[int, str]]:
+        """(id, path) of tracks whose cue points were not counted yet."""
+        return [(r[0], r[1]) for r in self.conn().execute(
+            "SELECT id, path FROM tracks WHERE cue_count IS NULL ORDER BY id LIMIT ?", (limit,))]
 
     def update_track(self, track_id: int, **fields_: Any) -> None:
         fields_ = {k: v for k, v in fields_.items() if k in TRACK_COLUMNS and k != "id"}

@@ -76,7 +76,7 @@ class Translatable:
 
 # =========================================================================== table model
 class TrackModel(QAbstractTableModel):
-    COLUMNS = ["fit", "title", "artist", "album", "key", "bpm", "delta", "energy", "duration", "year", "keywords",
+    COLUMNS = ["fit", "title", "artist", "album", "key", "bpm", "delta", "energy", "duration", "cues", "year", "keywords",
                "genre", "comment", "ext", "bitrate", "status", "analyzed_ok_at", "path"]
     HEADER_KEYS = {"ext": "format", "delta": "delta_deck"}
 
@@ -197,7 +197,11 @@ class TrackModel(QAbstractTableModel):
             if role == Qt.ToolTipRole and self.deck_bpm:
                 return tr("delta_tip", bpm=f"{self.deck_bpm:.1f}")
             return None
+        if col == "cues":
+            v = r.get("cue_count")
         if role == Qt.DisplayRole:
+            if col == "cues":
+                return "" if v is None else str(v)
             if col == "bpm":
                 return str(int(v + 0.5)) if v else ""          # rounded half up; exact value in the tooltip
             if col == "key":
@@ -222,6 +226,8 @@ class TrackModel(QAbstractTableModel):
             if col == "key":
                 k = Key.from_code(v)
                 return (k.camelot_number * 2 + (0 if k.minor else 1)) if k else 999
+            if col == "cues":
+                return float(v) if v is not None else 1e9
             if col in ("bpm", "year", "duration", "energy", "bitrate", "analyzed_ok_at"):
                 return float(v) if v else 1e9
             if col == "keywords":
@@ -232,6 +238,8 @@ class TrackModel(QAbstractTableModel):
         if role == Qt.ForegroundRole:
             if col in ("artist", "album", "duration", "year", "ext", "bitrate", "analyzed_ok_at", "path", "genre"):
                 return QColor("#9CA2B3" if self.dark else "#535B6E")
+            if col == "cues" and not v:
+                return QColor("#9CA2B3" if self.dark else "#535B6E")
             if col == "status" and v == "error":
                 return QColor("#FF6B6B" if self.dark else "#C62828")
         if role == Qt.FontRole and col in ("title", "bpm"):
@@ -240,7 +248,7 @@ class TrackModel(QAbstractTableModel):
             return f
         if role == Qt.TextAlignmentRole and col in ("bpm", "duration", "bitrate"):
             return int(Qt.AlignRight | Qt.AlignVCenter)
-        if role == Qt.TextAlignmentRole and col in ("key", "year", "ext", "energy"):
+        if role == Qt.TextAlignmentRole and col in ("key", "year", "ext", "energy", "cues"):
             return int(Qt.AlignCenter)
         if role == Qt.ToolTipRole:
             if col == "bpm" and r.get("bpm"):
@@ -250,6 +258,8 @@ class TrackModel(QAbstractTableModel):
                 return f"{k.long_name(tr.lang)} · {k.camelot()} · {k.sharps()} / {k.flats()} – {source_text(r, 'key')}"
             if col == "status" and r.get("error"):
                 return r["error"]
+            if col == "cues":
+                return tr("cues_tip")
             if col in ("path", "comment"):
                 return v
         return None

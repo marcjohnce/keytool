@@ -79,6 +79,8 @@ STRINGS: dict[str, str] = {
     "keywords": "Mots-clés",
     "genre": "Genre",
     "duration": "Durée",
+    "cues": "Cues",
+    "cues_tip": "Nombre de points de repère Serato dans le fichier",
     "format": "Format",
     "status": "Statut",
     "path": "Chemin",
