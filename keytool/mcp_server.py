@@ -157,7 +157,7 @@ def suggest_tags(track_id: int, online: bool = True) -> dict:
     t = lib().db.get_track(track_id)
     if not t:
         raise ValueError(f"track {track_id} not found")
-    res = suggest(t, online=online)
+    res = suggest(t, online=online, patterns=lib().settings.retag_patterns)
     return dict(track_id=track_id, isrc=res.isrc or None, online_error=res.online_error or None,
                 unreachable=res.unreachable,
                 suggestions=[dict(field=s.field, value=s.value, source=s.source, old=s.old) for s in res.suggestions])

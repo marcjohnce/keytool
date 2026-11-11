@@ -193,6 +193,28 @@ class SettingsDialog(QDialog):
         self.tag_notation.setEnabled(settings.write_tags)
         self.write_edits = check(settings.write_edits)
         row(v, tr("s_write_edits_short"), tr("sd_write_edits"), self.write_edits)
+        # Auto re-tag: file-name patterns (full width: regular expressions need room)
+        from PySide6.QtWidgets import QLineEdit
+        prow = QWidget(); prow.setObjectName("settingsRow")
+        pv = QVBoxLayout(prow); pv.setContentsMargins(0, 14, 0, 14); pv.setSpacing(6)
+        pt = QLabel(tr("s_retag_patterns")); pt.setObjectName("rowTitle")
+        pd = QLabel(tr("sd_retag_patterns")); pd.setObjectName("dim"); pd.setWordWrap(True)
+        self.patterns = QPlainTextEdit("\n".join(settings.retag_patterns)); self.patterns.setObjectName("codeBlock")
+        self.patterns.setLineWrapMode(QPlainTextEdit.NoWrap); self.patterns.setMinimumHeight(96)
+        self.patterns_err = QLabel(); self.patterns_err.setObjectName("patternError"); self.patterns_err.setWordWrap(True)
+        trow = QHBoxLayout(); trow.setSpacing(8)
+        self.pattern_sample = QLineEdit("07 - Mara Veil - Glass Harbour (Extended Mix).flac")
+        self.pattern_sample.setPlaceholderText(tr("s_retag_sample"))
+        trow.addWidget(QLabel(tr("s_retag_test"))); trow.addWidget(self.pattern_sample, 1)
+        self.pattern_result = QLabel(); self.pattern_result.setObjectName("dim"); self.pattern_result.setWordWrap(True)
+        self.pattern_result.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        for w_ in (pt, pd, self.patterns, self.patterns_err):
+            pv.addWidget(w_)
+        pv.addLayout(trow); pv.addWidget(self.pattern_result)
+        v.addWidget(prow)
+        self.patterns.textChanged.connect(self._check_patterns)
+        self.pattern_sample.textChanged.connect(self._check_patterns)
+        self._check_patterns()
         v.addStretch(1)
 
         # ---------------- MCP
@@ -241,6 +263,22 @@ class SettingsDialog(QDialog):
         from PySide6.QtGui import QDesktopServices
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(path)))
 
+    def pattern_lines(self) -> list[str]:
+        return [ln for ln in self.patterns.toPlainText().splitlines() if ln.strip()]
+
+    def _check_patterns(self):
+        """Show invalid patterns and what the first matching pattern makes of the sample file name."""
+        from ..retag import check_patterns, match_patterns
+        lines = self.pattern_lines()
+        errs = check_patterns(lines)
+        self.patterns_err.setText("\n".join(tr("s_retag_bad_line", n=n, e=e) for n, e in errs))
+        self.patterns_err.setVisible(bool(errs))
+        got = match_patterns(self.pattern_sample.text().strip(), lines) if self.pattern_sample.text().strip() else {}
+        names = {"artist": tr("artist"), "title": tr("title"), "album": tr("album"),
+                 "album_artist": tr("album_artist"), "year": tr("year"), "genre": tr("genre")}
+        self.pattern_result.setText(" · ".join(f"{names[k]}: {v}" for k, v in got.items()) if got
+                                    else tr("s_retag_no_match"))
+
     def apply(self) -> None:
         s = self.s
         s.language = self.lang.currentData()
@@ -256,4 +294,5 @@ class SettingsDialog(QDialog):
         s.write_edits = self.write_edits.isChecked()
         s.tag_key_notation = self.tag_notation.currentData()
         s.reanalyze_existing = self.reanalyze.isChecked()
+        s.retag_patterns = self.pattern_lines()
         s.save()

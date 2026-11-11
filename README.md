@@ -71,7 +71,12 @@ executables" → Run workflow.
   ("03 - Artist - Title [123456]", "Artist - Album (2021) [WEB]"). Only empty or obviously broken fields (e.g. a
   title that is just the file name) get a suggestion. Capitalisation is corrected as well: all-lower-case values and
   ALL-UPPER-CASE values of several words become "Title Case" (the spelling from Discogs/MusicBrainz wins if there is
-  one; acronyms such as DJ, roman numerals and "feat." are kept; a single upper-case word such as MGMT is left alone). Discogs is used without an account (25 requests per minute;
+  one; acronyms such as DJ, roman numerals and "feat." are kept; a single upper-case word such as MGMT is left alone).
+  **File-name patterns** (Settings → Files & tags): regular expressions, one per line, the first match wins over the
+  built-in file-name rules. Named groups `artist`, `title`, `album`, `album_artist`, `year`, `genre` are used (other
+  groups such as `track` or `ext` are ignored); both `(?<name>…)` and Python's `(?P<name>…)` work, case is ignored.
+  Default: `^(?:(?<track>\d{2}) - )?(?<artist>.+?) - (?<title>.+)\.(?<ext>flac|mp3|m4a|ogg)$`. The settings show
+  invalid lines and test the patterns against a sample file name. Discogs is used without an account (25 requests per minute;
   if Discogs asks for a sign-in it is skipped and the summary says so), MusicBrainz needs no key (about one request
   per second); without internet only the file name is used.
 * **Track tooltip:** resting the mouse on the title, artist or album of a track shows a card with the cover

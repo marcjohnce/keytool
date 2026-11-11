@@ -31,3 +31,19 @@ def test_settings_dialog_apply(tmp_path, monkeypatch):
     assert (s2.language, s2.theme, s2.key_method, s2.workers) == ("en", "light", "fast", 3)
     assert (s2.bpm_min, s2.bpm_max) == (90, 180)
     assert not s2.use_existing_tags and s2.reanalyze_existing and not s2.write_tags and not s2.write_edits
+
+
+def test_settings_dialog_retag_patterns(tmp_path, monkeypatch):
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path))
+    QApplication.instance() or QApplication([])
+    from keytool.config import Settings
+    from keytool.gui.settings_dialog import SettingsDialog
+    s = Settings()
+    d = SettingsDialog(s)
+    assert "Mara Veil" in d.pattern_result.text()                            # sample matches the default
+    d.patterns.setPlainText("(?<artist>.+\n" + r"^(?<title>.+)\.(?<ext>mp3)$")
+    assert not d.patterns_err.isHidden() and "1" in d.patterns_err.text()
+    d.pattern_sample.setText("Some Song.mp3")
+    assert "Some Song" in d.pattern_result.text()
+    d.apply()
+    assert Settings.load().retag_patterns == ["(?<artist>.+", r"^(?<title>.+)\.(?<ext>mp3)$"]

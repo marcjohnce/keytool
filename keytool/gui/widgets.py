@@ -943,6 +943,7 @@ class DetailPanel(QWidget, Translatable):
 
     # ------------------------------------------------------------------ auto re-tag
     online_retag = True                      # tests switch MusicBrainz off
+    retag_patterns = None                    # the user's file-name patterns (Settings.retag_patterns)
 
     def auto_retag(self):
         """Ask the file name, the ISRC code and MusicBrainz for tags (in the background) and put the
@@ -955,11 +956,11 @@ class DetailPanel(QWidget, Translatable):
         self._retag_running = row["id"]
         self.retag_btn.setText(tr("retag_running"))
         self._update_buttons()
-        bridge, online = self._retag_bridge, self.online_retag
+        bridge, online, patterns = self._retag_bridge, self.online_retag, self.retag_patterns
 
         def work():
             try:
-                res = suggest(row, online=online)
+                res = suggest(row, online=online, patterns=patterns)
             except Exception as e:                 # never crash the details for this
                 res = e
             try:
