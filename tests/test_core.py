@@ -339,8 +339,8 @@ def test_waveform_and_cache(tmp_path, monkeypatch):
     f = tmp_path / "w.wav"
     _write_wav(f, y)
     wf = get_waveform(str(f))
-    assert len(wf.peaks) == len(wf.colors) == 1600 and abs(wf.duration - 20) < 0.1
-    assert wf.peaks.max() <= 1.0 and wf.peaks[:300].max() < 0.01 and wf.peaks[500:].mean() > 0.2
+    assert len(wf.peaks) == len(wf.colors) == 2000 and abs(wf.duration - 20) < 0.1          # 100 per second
+    assert wf.peaks.max() <= 1.0 and wf.peaks[:480].max() < 0.01 and wf.peaks[600:].mean() > 0.2
     assert wf.colors.dtype == np.uint8 and wf.colors.shape[1] == 3
     cached = list((tmp_path / "data" / "waveforms").glob("*.npz"))
     assert len(cached) == 1
