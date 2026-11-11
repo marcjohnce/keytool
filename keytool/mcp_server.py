@@ -229,7 +229,7 @@ _kv_client = None
 def search_karaoke_version(keys: list[str] | None = None, bpm_min: float | None = None,
                            bpm_max: float | None = None, page: int = 1, with_details: bool = False,
                            notation: str = "camelot", include_semitones: bool = False) -> dict:
-    """Search karaoke-version.de (custom backing tracks) by key(s) in any notation and/or a BPM range.
+    """Search karaoke-version.com (custom backing tracks) by key(s) in any notation and/or a BPM range.
 
     One request per key is made so every hit carries the key it was found for. 20 hits per key and page.
     with_details=true additionally reads each hit's song page for exact tempo (or 'variable ~x'), all keys

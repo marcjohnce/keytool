@@ -381,7 +381,7 @@ def main():
         (pos(dlg.bmax, dlg, 1.0, 0.5, -2), "Tempo range", "right"),
         (pos(dlg.semitones, dlg, 0.0, 0.5, 2), "Also keys ±1 semitone (transposable on the site)", "left"),
         (pos(dlg.preview, dlg, 1.0, 0.5, -2), "What the search covers", "right"),
-        (pos(dlg.search_btn, dlg, 0.5, 1.0, 0, -2), "Opens the search on karaoke-version.de in your browser", "bottom"),
+        (pos(dlg.search_btn, dlg, 0.5, 1.0, 0, -2), "Opens the search on karaoke-version.com in your browser", "bottom"),
     ], "06-karaoke-version.png", "Karaoke-Version search")
     dlg.done(0)
 

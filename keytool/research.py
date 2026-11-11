@@ -1,7 +1,8 @@
-"""External research on Karaoke-Version (karaoke-version.de): search by key(s) and BPM range and parse
+"""External research on Karaoke-Version (karaoke-version.com): search by key(s) and BPM range and parse
 the results.
 
-Site facts (verified Nov 2026):
+Site facts (verified Nov 2026 on the German site karaoke-version.de, which runs the same shop software; the
+English .com pages are parsed with the matching English labels):
 * Search  /custombackingtrack/karaoke.html?chordkey=<codes>&tempo=<min>,<max>&page=<n>
           20 results per page; several keys and any BPM range can be combined.
 * Results (.songlist__item) carry title, artist, year, price, image and the song page link,
@@ -10,7 +11,8 @@ Site facts (verified Nov 2026):
 * Song page "Tempo: 126 BPM" | "Tempo: variabel (ca. 130 BPM)" | no tempo line,
           "In der gleichen Tonart wie das Original: C, Bm" (German note names: H = B, B = Bb,
           Fis/Cis/... = sharps, Es/As/... = flats; several keys = key changes within the song),
-          "Dauer: 04:27".
+          "Dauer: 04:27". On .com: "Tempo: 126 BPM" / "around 130 BPM", "...same key as the original: C, Bm"
+          (English note names: B = B natural, Bb = B flat), "Duration: 04:27" / "Length: 04:27".
 * Terms: Recisio's AGB only reserve text & data mining for AI/ML training; robots.txt allows the
           search pages for normal user agents. KeyTool only fetches what the user asks for, identifies
           itself, throttles requests and caches song pages.
@@ -31,7 +33,7 @@ from urllib.parse import urlencode, urljoin
 from . import __version__
 from .keys import Key
 
-BASE = "https://www.karaoke-version.de"
+BASE = "https://www.karaoke-version.com"
 SEARCH_PATH = "/custombackingtrack/karaoke.html"
 PER_PAGE = 20
 USER_AGENT = f"KeyTool/{__version__} (desktop music library; key/BPM research)"
@@ -155,8 +157,9 @@ def parse_total(page_html: str) -> int | None:
     m = re.search(r'data-pagination-ajax[^>]*data-total="(\d+)"', page_html)
     if m:
         return int(m.group(1))
-    m = re.search(r"(\d[\d.]*)\s+Titel verfügbar", page_html)
-    return int(m.group(1).replace(".", "")) if m else None
+    m = (re.search(r"(\d[\d.]*)\s+Titel verfügbar", page_html)
+         or re.search(r"(\d[\d,.]*)\s+(?:songs?|tracks?|titles?)\s+available", page_html, re.I))
+    return int(re.sub(r"[.,]", "", m.group(1))) if m else None
 
 
 def parse_list(page_html: str, base: str = BASE) -> tuple[int | None, list[KVSong]]:
@@ -201,29 +204,50 @@ def parse_german_key(token: str) -> Key | None:
     return None
 
 
+_EN_PC = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
+
+
+def parse_english_key(token: str) -> Key | None:
+    """'Am', 'C', 'F#m', 'Bb', 'Eb minor', 'B' (= B natural) ..."""
+    t = token.strip().replace("♯", "#").replace("♭", "b")
+    m = re.fullmatch(r"([A-Ga-g])\s*([#b])?\s*(m|min|minor|maj|major)?", t)
+    if not m:
+        return None
+    pc = (_EN_PC[m.group(1).lower()] + {"#": 1, "b": -1}.get(m.group(2) or "", 0)) % 12
+    return Key(pc, (m.group(3) or "").lower() in ("m", "min", "minor"))
+
+
 def parse_detail(page_html: str) -> KVDetails:
     text = _text(page_html)
+    german = bool(re.search(r"Tonart|Dauer:", text))
     bpm, variable = None, False
-    m = re.search(r"Tempo:\s*(variabel|variable)?\s*\(?\s*(?:ca\.|ungefähr|around)?\s*(\d+(?:[.,]\d+)?)\s*BPM",
-                  text, re.I)
+    m = re.search(r"Tempo:\s*(variabel|variable)?\s*\(?\s*(?:ca\.|ungefähr|around|approx\.?|about)?\s*"
+                  r"(\d+(?:[.,]\d+)?)\s*BPM", text, re.I)
     if m:
-        variable = bool(m.group(1))
+        variable = bool(m.group(1)) or bool(re.search(r"Tempo:\s*(?:around|approx|about)", text, re.I))
         bpm = float(m.group(2).replace(",", "."))
     keys: list[str] = []
-    m = (re.search(r"Tonart wie das Original:\s*(.+?)(?:\s+Dauer:|$)", text)
-         or re.search(r"(?:Originaltonart|Tonart|Tonlage)\s*:\s*(.+?)(?:\s+Dauer:|$)", text))
+    end = r"(?:\s+(?:Dauer|Duration|Length):|$)"
+    if german:
+        m = (re.search(rf"Tonart wie das Original:\s*(.+?){end}", text)
+             or re.search(rf"(?:Originaltonart|Tonart|Tonlage)\s*:\s*(.+?){end}", text))
+        parse_key, split = parse_german_key, r"\s*,\s*|\s+und\s+|\s*/\s*"
+    else:
+        m = (re.search(rf"key as the original:\s*(.+?){end}", text, re.I)
+             or re.search(rf"(?:Original key|Key)\s*:\s*(.+?){end}", text))
+        parse_key, split = parse_english_key, r"\s*,\s*|\s+and\s+|\s*/\s*"
     if m:
-        for tok in re.split(r"\s*,\s*|\s+und\s+|\s*/\s*", m.group(1)):
+        for tok in re.split(split, m.group(1)):
             tok = tok.strip()
             if not tok:
                 continue
-            k = parse_german_key(tok)
+            k = parse_key(tok)
             if k is None:
                 break           # end of the key list
             if k.code not in keys:
                 keys.append(k.code)
     dur = None
-    m = re.search(r"Dauer:\s*(\d+):(\d{2})", text)
+    m = re.search(r"(?:Dauer|Duration|Length):\s*(\d+):(\d{2})", text)
     if m:
         dur = int(m.group(1)) * 60 + int(m.group(2))
     return KVDetails(bpm, variable, keys, dur)
@@ -272,7 +296,7 @@ class KaraokeVersionClient:
     def _http_get(self, url: str) -> str:
         req = urllib.request.Request(url, headers={
             "User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml",
-            "Accept-Language": "de-DE,de;q=0.9"})
+            "Accept-Language": "en-US,en;q=0.9"})
         try:
             with urllib.request.urlopen(req, timeout=25) as r:
                 charset = r.headers.get_content_charset() or "utf-8"

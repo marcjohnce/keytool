@@ -23,7 +23,7 @@ More annotated screenshots are in [Screenshots](#screenshots) below.
 | Tags | BPM & key are **written into the file automatically** after analysis (ID3 TBPM/TKEY, Vorbis BPM/INITIALKEY, MP4 tmpo/initialkey) – can be turned off |
 | Details | Right-hand sidebar, shown/hidden with "Details" in the toolbar or Ctrl+I (remembered). Edit title, artist, album, album artist (ALBUMARTIST, only shown here), year, genre, comment, key, energy (1–10) and tempo – for one track or many at once; file type, bitrate, file size, duration and path are shown. Changes are written into the file tags (can be turned off) |
 | Manual correction | Override BPM/key; manual values are kept when a track is analysed again |
-| Research | Search **Karaoke-Version** (karaoke-version.de) by key(s) and BPM range (see the note on bot protection below) |
+| Research | Search **Karaoke-Version** (karaoke-version.com) by key(s) and BPM range (see the note on bot protection below) |
 | Player (deck) | Full-width deck: large title, key chip in its Camelot colour, large tempo, transpose buttons with the target key (e.g. "+1 3A"); cover (embedded or cover.jpg/folder.jpg in the folder, otherwise a placeholder), previous/next track, play/pause, stop, continuous play; plays through the system's default output device (follows device changes, e.g. headphones), volume, mute |
 | Transpose | Play one semitone higher (+1) or lower (−1) at the original tempo (Rubber Band via pedalboard); positions and cue points stay valid |
 | Serato cues | Existing Serato DJ hot cues (colour, name) and saved loops are read from the files (MP3, WAV, FLAC, M4A; OGG where possible) and shown in the waveform; clicking a cue flag or Alt+1…8 jumps to it |

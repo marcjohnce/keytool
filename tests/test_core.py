@@ -385,7 +385,7 @@ def test_kv_parse_list():
     assert total == 450 and len(songs) == 3
     s = songs[0]
     assert (s.title, s.artist, s.year, s.price) == ("Losing My Religion", "R.E.M.", 1991, "2,99 €")
-    assert s.url == "https://www.karaoke-version.de/custombackingtrack/r-e-m/losing-my-religion.html"
+    assert s.url == "https://www.karaoke-version.com/custombackingtrack/r-e-m/losing-my-religion.html"
     assert s.song_id == "10592-1" and s.image.startswith("https://")
     assert [x.artist for x in songs[1:]] == ["Andreas Gabalier", "Roland Kaiser"]
 
