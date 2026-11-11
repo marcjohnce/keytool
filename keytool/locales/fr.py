@@ -61,6 +61,8 @@ STRINGS: dict[str, str] = {
     'sec_bridge': 'Pont',
     'sec_break': 'Break',
     'sec_outro': 'Outro',
+    's_sections_short': 'Détecter les sections',
+    'sd_sections': 'Détecte intro, couplet, refrain, etc. à chaque analyse (un peu plus long). Désactivé : via « Analyse → Analyser les sections ».',
     'cue_add_here': 'Placer un point cue ici',
     'cue_add_full': 'Placer un point cue ici (les 8 sont pris)',
     'cue_delete_n': 'Supprimer le cue {n}',

@@ -47,6 +47,7 @@ class Settings:
     workers: int = 0                # 0 = auto (CPU count - 1, max 16, ~1 GB RAM per analysis)
     key_method: str = "classic"     # "classic" | "fast" (CQT-domain HPSS, ~4x faster) - see --compare-key
     reanalyze_existing: bool = False
+    detect_sections: bool = True    # detect song sections with every analysis (menu Analyse works anyway)
     volume: float = 0.8             # player volume 0..1
     show_details: bool = True       # right sidebar (metadata, file info, keywords) visible
     research_semitones: bool = True      # also search keys 1 semitone below/above (transposable on KV)
