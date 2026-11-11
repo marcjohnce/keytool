@@ -46,12 +46,13 @@ More annotated screenshots are in [Screenshots](#screenshots) below.
 
 A separate FFmpeg installation is not needed.
 
-**Option C – GitHub Actions:** `.github/workflows/build.yml` builds both executables on a Windows runner for every
-push and pull request to `main`: tests → PyInstaller → smoke test (`packaging/smoke_test.py` analyses a synthetic
+**Option C – GitHub Actions:** `.github/workflows/build.yml` runs the tests for every pull request to `main` and
+builds both executables on a Windows runner for every push to `main`: tests → PyInstaller → smoke test (`packaging/smoke_test.py` analyses a synthetic
 track with the built `KeyTool-MCP.exe` and checks BPM and key) → zip as a workflow artifact
 (`KeyTool-<commit>-windows-x64.zip`, kept 30 days). Pushing a tag such as `v1.1.0` also creates a GitHub release
 with `KeyTool-v1.1.0-windows-x64.zip` attached. It can also be started by hand under Actions → "Build Windows
-executables" → Run workflow.
+executables" → Run workflow (on any branch, e.g. to check packaging changes before merging). Changes that only
+touch `docs/` or Markdown files start no run.
 
 ## Usage
 
