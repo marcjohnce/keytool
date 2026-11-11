@@ -94,6 +94,8 @@ _T: dict[str, tuple[str, str]] = {
     "keywords": ("Schlüsselwörter", "Keywords"),
     "genre": ("Genre", "Genre"),
     "duration": ("Dauer", "Duration"),
+    "cues": ("Cues", "Cues"),
+    "cues_tip": ("Anzahl der Serato-Cue-Punkte in der Datei", "Number of Serato cue points in the file"),
     "format": ("Format", "Format"),
     "status": ("Status", "Status"),
     "path": ("Pfad", "Path"),

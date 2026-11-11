@@ -151,6 +151,14 @@ def parse_vorbis_value(value: str | bytes) -> SeratoMarkers:
     return parse_tag_data(_b64decode_lenient(raw))
 
 
+def count_cues(path: str) -> int:
+    """Number of Serato hot cues in a file (0 if none or unreadable)."""
+    try:
+        return len(read_serato_markers(path).cues)
+    except Exception:
+        return 0
+
+
 def read_serato_markers(path: str) -> SeratoMarkers:
     """Read Serato cues/loops from an audio file. Returns an empty SeratoMarkers if there are none."""
     import mutagen

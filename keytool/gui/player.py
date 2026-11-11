@@ -577,6 +577,7 @@ class PlayerPanel(QWidget, Translatable):
     prev_requested = Signal(bool)     # keep playing?
     next_requested = Signal(bool)
     deck_changed = Signal()           # loaded track, its key/bpm or the transposition changed
+    cues_read = Signal(str, int)      # path, number of cue points found in the loaded file
 
     def __init__(self, settings, parent=None):
         super().__init__(parent)
@@ -940,6 +941,7 @@ class PlayerPanel(QWidget, Translatable):
             self.markers = markers
             self.wave.set_markers(markers)
             self._update_cue_buttons()
+            self.cues_read.emit(path, len(markers.cues) if markers else 0)
             self._update_title()
 
     def seek_ms(self, ms: int):

@@ -84,6 +84,8 @@ STRINGS: dict[str, str] = {
     "keywords": "Palabras clave",
     "genre": "Género",
     "duration": "Duración",
+    "cues": "Cues",
+    "cues_tip": "Número de puntos cue de Serato en el archivo",
     "format": "Formato",
     "status": "Estado",
     "path": "Ruta",

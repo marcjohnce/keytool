@@ -17,6 +17,7 @@ from typing import Callable, Iterable
 from .config import Settings, db_path
 from .db import Database, Query, norm_path
 from .keys import Key
+from .serato import count_cues
 from .tags import EDITABLE_FIELDS, is_audio_file, parse_tag_bpm, parse_tag_key, read_metadata, write_bpm_key, write_metadata
 
 ProgressCB = Callable[[int, int, dict | None], None]   # (done, total, track_row)
@@ -133,6 +134,8 @@ class Library:
             if (existing and existing["size"] == st.st_size and abs((existing["mtime"] or 0) - st.st_mtime) < 1
                     and existing["status"] == "ok" and not self.settings.reanalyze_existing):
                 rep.unchanged += 1
+                if existing["cue_count"] is None:      # libraries from before the cue column: count once
+                    self.db.update_track(existing["id"], cue_count=count_cues(path))
                 p = norm_path(path)
                 if existing["path"] != p:            # same file, letter case differs (e.g. old lower-case rows)
                     self.db.update_track(existing["id"], path=p, folder=os.path.dirname(p),
@@ -142,7 +145,7 @@ class Library:
             meta = dict(title=md.title, artist=md.artist, album=md.album, album_artist=md.album_artist,
                         year=md.year, genre=md.genre,
                         duration=md.duration, tag_bpm=md.tag_bpm, tag_key=md.tag_key, comment=md.comment,
-                        energy=md.energy, bitrate=md.bitrate)
+                        energy=md.energy, bitrate=md.bitrate, cue_count=count_cues(path))
             tid = self.db.upsert_file(path, st.st_size, st.st_mtime, meta)
             if not existing:
                 rep.added += 1
@@ -385,6 +388,18 @@ class Library:
             r["album_artist"] = value
             changed = True
         return changed
+
+    def fill_cue_counts(self, batch: int = 200, cancel: threading.Event | None = None) -> list[tuple[int, int]]:
+        """Count the Serato cue points of up to `batch` tracks that have none stored yet.
+        Returns [(track_id, count)]; an empty list means everything is counted."""
+        out = []
+        for tid, path in self.db.ids_without_cue_count(batch):
+            if cancel is not None and cancel.is_set():
+                break
+            n = count_cues(path) if os.path.exists(path) else 0
+            self.db.update_track(tid, cue_count=n)
+            out.append((tid, n))
+        return out
 
     def reset_manual(self, track_ids: Iterable[int]) -> None:
         for tid in track_ids:

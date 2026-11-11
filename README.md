@@ -55,6 +55,9 @@ executables" → Run workflow.
   and have not changed are skipped. Analysis runs in parallel on several CPU cores.
 * **Search:** the "Search everything" field (Ctrl+F) searches title, artist, album, file name, genre, year and
   keywords. All filters on the left can be combined.
+* **Cues column:** number of Serato cue points in each file (0 = none, empty = not counted yet). Counted when
+  files are imported or changed, for older libraries once in the background after the start, and again whenever a
+  track is loaded into the deck. Cue points that only live in another program's database are not counted.
 * **Track tooltip:** resting the mouse on the title, artist or album of a track shows a card with the cover
   artwork, title, artist, album and year (a record in the key's colour if there is no artwork). Covers are read in
   the background and cached.
