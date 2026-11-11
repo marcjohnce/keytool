@@ -75,3 +75,28 @@ def test_transpose_buttons_without_zero(tmp_path, monkeypatch):
     p.set_track(dict(id=2, path="/y.mp3", title="T", artist="A", key=None, bpm=120.0))
     assert [p.tp_buttons[s].text() for s in (-1, 0, 1)] == ["−1", "–", "+1"]
     p.deleteLater(); app.processEvents()
+
+
+def test_chip_spans_the_transpose_row_with_the_key_name(tmp_path, monkeypatch):
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path))
+    app = QApplication.instance() or QApplication([])
+    import keytool.gui.player as pl
+    monkeypatch.setattr(pl, "HAVE_MULTIMEDIA", False)
+    from keytool.config import Settings
+    from keytool.i18n import set_language
+    set_language("en")
+    p = pl.PlayerPanel(Settings())
+    p.resize(1400, 230); p.show(); app.processEvents()
+    p.set_track(dict(id=1, path="/x.mp3", title="T", artist="A", key=Key.parse("8A").code, bpm=124.46, energy=7))
+    app.processEvents()
+    b = [p.tp_buttons[s] for s in (-1, 0, 1)]
+    left = b[0].mapTo(p, QPoint(0, 0)).x()
+    right = b[2].mapTo(p, QPoint(0, 0)).x() + b[2].width()
+    assert p.key_chip.mapTo(p, QPoint(0, 0)).x() == left and p.key_chip.width() == right - left
+    assert len({x.width() for x in b}) == 1
+    assert p.key_chip.name == "A minor" and p.key_chip.shown_name() == "A minor"
+    assert p.bpm_lbl.text() == "124" and "124.46" in p.bpm_lbl.toolTip()
+    assert p.bpm_sub.text() == "BPM · energy 7"
+    p.set_semitones(1) if p._tp_available else None
+    p.key_chip.grab()                                                   # paints key and name
+    p.deleteLater(); app.processEvents()

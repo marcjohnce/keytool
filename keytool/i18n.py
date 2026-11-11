@@ -51,7 +51,7 @@ _T: dict[str, tuple[str, str]] = {
     "analysis_menu": ("Analysieren", "Analyze"),
     "deck_caption": ("Im Deck", "In the deck"),
     "tempo_short": ("Tempo", "Tempo"),
-    "bpm_energy": ("BPM, Energy {e}", "BPM, energy {e}"),
+    "bpm_energy": ("BPM · Energy {e}", "BPM · energy {e}"),
     "time_of": ("{a} von {b}", "{a} of {b}"),
     "fit": ("Passt", "Fits"),
     "delta_deck": ("zum Deck", "vs. deck"),
@@ -454,7 +454,7 @@ def strings_for(lang: str) -> dict[str, str]:
 
 
 class Translator:
-    def __init__(self, lang: str = "de"):
+    def __init__(self, lang: str = "en"):           # English until the settings say otherwise
         self.lang = lang if lang in LANGUAGES else "en"
 
     def __call__(self, key: str, **kw) -> str:
