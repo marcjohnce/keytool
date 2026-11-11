@@ -28,7 +28,7 @@ More annotated screenshots are in [Screenshots](#screenshots) below.
 | Transpose | Play one semitone higher (+1) or lower (−1) at the original tempo (Rubber Band via pedalboard); positions and cue points stay valid |
 | Serato cues | Existing Serato DJ hot cues (colour, name) and saved loops are read from the files (MP3, WAV, FLAC, M4A; OGG where possible) and shown in the waveform; clicking a cue flag or Alt+1…8 jumps to it |
 | Waveform | Overview of the deck track, coloured by frequency band (bass blue, mids amber, highs white), click/drag to seek, bar ticks from the BPM |
-| Fits the deck | "Fits" column (● same key, ◐ harmonic neighbour ±1 or relative major/minor, ○ does not fit, transposition included) and "vs. deck" (tempo difference in %, dimmed beyond ±6 %); both sortable |
+| Fits the deck | "Fits" column (● same key, ◐ harmonic neighbour ±1 or relative major/minor, ○ does not fit, transposition included) and "vs. deck" (tempo difference in %, dimmed beyond ±6 %); both sortable. The track in the deck is shown as a row in the accent colour |
 | User interface | English, German, Spanish, French, Italian (in the settings; numbers, dates and key names such as "a-Moll" / "La menor" / "la mineur" follow the language), light and dark mode (or system), switch without restarting; Archivo typeface (SIL OFL, bundled), colour only for keys, amber for playback |
 | MCP server | Full access: search, details, keywords, set values, write tags, import & analyse folders |
 

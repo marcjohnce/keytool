@@ -193,7 +193,7 @@ class TrackModel(QAbstractTableModel):
                 return -1.0 if is_deck else (abs(d) if d is not None else 1e9)
             if role == Qt.ForegroundRole:
                 if is_deck:
-                    return QColor("#F0A53A" if self.dark else "#B4650A")
+                    return QColor("#1A1206" if self.dark else "#FFFFFF")
                 if d is not None and abs(d) > 6:
                     return QColor("#8D93A4" if self.dark else "#6B7385")
             if role == Qt.TextAlignmentRole:
@@ -240,6 +240,8 @@ class TrackModel(QAbstractTableModel):
         if role == ID_ROLE:
             return r["id"]
         if role == Qt.ForegroundRole:
+            if is_deck:                                    # the deck's track: text on the accent background
+                return QColor("#1A1206" if self.dark else "#FFFFFF")
             if col in ("artist", "album", "duration", "year", "ext", "bitrate", "analyzed_ok_at", "path", "genre"):
                 return QColor("#9CA2B3" if self.dark else "#535B6E")
             if col == "cues" and not v:
@@ -298,6 +300,20 @@ class TrackDelegate(QStyledItemDelegate):
         from PySide6.QtGui import QPen
         from .theme import CHIP_TEXT
         col = self.m.COLUMNS[index.column()]
+        deck = bool(index.data(DECK_ROLE))
+        if deck:
+            # the track in the deck: whole row tinted with the accent colour and its text in accent, also while
+            # selected (the selection then shows as a stronger tint instead of the normal selection colour)
+            from .theme import THEMES
+            c = THEMES["dark" if self.m.dark else "light"]
+            selected = bool(option.state & QStyle.State_Selected)
+            bg = QColor(c["accent"])
+            if selected:                                     # selection: a slightly deeper accent
+                bg = bg.darker(112) if self.m.dark else bg.lighter(112)
+            painter.fillRect(option.rect, bg)
+            option = QStyleOptionViewItem(option)
+            option.state &= ~QStyle.State_Selected
+            option.palette.setColor(QPalette.Text, QColor(c["accent_text"]))
         if col not in ("fit", "key", "energy"):
             super().paint(painter, option, index)
         else:
@@ -310,6 +326,8 @@ class TrackDelegate(QStyledItemDelegate):
         pal = option.palette
         text_col = pal.color(QPalette.Text)
         line_col = QColor("#34405A" if self.m.dark else "#CDD2DD")
+        if deck:                                             # empty energy bars on the accent background
+            line_col = QColor(text_col); line_col.setAlphaF(0.3)
         r = QRectF(option.rect)
         painter.save()
         painter.setRenderHint(QPainter.Antialiasing)
@@ -356,10 +374,6 @@ class TrackDelegate(QStyledItemDelegate):
                 for i in range(10):
                     painter.setBrush(text_col if i < int(e) else line_col)
                     painter.drawRoundedRect(QRectF(x0 + i * (bw + gap), y0, bw, bh), 1, 1)
-        if index.column() == 0 and index.data(DECK_ROLE):
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor("#F0A53A" if self.m.dark else "#B4650A"))
-            painter.drawRect(QRectF(r.left(), r.top(), 3, r.height()))
         painter.restore()
 
 
