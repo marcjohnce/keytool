@@ -966,6 +966,16 @@ class KeyChip(QWidget):
         self.code, self.text, self.name = code, text or "–", name
         self.update()
 
+    def text_positions(self) -> tuple[QPointF, QPointF]:
+        """Baseline points of the key (left) and its name (right-aligned): one shared baseline, so both
+        texts end flush at the bottom; the key is centred vertically."""
+        from PySide6.QtGui import QFontMetricsF
+        r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        big = QFontMetricsF(self.big)
+        baseline = r.center().y() + (big.ascent() - big.descent()) / 2
+        name_w = QFontMetricsF(self.small).horizontalAdvance(self.shown_name())
+        return QPointF(r.left() + 14, baseline), QPointF(r.right() - 12 - name_w, baseline)
+
     def shown_name(self) -> str:
         """The key name as painted (shortened with "…" if it does not fit next to the key)."""
         from PySide6.QtGui import QFontMetrics
@@ -984,14 +994,15 @@ class KeyChip(QWidget):
             p.setPen(QPen(self.palette().color(self.palette().ColorRole.Mid), 1)); p.setBrush(Qt.NoBrush)
         p.drawRoundedRect(r, 10, 10)
         ink = QColor(CHIP_TEXT) if col is not None else self.palette().color(self.palette().ColorRole.PlaceholderText)
+        key_at, name_at = self.text_positions()
         p.setFont(self.big)
         p.setPen(ink)
-        p.drawText(r.adjusted(14, 0, 0, 0), Qt.AlignLeft | Qt.AlignVCenter, self.text)
+        p.drawText(key_at, self.text)
         name = self.shown_name()
         if name:
             ink.setAlpha(200)
             p.setFont(self.small); p.setPen(ink)
-            p.drawText(r.adjusted(0, 0, -12, -9), Qt.AlignRight | Qt.AlignBottom, name)
+            p.drawText(name_at, name)
 
 
 # =========================================================================== player panel

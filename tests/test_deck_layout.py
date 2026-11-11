@@ -100,3 +100,20 @@ def test_chip_spans_the_transpose_row_with_the_key_name(tmp_path, monkeypatch):
     p.set_semitones(1) if p._tp_available else None
     p.key_chip.grab()                                                   # paints key and name
     p.deleteLater(); app.processEvents()
+
+
+def test_key_and_name_share_the_baseline(tmp_path, monkeypatch):
+    """The key ("5A") and its name ("C minor, -1") are drawn on one baseline, the name flush right."""
+    monkeypatch.setenv("KEYTOOL_DATA_DIR", str(tmp_path))
+    app = QApplication.instance() or QApplication([])
+    import keytool.gui.player as pl
+    from PySide6.QtGui import QFontMetricsF
+    chip = pl.KeyChip()
+    chip.setFixedWidth(240)
+    chip.set_key(Key.parse("5A").code, "5A", "C minor, -1")
+    key_at, name_at = chip.text_positions()
+    assert key_at.y() == name_at.y()
+    assert 0 < key_at.y() < chip.height()
+    assert abs(name_at.x() + QFontMetricsF(chip.small).horizontalAdvance("C minor, -1") - (chip.width() - 12.5)) < 1
+    chip.grab()
+    chip.deleteLater(); app.processEvents()
