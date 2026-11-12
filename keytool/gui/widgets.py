@@ -1436,7 +1436,6 @@ class AudioTypePicker(QComboBox):
         from PySide6.QtGui import QStandardItemModel
         self.placeholder_key = placeholder_key
         self._checked: set[str] = set()
-        self._keep_open = False
         self.setModel(QStandardItemModel(self))
         self.setItemDelegate(QStyledItemDelegate(self))     # real check boxes (styled like the keyword list)
         self.view().setObjectName("typeList")
@@ -1464,16 +1463,21 @@ class AudioTypePicker(QComboBox):
 
     def eventFilter(self, obj, ev):
         from PySide6.QtCore import QEvent
+        if obj is self.view().viewport() and ev.type() == QEvent.MouseButtonPress:
+            self._pressed = self.view().indexAt(ev.position().toPoint())
+            return True
         if obj is self.view().viewport() and ev.type() == QEvent.MouseButtonRelease:
             idx = self.view().indexAt(ev.position().toPoint())
-            if idx.isValid():
+            pressed, self._pressed = getattr(self, "_pressed", None), None
+            # only a click that started in the open list counts: the release of the click that opened the list
+            # lands on the entry under the mouse (Windows opens the list over the box) and must not toggle it
+            if idx.isValid() and pressed is not None and pressed == idx:
                 code = idx.data(Qt.UserRole)
                 (self._checked.discard if code in self._checked else self._checked.add)(code)
                 self.model().setData(idx, Qt.Checked if code in self._checked else Qt.Unchecked, Qt.CheckStateRole)
-                self._keep_open = True
                 self._update_tip(); self.update()
                 self.changed.emit()
-            return True                                    # the list stays open for the next check box
+            return True              # consumed, so the list stays open for the next check box
         return super().eventFilter(obj, ev)
 
     def keyPressEvent(self, ev):
@@ -1485,11 +1489,9 @@ class AudioTypePicker(QComboBox):
                 return
         super().keyPressEvent(ev)
 
-    def hidePopup(self):
-        if self._keep_open:
-            self._keep_open = False
-            return
-        super().hidePopup()
+    def showPopup(self):
+        self._pressed = None
+        super().showPopup()
 
     def summary(self) -> str:
         names = [self.model().item(r).text() for r in range(self.model().rowCount())
