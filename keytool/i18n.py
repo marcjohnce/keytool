@@ -174,6 +174,7 @@ _T: dict[str, tuple[str, str]] = {
                        "file name; types set by hand are kept."),
     "all_types": ("Alle Typen", "All types"),
     "no_type": ("Kein Typ", "No type"),
+    "tracks_heading": ("Titelliste", "Tracks"),
     "group_by": ("Gruppieren", "Group by"),
     "group_none": ("Keine", "None"),
     "group_artist": ("Interpret", "Artist"),

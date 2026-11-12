@@ -25,6 +25,7 @@ FIT_ROLE = Qt.UserRole + 4       # 2 same key, 1 harmonic neighbour, 0 no match,
 GROUP_ROLE = Qt.UserRole + 5     # sort key of the row's group ("" when the list is not grouped)
 HEADER_ROLE = Qt.UserRole + 6    # True for a group header row
 GROUP_BY = ("none", "artist", "album")
+PANEL_TOP = 16                   # top margin of the panel titles (filters, track list, details): keeps them aligned
 
 
 def harmonic_fit(code: str | None, deck_code: str | None) -> int | None:
@@ -876,7 +877,7 @@ class DetailPanel(QWidget, Translatable):
         self._loading = False
         self.dirty: set[str] = set()
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(4, 4, 4, 4)
+        lay.setContentsMargins(4, PANEL_TOP, 4, 4)     # title top-aligned with "Search & filter" and "Tracks"
         lay.setSpacing(8)
 
         self.heading = QLabel(); self.heading.setObjectName("heading"); self.heading.setWordWrap(True)
