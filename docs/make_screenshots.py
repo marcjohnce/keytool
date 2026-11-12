@@ -430,7 +430,7 @@ def main():
     nav = sdlg.findChild(QWidget, "settingsNav")
     marks = []
     if nav is not None:
-        marks.append((pos(nav, sdlg, 0.0, 0.08, 4), "Sections: display, analysis, files & tags, MCP server", "left"))
+        marks.append((pos(nav, sdlg, 0.0, 0.08, 4), "Sections: display, analysis, files & tags, CSV export, AI chat, MCP server", "left"))
     from PySide6.QtWidgets import QLabel
     descs = [l for l in sdlg.findChildren(QLabel) if l.isVisible() and l.objectName() == "dim" and l.text()
              and l.mapTo(sdlg, QPoint(0, 0)).y() > 140]
@@ -440,6 +440,62 @@ def main():
                       "Every setting explains what it does", "bottom"))
     annotate(shot, marks, "08-settings.png", "Settings")
     sdlg.reject()
+
+    # 9) AI chat ---------------------------------------------------------------
+    # a scripted model (no network): filter, then a keyword change that waits for the confirmation
+    from keytool import assistant as ai
+    from keytool.keys import Key as _Key
+    ai.get_api_key = lambda provider: "demo"
+    ids = {t["title"]: t["id"] for t in lib.search(__import__("keytool.db", fromlist=["Query"]).Query())}
+
+    class Demo(ai.Provider):
+        def __init__(self):
+            super().__init__("claude-sonnet-5-5")
+            self.replies = [
+                ai.Reply("", [ai.Call("1", "set_filter", {"keys": ["8A", "7A", "9A", "8B"], "bpm_min": 120,
+                                                         "bpm_max": 128})]),
+                ai.Reply("**Midnight Avenue** (8A, 124 BPM) fits 4 tracks. The best: **Glass Harbour** (9A, 122 BPM) "
+                         "and **Copper Sky** (8B, 125 BPM) – harmonic neighbours, less than 2 % apart."),
+                ai.Reply("", [ai.Call("2", "add_keywords", {"track_ids": [ids["Glass Harbour"], ids["Copper Sky"]],
+                                                           "keywords": ["Warm-up"]})]),
+            ]
+
+        def chat(self, system, history, tools):
+            return self.replies.pop(0) if self.replies else ai.Reply("Done.")
+    demo = Demo()
+    ai.make_provider = lambda settings, http=None: demo
+    w.a_details.setChecked(False)
+    w.a_chat.setChecked(True)
+    w.chat.refresh_setup()
+    app.processEvents()
+
+    def ask(text, until):
+        w.chat.send(text)
+        for _ in range(200):
+            app.processEvents()
+            if until():
+                break
+            time.sleep(0.02)
+    ask("Show me everything that fits my deck between 120 and 128 BPM", lambda: not w.chat.running())
+    ask("Give Glass Harbour and Copper Sky the keyword Warm-up", lambda: w.chat._pending_confirm is not None)
+    for _ in range(10):
+        app.processEvents(); time.sleep(0.02)
+    shot = w.grab()
+    root = w
+    card = w.chat._pending_confirm[0]
+    annotate(shot, [
+        (pos(w.toolbar.widgetForAction(w.a_chat), root, 0.5, 1.0, 0, -2), "Chat on/off (Ctrl+J), next to Details", "top"),
+        (pos(w.chat.model_lbl, root, 0.0, 0.5, 0), "Model in use (Settings → AI chat: Claude or OpenAI-compatible)", "top"),
+        (pos(w.f_keys, root, 0.5, 0.5), "The chat operates the app: here it set the key and BPM filter", "left"),
+        (pos(card, root, 1.0, 0.3, -2), "Changes to data and files wait for your confirmation", "right"),
+        (pos(w.chat.input, root, 0.3, 1.0, 0, -2), "Ask in your own words (Enter sends)", "bottom"),
+    ], "09-chat.png", "AI chat")
+    w.chat._answer_confirm(False)
+    for _ in range(100):
+        app.processEvents()
+        if not w.chat.running():
+            break
+        time.sleep(0.02)
 
     w.player.shutdown(); w.queue.shutdown()
 
