@@ -23,7 +23,6 @@ def run_gui(argv: list[str] | None = None) -> int:
         pass
     lib = Library()
     win = MainWindow(lib)
-    win.start_app_control()          # Claude (Desktop or the chat sidebar) can operate this window
     win.show()
     # Paths given on the command line (e.g. "Open with KeyTool") are imported right away
     paths = [a for a in (argv or sys.argv)[1:] if not a.startswith("-")]
