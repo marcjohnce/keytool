@@ -353,6 +353,12 @@ class TrackModel(QAbstractTableModel):
             return None
         if role == Qt.DisplayRole and col == "fit":
             return r["_label"]
+        if role == Qt.ToolTipRole:
+            by = tr(f"group_{self.group_by}")
+            if tr.lang != "de":                  # nouns stay capitalised only in German ("by album artist")
+                by = by[:1].lower() + by[1:]
+            count = tr("group_count_1") if r["_count"] == 1 else tr("group_count", n=r["_count"])
+            return tr("group_tip", by=by, name=r["_label"], count=count)
         if role == Qt.AccessibleTextRole:
             return f"{r['_label']}, " + (tr("group_count_1") if r["_count"] == 1 else tr("group_count", n=r["_count"]))
         return None
