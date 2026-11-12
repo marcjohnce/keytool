@@ -89,6 +89,7 @@ class SortProxy(QSortFilterProxyModel):
 # =========================================================================== main window
 class MainWindow(QMainWindow, Translatable):
     # default widths of the compact columns (widened if the header needs more room in the UI language)
+    DEFAULT_WIDTHS = (44, 210, 140, 140, 150, 62, 60, 78, 80, 56, 52, 52, 150, 100, 160, 56, 64, 90, 120, 300)
     NARROW_COLUMNS = {"fit": 44, "key": 62, "bpm": 60, "delta": 78, "energy": 80, "duration": 56, "cues": 52,
                       "year": 52}
 
@@ -271,7 +272,9 @@ class MainWindow(QMainWindow, Translatable):
         self.table = QTableView()
         self.table.setModel(self.proxy)
         self.table.setSortingEnabled(True)
-        self.table.sortByColumn(1, Qt.AscendingOrder)
+        sort_col = self.s.sort_column if self.s.sort_column in TrackModel.COLUMNS else "title"
+        self.table.sortByColumn(TrackModel.COLUMNS.index(sort_col),
+                                Qt.DescendingOrder if self.s.sort_descending else Qt.AscendingOrder)
         self.table.setAlternatingRowColors(False)
         self.table.setItemDelegate(TrackDelegate(self.model, self.table))
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -288,9 +291,20 @@ class MainWindow(QMainWindow, Translatable):
         hh = self.table.horizontalHeader()
         hh.setSectionResizeMode(QHeaderView.Interactive)
         hh.setStretchLastSection(True)
-        for col, w in zip(range(len(TrackModel.COLUMNS)),
-                          (44, 210, 140, 140, 150, 62, 60, 78, 80, 56, 52, 52, 150, 100, 160, 56, 64, 90, 120, 300)):
+        for col, w in zip(range(len(TrackModel.COLUMNS)), self.DEFAULT_WIDTHS):
             self.table.setColumnWidth(col, w)
+        # columns can be rearranged by dragging their header; the order is remembered
+        hh.setSectionsMovable(True)
+        hh.setFirstSectionMovable(True)
+        self.apply_column_order(getattr(self.s, "column_order", None) or [])
+        self.apply_column_widths(self.s.column_widths or {})
+        hh.sectionMoved.connect(self._column_moved)
+        # widths and the sort column are remembered too (widths saved shortly after the last drag)
+        self._widths_timer = QTimer(self, singleShot=True, interval=400, timeout=self._save_column_widths)
+        hh.sectionResized.connect(self._column_resized)
+        hh.sortIndicatorChanged.connect(self._sort_changed)
+        hh.setContextMenuPolicy(Qt.CustomContextMenu)
+        hh.customContextMenuRequested.connect(self._header_menu)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.table_menu)
         self.table.selectionModel().selectionChanged.connect(self.selection_changed)
@@ -446,13 +460,23 @@ class MainWindow(QMainWindow, Translatable):
             self.group_combo.setItemText(i, tr(f"group_{mode}"))
         self.model.refresh_all()
         self.update_count()
-        # narrow columns are never narrower than their header in this language (e.g. "Tonalidad", "Energía");
-        # +26 px leaves room for the padding and the sort arrow
+        self._fit_narrow_columns()
+
+    def _fit_narrow_columns(self):
+        """Narrow columns are never narrower than their header in this language (e.g. "Tonalidad", "Energía");
+        +26 px leaves room for the padding and the sort arrow. Widths the user has set are kept."""
         fm = self.table.horizontalHeader().fontMetrics()
-        for col, w in self.NARROW_COLUMNS.items():
-            i = TrackModel.COLUMNS.index(col)
-            header = self.model.headerData(i, Qt.Horizontal) or ""
-            self.table.setColumnWidth(i, max(w, fm.horizontalAdvance(header) + 26))
+        saved = self.s.column_widths or {}
+        self._sizing_columns = True
+        try:
+            for col, w in self.NARROW_COLUMNS.items():
+                if col in saved:
+                    continue
+                i = TrackModel.COLUMNS.index(col)
+                header = self.model.headerData(i, Qt.Horizontal) or ""
+                self.table.setColumnWidth(i, max(w, fm.horizontalAdvance(header) + 26))
+        finally:
+            self._sizing_columns = False
 
     # ------------------------------------------------------------------ data
     def build_query(self) -> Query:
@@ -513,13 +537,84 @@ class MainWindow(QMainWindow, Translatable):
         self._update_spans()
 
     def _update_spans(self, *_):
-        self.table.clearSpans()
-        if self.model.group_by == "none":
+        """Group headers are painted across the row by every cell (TrackDelegate._paint_header) - no table spans,
+        which do not work with columns moved by the user. Only a repaint is needed."""
+        self.table.viewport().update()
+
+    # ------------------------------------------------------------------ column order
+    def column_order(self) -> list[str]:
+        """Column names from left to right as shown."""
+        hh = self.table.horizontalHeader()
+        return [TrackModel.COLUMNS[hh.logicalIndex(v)] for v in range(hh.count())]
+
+    def apply_column_order(self, order: list[str]):
+        """Arrange the columns like `order` (names); unknown names are ignored, columns missing there (e.g. new in
+        this version) keep their place next to the column they follow by default."""
+        cols = TrackModel.COLUMNS
+        known = [c for c in dict.fromkeys(order) if c in cols]
+        for c in cols:                         # insert missing columns after their default predecessor
+            if c not in known:
+                i = cols.index(c)
+                prev = next((cols[j] for j in range(i - 1, -1, -1) if cols[j] in known), None)
+                known.insert(known.index(prev) + 1 if prev else 0, c)
+        hh = self.table.horizontalHeader()
+        hh.blockSignals(True)
+        for target, name in enumerate(known):
+            hh.moveSection(hh.visualIndex(cols.index(name)), target)
+        hh.blockSignals(False)
+        self._update_spans()
+
+    def apply_column_widths(self, widths: dict):
+        for name, w in widths.items():
+            if name in TrackModel.COLUMNS and isinstance(w, (int, float)) and 20 <= w <= 2000:
+                self.table.setColumnWidth(TrackModel.COLUMNS.index(name), int(w))
+
+    def _column_resized(self, logical, _old, new):
+        hh = self.table.horizontalHeader()
+        if getattr(self, "_sizing_columns", False) or hh.visualIndex(logical) == hh.count() - 1:
+            return            # set by the program, or the last column (it fills the rest of the window)
+        self.s.column_widths = {**(self.s.column_widths or {}), TrackModel.COLUMNS[logical]: int(new)}
+        self._widths_timer.start()          # written to disk after the drag (and anyway when the app closes)
+
+    def _save_column_widths(self):
+        self._save_settings_quietly()
+
+    def _sort_changed(self, logical, order):
+        if not 0 <= logical < len(TrackModel.COLUMNS):
             return
-        n = self.proxy.columnCount()
-        for r in range(self.proxy.rowCount()):
-            if self.proxy.index(r, 0).data(HEADER_ROLE):
-                self.table.setSpan(r, 0, 1, n)
+        self.s.sort_column = TrackModel.COLUMNS[logical]
+        self.s.sort_descending = order == Qt.DescendingOrder
+        self._save_settings_quietly()
+
+    def _save_settings_quietly(self):
+        try:
+            self.s.save()
+        except OSError:
+            pass
+
+    def _column_moved(self, *_):
+        self.s.column_order = self.column_order()
+        self._update_spans()
+        self._save_settings_quietly()
+
+    def reset_columns(self):
+        """Default order and widths of the columns (the sort column stays)."""
+        self._sizing_columns = True
+        try:
+            self.apply_column_order(list(TrackModel.COLUMNS))
+            for col, w in zip(range(len(TrackModel.COLUMNS)), self.DEFAULT_WIDTHS):
+                self.table.setColumnWidth(col, w)
+            self.s.column_order, self.s.column_widths = [], {}
+            self._fit_narrow_columns()
+        finally:
+            self._sizing_columns = False
+        self._save_settings_quietly()
+
+    def _header_menu(self, pos):
+        m = QMenu(self)
+        a = m.addAction(tr("reset_columns"), self.reset_columns)
+        a.setEnabled(self.column_order() != list(TrackModel.COLUMNS) or bool(self.s.column_widths))
+        m.exec(self.table.horizontalHeader().viewport().mapToGlobal(pos))
 
     def _enter_pressed(self):
         cur = self.table.currentIndex()

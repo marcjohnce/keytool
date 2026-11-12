@@ -18,6 +18,7 @@ More annotated screenshots are in [Screenshots](#screenshots) below.
 | Notations | **Camelot** (8A), **sharps** (F#m), **flats** (Gbm), plus Open Key (1m) |
 | Search | Free text + title, artist, album, year from/to, BPM from/to, keys (multiple), keywords (combined with "or" by default, switchable to "and") |
 | Keywords | Per track or for many tracks at once; rename and remove everywhere |
+| Columns | Drag a column header to move the column; order, widths and the sort column are remembered. Right-click a header → "Reset columns (order and width)" |
 | Grouping | "Group by" above the list: none, artist or album. Each group has a header with the number of tracks; click it (or Enter) to collapse or expand it, right-click for "Expand / collapse all groups". Sorting by a column sorts inside the groups |
 | Audio type | Song, Instrumental, Acapella, Remix, Stem, Soundtrack, Audio book, Radio play, Podcast, Interview, Commercial, Sound effect, Note – several per track. Detected from title, file name, album, genre and folder names (see below); "Type" column, filter on the left, editable in the details (types set by hand are kept), written into the files as tag `AUDIO_TYPE` ("Instrumental; Remix"), which is read back when a file is imported |
 | DJ extras | "Harmonic match": tracks that fit the selection on the Camelot wheel (±6 % BPM); halve/double BPM |

@@ -188,6 +188,7 @@ STRINGS: dict[str, str] = {
     "group_no_album": "Sin álbum",
     "group_count": "{n} pistas",
     "group_count_1": "1 pista",
+    "reset_columns": "Restablecer las columnas (orden y ancho)",
     "expand": "Desplegar",
     "collapse": "Plegar",
     "expand_all": "Desplegar todos los grupos",
