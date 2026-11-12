@@ -183,6 +183,7 @@ STRINGS: dict[str, str] = {
     "group_album": "Album",
     "group_no_artist": "Senza artista",
     "group_no_album": "Senza album",
+    "group_tip": "Raggruppato per {by}: {name} ({count})",
     "group_count": "{n} brani",
     "group_count_1": "1 brano",
     "reset_columns": "Ripristina le colonne (ordine e larghezza)",

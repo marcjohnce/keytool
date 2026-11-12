@@ -106,3 +106,20 @@ def test_cover_loaded_in_background_and_cached(win, monkeypatch):
     QThreadPool.globalInstance().waitForDone(5000)
     QApplication.processEvents()
     assert len(calls) == 1 and tip.cover.image is not None
+
+
+def test_group_header_has_plain_tooltip_not_the_track_card(win):
+    from keytool.gui.widgets import HEADER_ROLE, TrackModel
+    from keytool.i18n import set_language
+    win.group_combo.setCurrentIndex(1)                  # artist
+    QApplication.processEvents()
+    assert win.proxy.index(0, 0).data(HEADER_ROLE)
+    _hover(win, 0, "artist")
+    assert not win.track_tip.tip.isVisible()            # no empty cover card over the header
+    tip = win.proxy.index(0, TrackModel.COLUMNS.index("title")).data(Qt.ToolTipRole)
+    assert tip == "Grouped by artist: Ann (1 track)"
+    set_language("de")
+    try:
+        assert win.proxy.index(0, 0).data(Qt.ToolTipRole) == "Gruppiert nach Interpret: Ann (1 Titel)"
+    finally:
+        set_language("en")

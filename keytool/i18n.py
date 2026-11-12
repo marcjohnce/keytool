@@ -182,6 +182,7 @@ _T: dict[str, tuple[str, str]] = {
     "group_album": ("Album", "Album"),
     "group_no_artist": ("Ohne Interpret", "No artist"),
     "group_no_album": ("Ohne Album", "No album"),
+    "group_tip": ("Gruppiert nach {by}: {name} ({count})", "Grouped by {by}: {name} ({count})"),
     "group_count": ("{n} Titel", "{n} tracks"),
     "group_count_1": ("1 Titel", "1 track"),
     "reset_columns": ("Spalten zurücksetzen (Reihenfolge und Breite)", "Reset columns (order and width)"),

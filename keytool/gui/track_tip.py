@@ -194,7 +194,7 @@ class TrackTipFilter(QObject):
             idx = self.table.indexAt(ev.pos())
             if idx.isValid() and self.column_name(idx) in COLUMNS:
                 row = self.row_for_index(idx)
-                if row:
+                if row and not row.get("_header"):       # group headers have their own plain tooltip
                     from PySide6.QtWidgets import QToolTip
                     QToolTip.hideText()
                     self._cell = (idx.row(), idx.column())
