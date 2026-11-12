@@ -415,6 +415,26 @@ class Library:
         for tid in track_ids:
             self.db.update_track(tid, bpm_manual=0, key_manual=0, sections_manual=0, status="pending")
 
+    # ----------------------------------------------------------- export
+    def tracks_for_export(self, track_ids: Iterable[int] | None = None) -> list[dict]:
+        """Tracks with their keywords; None = the whole library (sorted by artist and title)."""
+        if track_ids is None:
+            rows = self.db.search(Query(order_by="artist"))
+        else:
+            ids = list(track_ids)
+            by_id = {t["id"]: t for t in self.db.get_tracks(ids)}
+            rows = [by_id[i] for i in ids if i in by_id]          # in the order of the list
+        kws = self.db.keywords_for([t["id"] for t in rows])
+        return [dict(t, keywords=kws.get(t["id"], [])) for t in rows]
+
+    def export_csv(self, path: str, track_ids: Iterable[int] | None = None, columns: list[str] | None = None,
+                   delimiter: str | None = None) -> int:
+        """Write tracks (None = all) as CSV with the columns / delimiter from the settings unless given."""
+        from .export import resolve_delimiter, write_csv
+        s = self.settings
+        d = resolve_delimiter(delimiter or s.export_delimiter, s.language)
+        return write_csv(path, self.tracks_for_export(track_ids), columns or s.export_columns, d, s.notation)
+
     # ----------------------------------------------------------- editing sections and cue points
     def set_sections(self, track_id: int, sections: list[dict]) -> None:
         """Song sections edited by hand; an analysis does not replace them ("reset manual values" does)."""

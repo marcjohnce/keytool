@@ -16,7 +16,7 @@ def test_settings_dialog_apply(tmp_path, monkeypatch):
     from keytool.gui.settings_dialog import SettingsDialog
     s = Settings()
     d = SettingsDialog(s)
-    assert d.nav.count() == d.pages.count() == 4
+    assert d.nav.count() == d.pages.count() == 5                     # display, analysis, files & tags, CSV export, MCP
     d.lang.setCurrentIndex(d.lang.findData("en"))
     d.theme.setCurrentIndex(d.theme.findData("light"))
     d.key_method.setCurrentIndex(d.key_method.findData("fast"))

@@ -10,6 +10,11 @@ from pathlib import Path
 APP_NAME = "KeyTool"
 
 
+def _default_export_columns():
+    from .export import DEFAULT_COLUMNS
+    return DEFAULT_COLUMNS
+
+
 def _default_patterns() -> list[str]:
     from .retag import DEFAULT_PATTERNS
     return DEFAULT_PATTERNS
@@ -48,6 +53,12 @@ class Settings:
     key_method: str = "classic"     # "classic" | "fast" (CQT-domain HPSS, ~4x faster) - see --compare-key
     reanalyze_existing: bool = False
     detect_sections: bool = True    # detect song sections with every analysis (menu Analyse works anyway)
+    # CSV export (see export.py): columns in file order, delimiter, ask for the file or use folder + name
+    export_columns: list = field(default_factory=lambda: list(_default_export_columns()))
+    export_delimiter: str = "auto"  # auto | comma | semicolon | tab
+    export_ask: bool = True         # ask for the file name with every export
+    export_folder: str = ""         # start folder / fixed folder ("" = Documents)
+    export_filename: str = "KeyTool-{date}.csv"   # {date} {time} {count}
     volume: float = 0.8             # player volume 0..1
     show_details: bool = True       # right sidebar (metadata, file info, keywords) visible
     research_semitones: bool = True      # also search keys 1 semitone below/above (transposable on KV)

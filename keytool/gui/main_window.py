@@ -92,6 +92,7 @@ class MainWindow(QMainWindow, Translatable):
         self.search_timer = QTimer(self, singleShot=True, interval=180, timeout=self.refresh)
         QShortcut(QKeySequence.Find, self, activated=lambda: (self.f_text.setFocus(), self.f_text.selectAll()))
         QShortcut(QKeySequence.Delete, self.table, activated=self.remove_selected)
+        QShortcut(QKeySequence("Ctrl+E"), self, activated=self.export_selected)
 
         self.apply_theme()
         self.set_notation(self.s.notation)
@@ -904,6 +905,7 @@ class MainWindow(QMainWindow, Translatable):
         m.addAction(tr("reset_manual"), lambda: (self.lib.reset_manual(self.selected_ids()), self.reanalyze_selected()))
         m.addAction(tr("sec_delete_selected"), self.clear_sections_selected)
         m.addAction(tr("add_keyword"), self._prompt_keywords)
+        m.addAction(tr("export_csv") + "\tCtrl+E", self.export_selected)
         m.addSeparator()
         m.addAction(tr("remove"), self.remove_selected)
         return m
@@ -912,6 +914,58 @@ class MainWindow(QMainWindow, Translatable):
         text, ok = QInputDialog.getText(self, tr("keywords"), tr("add_keyword"))
         if ok and text.strip():
             self.add_keywords([p.strip() for p in text.split(",") if p.strip()])
+
+    # ------------------------------------------------------------------ CSV export
+    def export_target(self, count: int) -> str | None:
+        """Where the export goes: asked with a save dialog (which confirms replacing a file), or the folder and
+        file name from the settings (an existing file is only replaced after asking). None = cancelled."""
+        from PySide6.QtCore import QStandardPaths
+        from ..export import default_filename
+        folder = self.s.export_folder or QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+        name = default_filename(self.s.export_filename, count)
+        path = os.path.join(folder, name)
+        if not self.s.export_ask:
+            if not os.path.exists(path):
+                return path
+            box = QMessageBox(QMessageBox.Question, tr("app_title"), tr("export_exists", file=path), parent=self)
+            replace = box.addButton(tr("export_replace"), QMessageBox.DestructiveRole)
+            other = box.addButton(tr("export_other"), QMessageBox.ActionRole)
+            box.addButton(QMessageBox.Cancel)
+            box.setDefaultButton(other)
+            box.exec()
+            if box.clickedButton() is replace:
+                return path
+            if box.clickedButton() is not other:
+                return None
+        got, _ = QFileDialog.getSaveFileName(self, tr("export_csv_title", n=count), path, "CSV (*.csv)")
+        if not got:
+            return None
+        if not got.lower().endswith(".csv"):
+            got += ".csv"
+            if os.path.exists(got) and QMessageBox.question(self, tr("app_title"), tr("export_exists", file=got)) \
+                    != QMessageBox.Yes:
+                return None
+        if self.s.export_ask:                         # next time the dialog starts in the same folder
+            self.s.export_folder = os.path.dirname(got)
+            self.s.save()
+        return got
+
+    def export_selected(self):
+        """CSV export of the tracks selected in the list (in list order); the whole library: MCP export_csv."""
+        sel = {i.row(): i.data(ID_ROLE) for i in self.table.selectionModel().selectedRows()} if hasattr(self, "table") else {}
+        ids = [sel[r] for r in sorted(sel)]
+        if not ids:
+            self.msg_lbl.setText(tr("export_none"))
+            return
+        path = self.export_target(len(ids))
+        if not path:
+            return
+        try:
+            n = self.lib.export_csv(path, ids)
+        except OSError as e:
+            QMessageBox.warning(self, tr("app_title"), tr("export_failed", file=path, error=str(e)))
+            return
+        self.msg_lbl.setText(tr("export_done", n=n, file=path))
 
     @staticmethod
     def reveal(path: str):
