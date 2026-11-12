@@ -428,6 +428,21 @@ class Library:
             out.append((tid, n))
         return out
 
+    def fill_album_artists(self, batch: int = 200, cancel: threading.Event | None = None) -> list[tuple[int, str]]:
+        """Read the album artist of up to `batch` tracks that have none stored yet (NULL) from their files.
+        Returns [(track_id, album artist)] ("" = the file has none); an empty list means all are read."""
+        out = []
+        for tid, path in self.db.ids_without_album_artist(batch):
+            if cancel is not None and cancel.is_set():
+                break
+            try:
+                value = read_metadata(path).album_artist if os.path.exists(path) else ""
+            except Exception:
+                value = ""
+            self.db.update_track(tid, album_artist=value or "")
+            out.append((tid, value or ""))
+        return out
+
     def reset_manual(self, track_ids: Iterable[int]) -> None:
         for tid in track_ids:
             self.db.update_track(tid, bpm_manual=0, key_manual=0, sections_manual=0, status="pending")

@@ -24,7 +24,7 @@ DECK_ROLE = Qt.UserRole + 3      # True for the row that is loaded in the deck
 FIT_ROLE = Qt.UserRole + 4       # 2 same key, 1 harmonic neighbour, 0 no match, None unknown
 GROUP_ROLE = Qt.UserRole + 5     # sort key of the row's group ("" when the list is not grouped)
 HEADER_ROLE = Qt.UserRole + 6    # True for a group header row
-GROUP_BY = ("none", "artist", "album")
+GROUP_BY = ("none", "artist", "album_artist", "album")
 PANEL_TOP = 16                   # top margin of the panel titles (filters, track list, details): keeps them aligned
 
 
@@ -96,7 +96,7 @@ class TrackModel(QAbstractTableModel):
         self.busy_ids: set[int] = set()       # tracks the analysis queue is working on (dots in "fit")
         self.busy_phase = 0.0                 # animation phase of those dots, 0..1
         self.tracks: list[dict] = []          # the tracks; self.rows also holds the group header rows
-        self.group_by = "none"                # "none" | "artist" | "album"
+        self.group_by = "none"                # "none" | "artist" | "album_artist" | "album"
         self.collapsed: set[str] = set()      # group keys whose tracks are hidden
 
     # -- grouping
@@ -104,6 +104,9 @@ class TrackModel(QAbstractTableModel):
         """(sort key, label) of the group a track belongs to; ("", "") when not grouped."""
         if self.group_by == "artist":
             name = (r.get("artist") or "").strip()
+            return (name.lower() if name else "\uffff", name or tr("group_no_artist"))
+        if self.group_by == "album_artist":       # tracks without an album artist: their artist
+            name = (r.get("album_artist") or r.get("artist") or "").strip()
             return (name.lower() if name else "\uffff", name or tr("group_no_artist"))
         if self.group_by == "album":
             name = (r.get("album") or "").strip()
