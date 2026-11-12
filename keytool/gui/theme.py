@@ -226,18 +226,6 @@ def apply_theme(app: QApplication, name: str) -> dict:
         QScrollArea#rail {{ border-right: 1px solid {c['border']}; }}
         QScrollArea#inspector {{ border-left: 1px solid {c['border']}; background: {c['panel']}; }}
         QWidget#inspectorBody {{ background: {c['panel']}; }}
-        QLabel#chatTitle {{ font-size: 15pt; font-weight: 700; }}
-        QScrollArea#chatScroll, QWidget#chatMessages {{ background: transparent; border: none; }}
-        QLabel#chatUser {{ background: {c['border']}; border-radius: 12px; padding: 9px 12px; }}
-        QLabel#chatAnswer {{ padding: 0px 2px; }}
-        QLabel#chatChip {{ color: {c['dim']}; border: 1px solid {c['border']}; border-radius: 11px; padding: 4px 10px; }}
-        QLabel#chatError {{ color: {c['danger']}; }}
-        QLabel#chatHint {{ color: {c['dim']}; font-size: 8.5pt; }}
-        QLabel#chatCardTitle {{ font-weight: 700; }}
-        QWidget#chatPanel {{ border-left: 1px solid {c['border']}; background: {c['panel']}; }}
-        QFrame#chatConfirm {{ border: 1px solid {c['accent']}; border-radius: 10px; }}
-        QPushButton#chatSuggestion {{ border-radius: 12px; padding: 3px 10px; min-height: 0px; color: {c['dim']}; }}
-        QPushButton#chatSuggestion:hover {{ color: {c['text']}; }}
         QStatusBar {{ background: {c['deck']}; border-top: 1px solid {c['border']}; padding: 2px 12px; }}
         QStatusBar QLabel {{ padding: 2px 6px; }}
         QProgressBar {{ border: none; background: {c['border']}; border-radius: 2px; max-height: 4px; min-height: 4px; color: transparent; }}

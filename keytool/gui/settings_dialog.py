@@ -98,10 +98,7 @@ class SettingsDialog(QDialog):
         body.addWidget(self.nav)
         body.addWidget(self.pages, 1)
 
-        self.page_index: dict[str, int] = {}
-
         def page(title_key: str, intro_key: str):
-            self.page_index[title_key] = self.pages.count()
             w = QWidget(); w.setObjectName("settingsPage")
             v = QVBoxLayout(w); v.setContentsMargins(32, 26, 32, 26); v.setSpacing(0)
             h = QLabel(tr(title_key)); h.setObjectName("settingsTitle")
@@ -267,34 +264,6 @@ class SettingsDialog(QDialog):
         row(v, tr("s_export_filename"), tr("sd_export_filename"), self.export_name)
         v.addStretch(1)
 
-        # ---------------- AI chat
-        from .. import assistant as ai
-        v = page("sp_chat", "sp_chat_intro")
-        self.chat_provider = QComboBox()
-        self.chat_provider.addItem(tr("s_chat_anthropic"), "anthropic")
-        self.chat_provider.addItem(tr("s_chat_openai"), "openai")
-        self.chat_provider.setCurrentIndex(max(0, self.chat_provider.findData(settings.chat_provider)))
-        row(v, tr("s_chat_provider"), tr("sd_chat_provider"), self.chat_provider)
-        self.chat_model = QComboBox(); self.chat_model.setEditable(True)
-        row(v, tr("s_chat_model"), tr("sd_chat_model"), self.chat_model)
-        self.chat_key = QLineEdit(); self.chat_key.setEchoMode(QLineEdit.Password)
-        self.chat_key_del = QPushButton(tr("s_chat_key_remove"))
-        self._key_removed: set[str] = set()
-        self.chat_key_del.clicked.connect(self._remove_chat_key)
-        row(v, tr("s_chat_key"), tr("sd_chat_key"), [self.chat_key, self.chat_key_del])
-        self.chat_url = QLineEdit(settings.chat_base_url); self.chat_url.setPlaceholderText(ai.DEFAULT_OPENAI_URL)
-        row(v, tr("s_chat_url"), tr("sd_chat_url"), self.chat_url)
-        self.chat_test = QPushButton(tr("s_chat_test"))
-        self.chat_test_result = QLabel(); self.chat_test_result.setObjectName("dim"); self.chat_test_result.setWordWrap(True)
-        self.chat_test.clicked.connect(self._test_chat)
-        r = row(v, tr("s_chat_test_title"), tr("sd_chat_test"), self.chat_test)
-        r.layout().itemAt(0).layout().addWidget(self.chat_test_result)
-        self._chat_models = {settings.chat_provider: settings.chat_model}
-        self._chat_last = settings.chat_provider
-        self.chat_provider.currentIndexChanged.connect(self._chat_provider_changed)
-        self._chat_provider_changed()
-        v.addStretch(1)
-
         # ---------------- MCP
         v = page("s_mcp", "sp_mcp_intro")
         cp = QPushButton(tr("s_copy_config"))
@@ -341,74 +310,6 @@ class SettingsDialog(QDialog):
         from PySide6.QtGui import QDesktopServices
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(path)))
 
-    # -- AI chat
-    def show_page(self, name: str):
-        """Open the dialog on a page ("chat", "export", ...)."""
-        key = {"chat": "sp_chat", "export": "sp_export", "analysis": "s_analysis", "mcp": "s_mcp"}.get(name, name)
-        if key in self.page_index:
-            self.nav.setCurrentRow(self.page_index[key])
-
-    def _chat_provider_changed(self, *_):
-        from .. import assistant as ai
-        prov = self.chat_provider.currentData()
-        self._chat_models[self._chat_last] = self.chat_model.currentText().strip()
-        self._chat_last = prov
-        self.chat_model.clear()
-        if prov == "anthropic":
-            self.chat_model.addItems(list(ai.ANTHROPIC_MODELS))
-        self.chat_model.setEditText(self._chat_models.get(prov) or ai.DEFAULT_MODEL.get(prov, ""))
-        self.chat_model.lineEdit().setPlaceholderText(tr("s_chat_model_hint") if prov == "openai" else "")
-        self.chat_url.setEnabled(prov == "openai")
-        self.chat_key.clear()
-        stored = bool(ai.get_api_key(prov)) and prov not in self._key_removed
-        self.chat_key.setPlaceholderText(tr("s_chat_key_stored") if stored else
-                                         (tr("s_chat_key_optional") if prov == "openai" else tr("s_chat_key_none")))
-        self.chat_key_del.setEnabled(stored)
-        self.chat_test_result.clear()
-
-    def _store_chat_keys(self):
-        """New / removed API keys go to the Windows Credential Manager (keyring), never into settings.json."""
-        from PySide6.QtWidgets import QMessageBox
-        from .. import assistant as ai
-        prov = self.chat_provider.currentData()
-        todo = {p: "" for p in self._key_removed}
-        if self.chat_key.text().strip():
-            todo[prov] = self.chat_key.text().strip()
-        for p, key in todo.items():
-            try:
-                ai.set_api_key(p, key)
-            except Exception as e:
-                QMessageBox.warning(self, tr("app_title"), tr("s_chat_key_failed", e=str(e)))
-
-    def _remove_chat_key(self):
-        self._key_removed.add(self.chat_provider.currentData())
-        self.chat_key.clear()
-        self.chat_key.setPlaceholderText(tr("s_chat_key_none"))
-        self.chat_key_del.setEnabled(False)
-
-    def _chat_values(self):
-        from .. import assistant as ai
-        prov = self.chat_provider.currentData()
-        key = self.chat_key.text().strip() or ("" if prov in self._key_removed else ai.get_api_key(prov))
-        return prov, self.chat_model.currentText().strip(), key, self.chat_url.text().strip()
-
-    def _test_chat(self):
-        """Send a one-word request with the values in the dialog (not saved yet)."""
-        from PySide6.QtCore import Qt
-        from PySide6.QtGui import QGuiApplication
-        from .. import assistant as ai
-        prov, model, key, url = self._chat_values()
-        cls = ai.AnthropicProvider if prov == "anthropic" else ai.OpenAIProvider
-        p = cls(model or ai.DEFAULT_MODEL.get(prov, ""), key, url)
-        QGuiApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            p.chat("Reply with the single word: OK", [{"role": "user", "text": "Test"}], [])
-            self.chat_test_result.setText(tr("s_chat_test_ok"))
-        except Exception as e:
-            self.chat_test_result.setText(tr("s_chat_test_fail", e=str(e)))
-        finally:
-            QGuiApplication.restoreOverrideCursor()
-
     def export_columns(self) -> list[str]:
         """Ticked columns in the order of the list (dragged into the file order)."""
         from PySide6.QtCore import Qt
@@ -454,7 +355,4 @@ class SettingsDialog(QDialog):
         s.export_ask = self.export_ask.isChecked()
         s.export_folder = self.export_folder.text().strip()
         s.export_filename = self.export_name.text().strip() or "KeyTool-{date}.csv"
-        prov, model, _, url = self._chat_values()
-        s.chat_provider, s.chat_model, s.chat_base_url = prov, model, url
-        self._store_chat_keys()
         s.save()

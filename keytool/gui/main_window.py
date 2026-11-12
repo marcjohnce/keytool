@@ -171,15 +171,6 @@ class MainWindow(QMainWindow, Translatable):
         self.t(self.a_details.setToolTip, "details_toggle_tip")
         self.a_details.toggled.connect(self.set_details_visible)
         tb.addAction(self.a_details)
-        # AI chat sidebar on/off, next to "Details"
-        self.a_chat = QAction(self)
-        self.a_chat.setCheckable(True)
-        self.a_chat.setChecked(bool(getattr(self.s, "show_chat", False)))
-        self.a_chat.setShortcut(QKeySequence("Ctrl+J"))
-        self.t(self.a_chat.setText, "chat")
-        self.t(self.a_chat.setToolTip, "chat_toggle_tip")
-        self.a_chat.toggled.connect(self.set_chat_visible)
-        tb.addAction(self.a_chat)
         tb.addAction(self.a_queue)              # analysis queue panel on/off, right of "Details"
         tb.addAction(self.a_settings)
 
@@ -329,23 +320,14 @@ class MainWindow(QMainWindow, Translatable):
         dscroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         dscroll.setMinimumWidth(330)
         split.addWidget(dscroll)
-        # ---------------- right: AI chat (next to the details when both are on)
-        from .chat_panel import ChatPanel
-        self.chat = ChatPanel(self)
-        self.chat.setMinimumWidth(360)
-        self.chat.open_settings_requested.connect(lambda: self.open_settings(page="chat"))
-        self.chat.library_changed.connect(lambda: (self.refresh(), self.sync_deck()))
-        split.addWidget(self.chat)
         split.setStretchFactor(0, 0); split.setStretchFactor(1, 1); split.setStretchFactor(2, 0)
-        split.setStretchFactor(3, 0)
-        split.setSizes([300, 840, 340, 400])
+        split.setSizes([300, 840, 340])
         # the deck spans the full width above filter rail, list and inspector
         root = QWidget(); rv = QVBoxLayout(root); rv.setContentsMargins(0, 0, 0, 0); rv.setSpacing(0)
         rv.addWidget(self.player, 0)
         rv.addWidget(split, 1)
         self.setCentralWidget(root)
         self.details_scroll.setVisible(self.a_details.isChecked())
-        self.chat.setVisible(self.a_chat.isChecked())
 
     def _build_queue_dock(self):
         from PySide6.QtWidgets import QDockWidget
@@ -405,8 +387,6 @@ class MainWindow(QMainWindow, Translatable):
         self.f_keys.set_notation(self.s.notation)
         self.f_keywords.retranslate()
         self.details.retranslate()
-        if hasattr(self, "chat"):
-            self.chat.retranslate()
         self.player.retranslate()
         if hasattr(self, "queue_panel"):
             self.queue_panel.retranslate()
@@ -560,17 +540,6 @@ class MainWindow(QMainWindow, Translatable):
             self.details_scroll.setVisible(on)
         if self.s.show_details != on:
             self.s.show_details = on
-            self.s.save()
-
-    def set_chat_visible(self, on: bool):
-        """Show/hide the AI chat sidebar (remembered across starts); the input gets the focus."""
-        if hasattr(self, "chat"):
-            self.chat.setVisible(on)
-            if on:
-                self.chat.refresh_setup()
-                self.chat.input.setFocus()
-        if self.s.show_chat != on:
-            self.s.show_chat = on
             self.s.save()
 
     # ------------------------------------------------------------------ Mixed In Key import
@@ -1026,10 +995,8 @@ class MainWindow(QMainWindow, Translatable):
         dlg.exec()
 
     # ------------------------------------------------------------------ settings
-    def open_settings(self, page: str | None = None):
+    def open_settings(self):
         dlg = SettingsDialog(self.s, self)
-        if page:
-            dlg.show_page(page)
         if dlg.exec():
             dlg.apply()
             self.details.retag_patterns = self.s.retag_patterns
@@ -1037,7 +1004,6 @@ class MainWindow(QMainWindow, Translatable):
             self.apply_theme()
             self.set_notation(self.s.notation)
             self.retranslate()
-        self.chat.refresh_setup()                     # a key may have been stored / removed
 
     # ------------------------------------------------------------------ drag & drop
     def dragEnterEvent(self, e):
