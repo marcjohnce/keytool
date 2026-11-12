@@ -61,10 +61,6 @@ class Settings:
     export_filename: str = "KeyTool-{date}.csv"   # {date} {time} {count}
     volume: float = 0.8             # player volume 0..1
     show_details: bool = True       # right sidebar (metadata, file info, keywords) visible
-    show_chat: bool = False         # AI chat sidebar visible
-    chat_provider: str = "anthropic"  # anthropic | openai (any OpenAI-compatible endpoint, e.g. Ollama)
-    chat_model: str = ""            # "" = default model of the provider (assistant.DEFAULT_MODEL)
-    chat_base_url: str = ""         # OpenAI-compatible endpoint ("" = Ollama on this computer)
     research_semitones: bool = True      # also search keys 1 semitone below/above (transposable on KV)
     research_bpm_tolerance: float = 3.0  # +-% around the selected track's BPM
     # Auto re-tag: regular expressions for file names, first match wins (see retag.match_patterns)

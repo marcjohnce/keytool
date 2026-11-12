@@ -31,7 +31,6 @@ More annotated screenshots are in [Screenshots](#screenshots) below.
 | Fits the deck | "Fits" column (● same key, ◐ harmonic neighbour ±1 or relative major/minor, ○ does not fit, transposition included) and "vs. deck" (tempo difference in %, dimmed beyond ±6 %); both sortable |
 | User interface | English, German, Spanish, French, Italian (in the settings; numbers, dates and key names such as "a-Moll" / "La menor" / "la mineur" follow the language), light and dark mode (or system), switch without restarting; Archivo typeface (SIL OFL, bundled), colour only for keys, amber for playback |
 | CSV export | Selected tracks via right-click → "Export as CSV" or Ctrl+E; columns and their order, delimiter (automatic: semicolon and decimal comma where Excel expects them), target folder and file name pattern in the settings; asks before replacing a file. The whole library: MCP tool `export_csv` |
-| AI chat | Sidebar (Ctrl+J, next to Details): ask in your own words – the chat searches the library and operates KeyTool (filter, select, load into the deck, play, transpose, jump to cues/sections) and can use the MCP tools (keywords, tags, BPM/key, write tags …); changes to data and files wait for your confirmation. Claude via the Anthropic API or any OpenAI-compatible service (OpenAI, local Ollama / LM Studio); the API key is kept in the Windows Credential Manager |
 | MCP server | Full access: search, details, keywords, set values, write tags, import & analyse folders, CSV export |
 
 ## Installation & start (Windows)
@@ -219,15 +218,6 @@ All screenshots show a made-up demo library (titles, artists and cover images ar
 ### Settings
 ![Settings](docs/screenshots/08-settings.png)
 
-### AI chat
-![AI chat](docs/screenshots/09-chat.png)
-
-Set it up under Settings → AI chat: choose **Claude (Anthropic)** and enter an API key from console.anthropic.com
-(usage is billed by Anthropic, separately from a Claude subscription), or **OpenAI-compatible** with the address and
-model name of the service – e.g. Ollama on this computer (`http://localhost:11434/v1`, model `llama3.1`), free and
-offline but less reliable with the tools. "Test connection" checks the values before saving. The chat cannot export
-the whole library (that stays an MCP tool); it shows what it did as small notes and asks before anything is changed.
-
 ## MCP server
 
 For Claude Desktop, add this to `%APPDATA%\Claude\claude_desktop_config.json`
@@ -298,8 +288,6 @@ keytool/
   analysis.py       BPM and key detection (classic / fast)
   structure.py      Song sections: segmentation, grouping, labels
   export.py         CSV export: columns, delimiter, file name pattern
-  assistant.py      AI chat: providers (Anthropic, OpenAI-compatible), tools, confirmation loop
-  gui/chat_panel.py Chat sidebar and the tools that operate the app
   analysis_queue.py Analysis queue (order, "Analyse now", crash-safe)
   compare.py        Compare the key detection methods on your own tracks
   keys.py           Key model, notations, Camelot wheel
