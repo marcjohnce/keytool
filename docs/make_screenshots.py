@@ -6,7 +6,6 @@ Everything shown is invented: titles, artists, albums and the abstract cover ima
 The app runs offscreen in English with the dark theme; numbered markers and a legend are drawn on top."""
 from __future__ import annotations
 
-import json
 import math
 import os
 import sys
@@ -431,7 +430,7 @@ def main():
     nav = sdlg.findChild(QWidget, "settingsNav")
     marks = []
     if nav is not None:
-        marks.append((pos(nav, sdlg, 0.0, 0.08, 4), "Sections: display, analysis, files & tags, CSV export, chat, MCP server", "left"))
+        marks.append((pos(nav, sdlg, 0.0, 0.08, 4), "Sections: display, analysis, files & tags, MCP server", "left"))
     from PySide6.QtWidgets import QLabel
     descs = [l for l in sdlg.findChildren(QLabel) if l.isVisible() and l.objectName() == "dim" and l.text()
              and l.mapTo(sdlg, QPoint(0, 0)).y() > 140]
@@ -441,66 +440,6 @@ def main():
                       "Every setting explains what it does", "bottom"))
     annotate(shot, marks, "08-settings.png", "Settings")
     sdlg.reject()
-
-    # 9) chat with Claude (through Claude Code) --------------------------------------
-    # a stand-in for Claude Code (no account needed): it operates the window through the same control interface
-    # the MCP server uses, then asks for a confirmation and waits
-    from keytool import app_control
-    from keytool import claude_code as cc
-    from keytool.db import Query as _Q
-    ids = {t["title"]: t["id"] for t in lib.search(_Q())}
-    w.start_app_control()
-
-    class Demo(cc.Session):
-        def run(self, prompt, system, on_event, cancel=None):
-            if "fits" in prompt:
-                args = {"keys": ["8A", "7A", "9A", "8B"], "bpm_min": 120, "bpm_max": 128}
-                res = app_control.call("set_filter", args)
-                on_event("action", ("mcp__keytool__app_set_filter", args, json.dumps(res), False))
-                on_event("text", "**Midnight Avenue** (8A, 124 BPM) fits 4 tracks. The best: **Glass Harbour** "
-                                 "(9A, 122 BPM) and **Copper Sky** (8B, 125 BPM) – harmonic neighbours, "
-                                 "less than 2 % apart.")
-            else:
-                args = {"track_ids": [ids["Glass Harbour"], ids["Copper Sky"]], "keywords": ["Warm-up"]}
-                app_control.call("confirm", {"tool_name": "mcp__keytool__add_keywords", "input": args}, 3600)
-            return ""
-    w.chat.make_session = lambda exe: Demo(exe)
-    cc_find = cc.find_claude
-    cc.find_claude = lambda configured="": "claude"
-    w.a_details.setChecked(False)
-    w.a_chat.setChecked(True)
-    w.chat.refresh_setup()
-    app.processEvents()
-
-    def ask(text, until):
-        w.chat.send(text)
-        for _ in range(300):
-            app.processEvents()
-            if until():
-                break
-            time.sleep(0.02)
-    ask("Show me everything that fits my deck between 120 and 128 BPM", lambda: not w.chat.running())
-    ask("Give Glass Harbour and Copper Sky the keyword Warm-up", lambda: w.chat._pending_confirm is not None)
-    for _ in range(10):
-        app.processEvents(); time.sleep(0.02)
-    shot = w.grab()
-    root = w
-    card = w.chat._pending_confirm[0]
-    annotate(shot, [
-        (pos(w.toolbar.widgetForAction(w.a_chat), root, 0.5, 1.0, 0, -2), "Chat on/off (Ctrl+J), next to Details", "top"),
-        (pos(w.chat.model_lbl, root, 0.0, 0.5, 0), "Claude through Claude Code with your Claude plan – no API key", "top"),
-        (pos(w.f_keys, root, 0.5, 0.5), "Claude operates the app: here it set the key and BPM filter", "left"),
-        (pos(card, root, 1.0, 0.3, -2), "Changes to data and files wait for your confirmation", "right"),
-        (pos(w.chat.input, root, 0.3, 1.0, 0, -2), "Ask in your own words (Enter sends)", "bottom"),
-    ], "09-chat.png", "Chat with Claude")
-    w.chat._answer_confirm(False)
-    for _ in range(100):
-        app.processEvents()
-        if not w.chat.running():
-            break
-        time.sleep(0.02)
-    cc.find_claude = cc_find
-    w.app_control.stop()
 
     w.player.shutdown(); w.queue.shutdown()
 

@@ -31,7 +31,6 @@ More annotated screenshots are in [Screenshots](#screenshots) below.
 | Fits the deck | "Fits" column (● same key, ◐ harmonic neighbour ±1 or relative major/minor, ○ does not fit, transposition included) and "vs. deck" (tempo difference in %, dimmed beyond ±6 %); both sortable |
 | User interface | English, German, Spanish, French, Italian (in the settings; numbers, dates and key names such as "a-Moll" / "La menor" / "la mineur" follow the language), light and dark mode (or system), switch without restarting; Archivo typeface (SIL OFL, bundled), colour only for keys, amber for playback |
 | CSV export | Selected tracks via right-click → "Export as CSV" or Ctrl+E; columns and their order, delimiter (automatic: semicolon and decimal comma where Excel expects them), target folder and file name pattern in the settings; asks before replacing a file. The whole library: MCP tool `export_csv` |
-| Chat with Claude | Sidebar (Ctrl+J, next to Details): ask in your own words – Claude searches the library and operates KeyTool (filter, select, load into the deck, play, transpose, jump to cues/sections, keywords, tags …). It runs through **Claude Code with your Claude plan (Pro/Max) – no API key**; changes to data and files wait for your confirmation. In **Claude Desktop** the same works with the MCP server: while KeyTool is open, Claude can operate the window |
 | MCP server | Full access: search, details, keywords, set values, write tags, import & analyse folders, CSV export |
 
 ## Installation & start (Windows)
@@ -219,20 +218,6 @@ All screenshots show a made-up demo library (titles, artists and cover images ar
 ### Settings
 ![Settings](docs/screenshots/08-settings.png)
 
-### Chat with Claude
-![Chat with Claude](docs/screenshots/09-chat.png)
-
-The chat uses **Claude Code** (the `claude` program) signed in with your **Claude plan (Pro or Max)** – there is no
-API key and no pay-per-use API billing; usage counts against your plan's limits. Set-up: install Claude Code
-(https://claude.com/claude-code), run `claude` once in a terminal and sign in with your Claude account, then open the
-chat with Ctrl+J. Settings → Chat finds the program automatically (or takes a path), offers the model (default of
-your plan, Sonnet, Opus, Haiku) and a "Test" button. KeyTool starts Claude Code with only its own MCP server – no
-access to files, shell or web – and removes `ANTHROPIC_API_KEY` from its environment so the plan is used.
-Reading and operating the app run directly; every tool that changes data or files shows a confirmation card first.
-
-**Claude Desktop:** add KeyTool as an MCP server (see below). While the KeyTool window is open, Claude can also
-operate it from Claude Desktop with the `app_*` tools.
-
 ## MCP server
 
 For Claude Desktop, add this to `%APPDATA%\Claude\claude_desktop_config.json`
@@ -279,7 +264,6 @@ error messages there that would otherwise stay invisible.
 | `search_karaoke_version` | Search Karaoke-Version by key(s)/BPM, optionally with tempo/keys/duration per hit and ±1 semitone (`include_semitones`) |
 | `export_csv` | Export the whole library as CSV (columns, delimiter; an existing file only with `overwrite`) |
 | `remove_tracks`, `remove_missing_files` | Remove entries from the library (the files are kept) |
-| `app_state`, `app_set_filter`, `app_clear_filters`, `app_select_tracks`, `app_load_into_deck`, `app_playback`, `app_transpose`, `app_jump_in_deck`, `app_add_files`, `app_reanalyze`, `app_add_cue`, `app_delete_cue` | Operate the **open KeyTool window** (filter, select, deck …); they answer with an error if KeyTool is not open. The window listens on 127.0.0.1 only, with a random token in the data folder |
 
 Example requests to Claude: "Import `D:\Music\New`", "Which tracks in 8A between 120 and 126 BPM do I have?",
 "Give all tracks by artist X the keyword Warmup", "What fits harmonically with track 42?"
@@ -304,9 +288,6 @@ keytool/
   analysis.py       BPM and key detection (classic / fast)
   structure.py      Song sections: segmentation, grouping, labels
   export.py         CSV export: columns, delimiter, file name pattern
-  app_control.py    Local control interface of the open window (for the app_* MCP tools)
-  claude_code.py    Chat engine: Claude Code (claude -p, stream-json) with the user's Claude plan
-  gui/chat_panel.py Chat sidebar; gui/app_commands.py: what Claude can do in the window
   analysis_queue.py Analysis queue (order, "Analyse now", crash-safe)
   compare.py        Compare the key detection methods on your own tracks
   keys.py           Key model, notations, Camelot wheel
