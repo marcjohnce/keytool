@@ -5,6 +5,7 @@ It uses the same SQLite database as the GUI, so both can run at the same time.
 """
 from __future__ import annotations
 
+import json
 import threading
 import time
 import uuid
@@ -55,6 +56,22 @@ def _track_out(r: dict, notation: str = "camelot", full: bool = False) -> dict:
             tag_bpm=r["tag_bpm"], tag_key=r["tag_key"],
         )
     return out
+
+
+def _notifies_app(fn):
+    """Tools that change the library tell a running KeyTool window to refresh its list and deck."""
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        res = fn(*args, **kwargs)
+        try:
+            from . import app_control
+            app_control.call("library_changed", timeout=3)
+        except Exception:
+            pass                                    # no window open: nothing to refresh
+        return res
+    return wrapper
 
 
 def _parse_keys(keys: list[str] | None) -> list[str]:
@@ -116,6 +133,7 @@ def search_tracks(
 
 
 @mcp.tool()
+@_notifies_app
 def import_mixed_in_key(db_path: str | None = None, add_missing: bool = False, collections_as_keywords: bool = True,
                         overwrite: bool = True, dry_run: bool = False) -> dict:
     """Import key, tempo, energy and collections from a Mixed In Key 10/11 library (MIKStore.db).
@@ -305,6 +323,7 @@ def list_keywords() -> list[dict]:
 
 
 @mcp.tool()
+@_notifies_app
 def add_keywords(track_ids: list[int], keywords: list[str]) -> dict:
     """Add keywords to one or more tracks (existing keywords are kept)."""
     lib().db.add_keywords(track_ids, keywords)
@@ -312,6 +331,7 @@ def add_keywords(track_ids: list[int], keywords: list[str]) -> dict:
 
 
 @mcp.tool()
+@_notifies_app
 def remove_keywords(track_ids: list[int], keywords: list[str]) -> dict:
     """Remove keywords from one or more tracks."""
     lib().db.remove_keywords(track_ids, keywords)
@@ -319,6 +339,7 @@ def remove_keywords(track_ids: list[int], keywords: list[str]) -> dict:
 
 
 @mcp.tool()
+@_notifies_app
 def set_keywords(track_id: int, keywords: list[str]) -> dict:
     """Replace all keywords of a track."""
     lib().db.set_keywords(track_id, keywords)
@@ -326,6 +347,7 @@ def set_keywords(track_id: int, keywords: list[str]) -> dict:
 
 
 @mcp.tool()
+@_notifies_app
 def rename_keyword(old: str, new: str) -> dict:
     """Rename a keyword on every track."""
     lib().db.rename_keyword(old, new)
@@ -334,6 +356,7 @@ def rename_keyword(old: str, new: str) -> dict:
 
 # ============================================================================ edits
 @mcp.tool()
+@_notifies_app
 def set_bpm(track_id: int, bpm: float | None, write_tags: bool | None = None) -> dict:
     """Manually set (or clear with null) the BPM of a track. Manual values survive re-analysis.
     write_tags: write into the file (default: app setting)."""
@@ -342,6 +365,7 @@ def set_bpm(track_id: int, bpm: float | None, write_tags: bool | None = None) ->
 
 
 @mcp.tool()
+@_notifies_app
 def set_key(track_id: int, key: str | None, write_tags: bool | None = None) -> dict:
     """Manually set (or clear with null) the key of a track, in any notation."""
     code = None
@@ -355,6 +379,7 @@ def set_key(track_id: int, key: str | None, write_tags: bool | None = None) -> d
 
 
 @mcp.tool()
+@_notifies_app
 def update_metadata(track_ids: list[int], title: str | None = None, artist: str | None = None,
                     album: str | None = None, genre: str | None = None, comment: str | None = None,
                     energy: int | None = None, year: int | None = None, album_artist: str | None = None,
@@ -373,6 +398,7 @@ def update_metadata(track_ids: list[int], title: str | None = None, artist: str 
 
 
 @mcp.tool()
+@_notifies_app
 def write_tags(track_ids: list[int]) -> dict:
     """Write the stored BPM and key into the audio files' tags."""
     L = lib()
@@ -385,18 +411,120 @@ def write_tags(track_ids: list[int]) -> dict:
 
 
 @mcp.tool()
+@_notifies_app
 def remove_tracks(track_ids: list[int]) -> dict:
     """Remove tracks from the library database. Audio files are NOT deleted."""
     return {"removed": lib().db.delete_tracks(track_ids)}
 
 
 @mcp.tool()
+@_notifies_app
 def remove_missing_files() -> dict:
     """Remove library entries whose files no longer exist on disk."""
     return {"removed": lib().db.remove_missing()}
 
 
 # ============================================================================ analysis jobs
+# ============================================================================ the running app
+# These tools operate the open KeyTool window (see app_control.py): Claude Desktop or the chat sidebar can filter
+# the list, select tracks, load the deck, play ... They answer with an error if no KeyTool window is open.
+def _app(command: str, args: dict | None = None, timeout: float = 30.0):
+    from . import app_control
+    args = {k: v for k, v in (args or {}).items() if v is not None}
+    try:
+        return app_control.call(command, args, timeout)
+    except app_control.AppNotRunning as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def app_state() -> dict:
+    """What the user sees in the open KeyTool app: deck track, selected tracks, active filters, visible count."""
+    return _app("state")
+
+
+@mcp.tool()
+def app_set_filter(text: str | None = None, title: str | None = None, artist: str | None = None,
+                   album: str | None = None, year_from: int | None = None, year_to: int | None = None,
+                   bpm_min: float | None = None, bpm_max: float | None = None, keys: list[str] | None = None,
+                   keywords: list[str] | None = None, keywords_mode: str | None = None,
+                   keep_other_filters: bool = False) -> dict:
+    """Filter the track list in the open app (the user sees the result). keys in any notation ("8A", "Am");
+    keywords_mode any|all. Other filters are reset unless keep_other_filters. Returns count and first tracks."""
+    return _app("set_filter", locals())
+
+
+@mcp.tool()
+def app_clear_filters() -> dict:
+    """Remove all filters from the track list in the open app."""
+    return _app("clear_filters")
+
+
+@mcp.tool()
+def app_select_tracks(track_ids: list[int]) -> dict:
+    """Select tracks in the app's list (only tracks the current filter shows)."""
+    return _app("select_tracks", {"track_ids": track_ids})
+
+
+@mcp.tool()
+def app_load_into_deck(track_id: int, play: bool = False) -> dict:
+    """Load a track into the app's deck, optionally start playing."""
+    return _app("load_into_deck", {"track_id": track_id, "play": play})
+
+
+@mcp.tool()
+def app_playback(action: str) -> dict:
+    """Control the deck: play, pause, toggle, stop, next or previous track."""
+    return _app("playback", {"action": action})
+
+
+@mcp.tool()
+def app_transpose(semitones: int) -> dict:
+    """Play the deck track 1 semitone lower (-1), higher (1) or in the original key (0)."""
+    return _app("transpose", {"semitones": semitones})
+
+
+@mcp.tool()
+def app_jump_in_deck(cue: int | None = None, section: str | None = None, seconds: float | None = None) -> dict:
+    """Jump in the deck track to a cue point (number), a song section (e.g. "chorus", "drop" or its number) or a
+    time in seconds."""
+    return _app("jump_in_deck", {"cue": cue, "section": section, "seconds": seconds})
+
+
+@mcp.tool()
+def app_add_files(paths: list[str]) -> dict:
+    """Import audio files or folders into the app's library and analyse them in its analysis queue."""
+    return _app("add_files", {"paths": paths})
+
+
+@mcp.tool()
+def app_reanalyze(track_ids: list[int]) -> dict:
+    """Analyse tracks again in the app's analysis queue (tempo, key, song sections)."""
+    return _app("reanalyze", {"track_ids": track_ids})
+
+
+@mcp.tool()
+def app_add_cue(seconds: float) -> dict:
+    """Set a Serato cue point in the deck track at a time in seconds (written into the file; numbered by position)."""
+    return _app("add_cue", {"seconds": seconds})
+
+
+@mcp.tool()
+def app_delete_cue(number: int) -> dict:
+    """Delete cue point number N of the deck track (written into the file)."""
+    return _app("delete_cue", {"number": number})
+
+
+@mcp.tool()
+def app_confirm_permission(tool_name: str, input: dict, tool_use_id: str | None = None) -> str:
+    """Internal: used by the KeyTool chat sidebar to ask the user before a tool that changes data runs.
+    Do not call this yourself."""
+    res = _app("confirm", {"tool_name": tool_name, "input": input}, timeout=3600)
+    ok = isinstance(res, dict) and res.get("allow")
+    return json.dumps({"behavior": "allow", "updatedInput": input} if ok else
+                      {"behavior": "deny", "message": "The user did not confirm this action."})
+
+
 def _run_job(job_id: str, paths: list[str] | None, ids: list[int] | None):
     job = _jobs[job_id]
     L = Library(settings=Settings.load())
@@ -420,6 +548,11 @@ def _run_job(job_id: str, paths: list[str] | None, ids: list[int] | None):
     finally:
         job["finished_at"] = time.time()
         L.db.close()
+        try:
+            from . import app_control
+            app_control.call("library_changed", timeout=3)
+        except Exception:
+            pass
 
 
 def _start_job(paths: list[str] | None, ids: list[int] | None, wait_seconds: float) -> dict:

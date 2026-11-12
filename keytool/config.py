@@ -61,6 +61,9 @@ class Settings:
     export_filename: str = "KeyTool-{date}.csv"   # {date} {time} {count}
     volume: float = 0.8             # player volume 0..1
     show_details: bool = True       # right sidebar (metadata, file info, keywords) visible
+    show_chat: bool = False         # chat sidebar (Claude through Claude Code) visible
+    chat_claude_path: str = ""      # claude program ("" = found on PATH / usual install places)
+    chat_model: str = ""            # "" = Claude Code's default | sonnet | opus | haiku
     research_semitones: bool = True      # also search keys 1 semitone below/above (transposable on KV)
     research_bpm_tolerance: float = 3.0  # +-% around the selected track's BPM
     # Auto re-tag: regular expressions for file names, first match wins (see retag.match_patterns)

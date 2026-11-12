@@ -98,7 +98,10 @@ class SettingsDialog(QDialog):
         body.addWidget(self.nav)
         body.addWidget(self.pages, 1)
 
+        self.page_index: dict[str, int] = {}
+
         def page(title_key: str, intro_key: str):
+            self.page_index[title_key] = self.pages.count()
             w = QWidget(); w.setObjectName("settingsPage")
             v = QVBoxLayout(w); v.setContentsMargins(32, 26, 32, 26); v.setSpacing(0)
             h = QLabel(tr(title_key)); h.setObjectName("settingsTitle")
@@ -264,6 +267,34 @@ class SettingsDialog(QDialog):
         row(v, tr("s_export_filename"), tr("sd_export_filename"), self.export_name)
         v.addStretch(1)
 
+        # ---------------- chat with Claude (Claude Code, the user's Claude plan)
+        from .. import claude_code as cc
+        v = page("sp_chat", "sp_chat_intro")
+        found = cc.find_claude("")
+        self.chat_path = QLineEdit(settings.chat_claude_path)
+        self.chat_path.setPlaceholderText(found or tr("s_chat_not_found"))
+        pick_claude = QPushButton(tr("s_export_choose"))
+        pick_claude.clicked.connect(self._pick_claude)
+        row(v, tr("s_chat_program"), tr("sd_chat_program"), [self.chat_path, pick_claude])
+        self.chat_model = QComboBox()
+        for m in cc.MODELS:
+            self.chat_model.addItem(tr(f"chat_model_{m}") if m else tr("chat_model_default"), m)
+        self.chat_model.setCurrentIndex(max(0, self.chat_model.findData(settings.chat_model)))
+        row(v, tr("s_chat_model"), tr("sd_chat_model"), self.chat_model)
+        self.chat_test = QPushButton(tr("s_chat_test"))
+        self.chat_test_result = QLabel(); self.chat_test_result.setObjectName("dim"); self.chat_test_result.setWordWrap(True)
+        self.chat_test.clicked.connect(self._test_chat)
+        r = row(v, tr("s_chat_test_title"), tr("sd_chat_test"), self.chat_test)
+        r.layout().itemAt(0).layout().addWidget(self.chat_test_result)
+        desk = QLabel(tr("sd_chat_desktop")); desk.setObjectName("dim"); desk.setWordWrap(True)
+        desk.setTextFormat(Qt.RichText); desk.setOpenExternalLinks(True)
+        dt = QLabel(tr("s_chat_desktop")); dt.setObjectName("rowTitle")
+        dbox = QWidget(); dbox.setObjectName("settingsRow")
+        dl = QVBoxLayout(dbox); dl.setContentsMargins(0, 14, 0, 14); dl.setSpacing(3)
+        dl.addWidget(dt); dl.addWidget(desk)
+        v.addWidget(dbox)
+        v.addStretch(1)
+
         # ---------------- MCP
         v = page("s_mcp", "sp_mcp_intro")
         cp = QPushButton(tr("s_copy_config"))
@@ -310,6 +341,38 @@ class SettingsDialog(QDialog):
         from PySide6.QtGui import QDesktopServices
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(path)))
 
+    # -- chat
+    def show_page(self, name: str):
+        """Open the dialog on a page ("chat", "export", ...)."""
+        key = {"chat": "sp_chat", "export": "sp_export", "analysis": "s_analysis", "mcp": "s_mcp"}.get(name, name)
+        if key in self.page_index:
+            self.nav.setCurrentRow(self.page_index[key])
+
+    def _pick_claude(self):
+        from PySide6.QtWidgets import QFileDialog
+        f, _ = QFileDialog.getOpenFileName(self, tr("s_chat_program"), self.chat_path.text(),
+                                           "claude (claude claude.exe claude.cmd)")
+        if f:
+            self.chat_path.setText(f)
+
+    def _test_chat(self):
+        """Start Claude Code once with a one-word request: installed and signed in?"""
+        from PySide6.QtCore import Qt
+        from PySide6.QtGui import QGuiApplication
+        from .. import claude_code as cc
+        exe = cc.find_claude(self.chat_path.text().strip())
+        if not exe:
+            self.chat_test_result.setText(tr("s_chat_test_fail", e=tr("s_chat_not_found")))
+            return
+        QGuiApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            version = cc.check(exe, self.chat_model.currentData())
+            self.chat_test_result.setText(tr("s_chat_test_ok", v=version))
+        except Exception as e:
+            self.chat_test_result.setText(tr("s_chat_test_fail", e=str(e)))
+        finally:
+            QGuiApplication.restoreOverrideCursor()
+
     def export_columns(self) -> list[str]:
         """Ticked columns in the order of the list (dragged into the file order)."""
         from PySide6.QtCore import Qt
@@ -355,4 +418,6 @@ class SettingsDialog(QDialog):
         s.export_ask = self.export_ask.isChecked()
         s.export_folder = self.export_folder.text().strip()
         s.export_filename = self.export_name.text().strip() or "KeyTool-{date}.csv"
+        s.chat_claude_path = self.chat_path.text().strip()
+        s.chat_model = self.chat_model.currentData()
         s.save()
