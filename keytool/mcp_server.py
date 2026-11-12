@@ -10,10 +10,7 @@ import time
 import uuid
 from typing import Any
 
-try:  # MCP Python SDK >= 2
-    from mcp.server.mcpserver import MCPServer as _Server
-except ImportError:  # MCP Python SDK 1.x
-    from mcp.server.fastmcp import FastMCP as _Server
+from mcp.server.mcpserver import MCPServer as _Server     # MCP Python SDK 2 (requirements: mcp>=2.0)
 
 from .config import Settings
 from .db import Query
