@@ -180,6 +180,7 @@ STRINGS: dict[str, str] = {
     "audio_type_tip": "Puede haber varios. El análisis lo detecta a partir del título y del nombre del archivo; los tipos puestos a mano se conservan.",
     "all_types": "Todos los tipos",
     "no_type": "Sin tipo",
+    "tracks_heading": "Pistas",
     "group_by": "Agrupar",
     "group_none": "Ninguno",
     "group_artist": "Artista",

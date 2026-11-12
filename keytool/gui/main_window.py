@@ -24,7 +24,7 @@ from .player import PlayerPanel
 from .queue_panel import QueueBridge, QueuePanel
 from .settings_dialog import SettingsDialog
 from .theme import apply_theme, resolve_theme
-from .widgets import (AudioTypePicker, DetailPanel, GROUP_BY, GROUP_ROLE, HEADER_ROLE, ID_ROLE, KeyFilter,
+from .widgets import (AudioTypePicker, DetailPanel, GROUP_BY, PANEL_TOP, GROUP_ROLE, HEADER_ROLE, ID_ROLE, KeyFilter,
                       KeywordFilter, SORT_ROLE, TrackDelegate, TrackModel, Translatable)
 
 
@@ -89,6 +89,7 @@ class SortProxy(QSortFilterProxyModel):
 # =========================================================================== main window
 class MainWindow(QMainWindow, Translatable):
     # default widths of the compact columns (widened if the header needs more room in the UI language)
+    RAIL_TOP = PANEL_TOP   # top margin of the panel titles (filters, track list, details) - keeps them aligned
     DEFAULT_WIDTHS = (44, 210, 140, 140, 150, 62, 60, 78, 80, 56, 52, 52, 150, 100, 160, 56, 64, 90, 120, 300)
     NARROW_COLUMNS = {"fit": 44, "key": 62, "bpm": 60, "delta": 78, "energy": 80, "duration": 56, "cues": 52,
                       "year": 52}
@@ -212,7 +213,7 @@ class MainWindow(QMainWindow, Translatable):
         # ---------------- left: filters
         left = QWidget()
         lv = QVBoxLayout(left)
-        lv.setContentsMargins(20, 16, 16, 16)
+        lv.setContentsMargins(20, self.RAIL_TOP, 16, 16)
         lv.setSpacing(10)
         h = QLabel(); h.setObjectName("heading"); self.t(h.setText, "filters"); lv.addWidget(h)
         self.f_text = QLineEdit(); self.f_text.setClearButtonEnabled(True)
@@ -317,14 +318,31 @@ class MainWindow(QMainWindow, Translatable):
         self.track_tip.tip.set_dark(resolve_theme(self.s.theme) == "dark")
         self.drop_hint = QLabel(); self.drop_hint.setObjectName("dropHint"); self.drop_hint.setAlignment(Qt.AlignCenter)
         self.t(self.drop_hint.setText, "drop_hint")
-        # group bar above the list: none / artist / album
+        # header panel above the list: title "Tracks" on the left, grouping (none / artist / album) on the right
         self.group_combo = QComboBox(); self.group_combo.setObjectName("groupBy")
         for mode in GROUP_BY:
             self.group_combo.addItem("", mode)
         gl = QLabel(); gl.setObjectName("dim"); self.t(gl.setText, "group_by")
+        self.list_title = QLabel(); self.list_title.setObjectName("heading"); self.t(self.list_title.setText, "tracks_heading")
         list_page = QWidget(); lpv = QVBoxLayout(list_page); lpv.setContentsMargins(0, 0, 0, 0); lpv.setSpacing(0)
-        gbar = QWidget(); gbar.setObjectName("groupBar"); gbl = QHBoxLayout(gbar); gbl.setContentsMargins(10, 8, 10, 6)
-        gbl.addWidget(gl); gbl.addWidget(self.group_combo); gbl.addStretch(1)
+        # number of tracks next to the title ("14 of 13,063 tracks"), baseline-aligned with it
+        self.count_lbl = QLabel(); self.count_lbl.setObjectName("dim")
+        # the title is top-aligned with "Search & filter" (same top margin as the filter rail)
+        gbar = QWidget(); gbar.setObjectName("listHeader"); gbl = QHBoxLayout(gbar)
+        gbl.setContentsMargins(6, self.RAIL_TOP, 6, 8); gbl.setSpacing(8)
+        title_w = QWidget(); title_box = QHBoxLayout(title_w)
+        title_box.setContentsMargins(0, 0, 0, 0); title_box.setSpacing(10)
+        title_box.addWidget(self.list_title, 0, Qt.AlignBaseline); title_box.addWidget(self.count_lbl, 0, Qt.AlignBaseline)
+        group_w = QWidget(); group_box = QHBoxLayout(group_w); group_box.setContentsMargins(0, 0, 0, 0)
+        group_box.addWidget(gl); group_box.addWidget(self.group_combo)
+        gbl.addWidget(title_w, 0, Qt.AlignVCenter)
+        gbl.addStretch(1)
+        gbl.addWidget(group_w, 0, Qt.AlignVCenter)
+        # the drop-down is taller than the title: start the row higher by half the difference, so the title's
+        # top lines up with "Search & filter" and the drop-down sits centred on the title line
+        lift = max(0, (group_w.sizeHint().height() - title_w.sizeHint().height()) // 2)
+        gbl.setContentsMargins(6, max(0, self.RAIL_TOP - lift), 6, 8)
+        gl.setBuddy(self.group_combo)
         lpv.addWidget(gbar); lpv.addWidget(self.table, 1)
         mode = getattr(self.s, "group_by", "none")
         self.group_combo.setCurrentIndex(max(0, GROUP_BY.index(mode) if mode in GROUP_BY else 0))
@@ -363,7 +381,7 @@ class MainWindow(QMainWindow, Translatable):
                   context=Qt.WidgetWithChildrenShortcut)
         QShortcut(QKeySequence(Qt.Key_Space), self.player, activated=self.player.toggle,
                   context=Qt.WidgetWithChildrenShortcut)
-        cw = QWidget(); cv = QVBoxLayout(cw); cv.setContentsMargins(12, 8, 12, 0)
+        cw = QWidget(); cv = QVBoxLayout(cw); cv.setContentsMargins(12, 0, 12, 0)   # top: RAIL_TOP in the header
         cv.addWidget(self.center)
         split.addWidget(cw)
 
@@ -407,8 +425,6 @@ class MainWindow(QMainWindow, Translatable):
 
     def _build_statusbar(self):
         sb = self.statusBar()
-        self.count_lbl = QLabel()
-        sb.addWidget(self.count_lbl)
         self.progress = QProgressBar(); self.progress.setFixedWidth(260); self.progress.hide()
         self.cancel_btn = QPushButton(); self.t(self.cancel_btn.setText, "cancel")
         self.cancel_btn.clicked.connect(self.cancel_work); self.cancel_btn.hide()
