@@ -13,6 +13,7 @@ import os
 import time
 from typing import Callable
 
+from . import audio_type
 from .keys import Key
 
 # id -> (header in the file, i18n key for the settings list)
@@ -24,6 +25,7 @@ COLUMNS: dict[str, tuple[str, str]] = {
     "year": ("Year", "year"),
     "genre": ("Genre", "genre"),
     "comment": ("Comment", "comment"),
+    "audio_type": ("Audio type", "audio_type"),
     "bpm": ("BPM", "x_bpm"),
     "bpm_exact": ("BPM (exact)", "x_bpm_exact"),
     "key": ("Key", "x_key"),
@@ -120,6 +122,7 @@ def row_values(t: dict, columns: list[str], notation: str = "camelot", decimal_c
         "year": lambda: t.get("year") or "",
         "genre": lambda: t.get("genre") or "",
         "comment": lambda: t.get("comment") or "",
+        "audio_type": lambda: audio_type.to_tag(audio_type.decode(t.get("audio_type"))),
         "bpm": lambda: str(int(round(t["bpm"]))) if t.get("bpm") else "",
         "bpm_exact": lambda: num(t.get("bpm"), 2),
         "key": lambda: k.format(notation) if k else "",

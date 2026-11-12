@@ -18,9 +18,11 @@ More annotated screenshots are in [Screenshots](#screenshots) below.
 | Notations | **Camelot** (8A), **sharps** (F#m), **flats** (Gbm), plus Open Key (1m) |
 | Search | Free text + title, artist, album, year from/to, BPM from/to, keys (multiple), keywords (combined with "or" by default, switchable to "and") |
 | Keywords | Per track or for many tracks at once; rename and remove everywhere |
+| Grouping | "Group by" above the list: none, artist or album. Each group has a header with the number of tracks; click it (or Enter) to collapse or expand it, right-click for "Expand / collapse all groups". Sorting by a column sorts inside the groups |
+| Audio type | Song, Instrumental, Acapella, Remix, Stem, Soundtrack, Audio book, Radio play, Podcast, Interview, Commercial, Sound effect, Note – several per track. Detected from title, file name, album, genre and folder names (see below); "Type" column, filter on the left, editable in the details (types set by hand are kept), written into the files as tag `AUDIO_TYPE` ("Instrumental; Remix"), which is read back when a file is imported |
 | DJ extras | "Harmonic match": tracks that fit the selection on the Camelot wheel (±6 % BPM); halve/double BPM |
 | Analyse only what is missing | If only the key is in the tags, only the BPM is analysed (about 20× faster than a full analysis); if only the BPM is there, only the key; if both are there, nothing |
-| Tags | BPM & key are **written into the file automatically** after analysis (ID3 TBPM/TKEY, Vorbis BPM/INITIALKEY, MP4 tmpo/initialkey) – can be turned off |
+| Tags | BPM, key and audio type are **written into the file automatically** after analysis (ID3 TBPM/TKEY/TXXX:AUDIO_TYPE, Vorbis BPM/INITIALKEY/AUDIO_TYPE, MP4 tmpo/initialkey/AUDIO_TYPE) – can be turned off |
 | Details | Right-hand sidebar, shown/hidden with "Details" in the toolbar or Ctrl+I (remembered). Edit title, artist, album, album artist (ALBUMARTIST, only shown here), year, genre, comment, key, energy (1–10) and tempo – for one track or many at once; file type, bitrate, file size, duration and path are shown. Changes are written into the file tags (can be turned off) |
 | Manual correction | Override BPM/key; manual values are kept when a track is analysed again |
 | Research | Search **Karaoke-Version** (karaoke-version.com) by key(s) and BPM range (see the note on bot protection below) |
@@ -62,6 +64,17 @@ touch `docs/` or Markdown files start no run.
   and have not changed are skipped. Analysis runs in parallel on several CPU cores.
 * **Search:** the "Search everything" field (Ctrl+F) searches title, artist, album, file name, genre, year and
   keywords. All filters on the left can be combined.
+* **Audio type:** the version part of the title and of the file name – brackets and the part after " - " –
+  decides between song, instrumental, acapella, remix and stem: "(Instrumental)", "(Instrumental Mix)", "Karaoke" →
+  instrumental; "(Acapella)", "(Vocals)", "Vocals Only" → acapella; "(… Remix)", "Edit", "Bootleg", "VIP", "Dub",
+  "Club Mix" → remix; "(… Remix Instrumental)" → remix and instrumental; "Drums Stem", "Vocal Stem" → stem.
+  "Original Mix", "Extended Mix", "Radio Edit", "Album Version" and "Remastered" are the song itself. Words for a kind
+  of recording count in the whole title, the album, the genre and the folder names: "Hörbuch"/"Audiobook",
+  "Hörspiel"/"Radio Play", "Podcast" (or "Episode 12" / "Folge 12"), "Interview", "Soundtrack"/"OST"/"Filmmusik",
+  "Werbespot"/"Commercial"; sound effects ("SFX", "Geräusche", "Samples", "One Shots") and notes ("Sprachmemos",
+  "Voice Memos", "Neue Aufnahme 12") only from album, genre and folders, since such words are common in song titles.
+  Without any marker a track is a song. A file's `AUDIO_TYPE` tag wins over the detection; types set by hand are
+  never changed by an analysis (unticking all of them goes back to the detected type).
 * **Song sections:** every analysis also detects the song's sections (intro, verse, pre-chorus, chorus, bridge, break,
   outro) and stores their boundaries in the library. The deck shows them as tinted bands in the waveform with their
   names along the bottom; the same colour means the same part (chorus 1, 2 and 3 share one), the section playing now is
@@ -250,7 +263,7 @@ error messages there that would otherwise stay invisible.
 
 | Tool | Purpose |
 |---|---|
-| `search_tracks` | Search with all filters, sorting, paging, choice of notation |
+| `search_tracks` | Search with all filters (including audio types), sorting, paging, choice of notation |
 | `get_track` | All details of a track (by ID or path) |
 | `compatible_tracks` | Harmonically matching tracks (Camelot neighbours, BPM tolerance) |
 | `library_stats` | Count, status, BPM range, key distribution |
@@ -258,7 +271,7 @@ error messages there that would otherwise stay invisible.
 | `list_keywords`, `add_keywords`, `remove_keywords`, `set_keywords`, `rename_keyword` | Keywords |
 | `import_mixed_in_key` | Take over key, tempo, energy and collections from Mixed In Key (`dry_run` for a preview only) |
 | `suggest_tags` | Auto re-tag suggestions for one track (Discogs/ISRC/MusicBrainz/file name); apply them with `update_metadata` |
-| `update_metadata` | Change title, artist, album, album artist, year, genre, comment, energy (one or more tracks) |
+| `update_metadata` | Change title, artist, album, album artist, year, genre, comment, energy, audio type (one or more tracks) |
 | `set_bpm`, `set_key`, `write_tags` | Manual correction and writing tags |
 | `analyze_paths`, `reanalyze_tracks`, `get_job_status`, `cancel_job` | Import and analyse files/folders (background job) |
 | `search_karaoke_version` | Search Karaoke-Version by key(s)/BPM, optionally with tempo/keys/duration per hit and ±1 semitone (`include_semitones`) |
@@ -288,6 +301,7 @@ keytool/
   analysis.py       BPM and key detection (classic / fast)
   structure.py      Song sections: segmentation, grouping, labels
   export.py         CSV export: columns, delimiter, file name pattern
+  audio_type.py     Audio type: detection from title / file name / folders, AUDIO_TYPE tag
   analysis_queue.py Analysis queue (order, "Analyse now", crash-safe)
   compare.py        Compare the key detection methods on your own tracks
   keys.py           Key model, notations, Camelot wheel

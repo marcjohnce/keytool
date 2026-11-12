@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS tracks (
     cue_count       INTEGER,            -- Serato cue points in the file; NULL = not read yet
     sections        TEXT,               -- song sections as JSON (structure.py); NULL = not analysed
     sections_manual INTEGER DEFAULT 0,  -- sections edited by hand: an analysis does not replace them
+    audio_type      TEXT,               -- audio_type.py codes, comma separated; NULL = not detected yet
+    audio_type_manual INTEGER DEFAULT 0, -- AT_*: 0 detected, 1 set by hand, 2 from the AUDIO_TYPE tag
     status          TEXT DEFAULT 'pending',
     error           TEXT DEFAULT '',
     added_at        REAL,
@@ -61,10 +63,13 @@ CREATE TABLE IF NOT EXISTS keywords (
 CREATE INDEX IF NOT EXISTS ix_keywords_kw ON keywords(keyword COLLATE NOCASE);
 """
 
+# where tracks.audio_type comes from (column audio_type_manual); only detected types are detected again
+AT_DETECTED, AT_MANUAL, AT_FROM_TAG = 0, 1, 2
+
 TRACK_COLUMNS = [
     "id", "path", "folder", "filename", "ext", "size", "mtime", "title", "artist", "album", "album_artist", "year",
     "genre", "duration", "bpm", "bpm_confidence", "key", "key_confidence", "bpm_manual", "key_manual",
-    "tag_bpm", "tag_key", "bpm_source", "key_source", "comment", "energy", "bitrate", "cue_count", "sections", "sections_manual", "status", "error", "added_at", "analyzed_at", "analyzed_ok_at",
+    "tag_bpm", "tag_key", "bpm_source", "key_source", "comment", "energy", "bitrate", "cue_count", "sections", "sections_manual", "audio_type", "audio_type_manual", "status", "error", "added_at", "analyzed_at", "analyzed_ok_at",
 ]
 
 SORTABLE = {"title", "artist", "album", "year", "bpm", "key", "duration", "added_at", "filename", "genre", "energy",
@@ -99,6 +104,7 @@ class Query:
     keys: list[str] = field(default_factory=list)       # canonical key codes
     keywords: list[str] = field(default_factory=list)
     keywords_mode: str = "any"        # any (OR, default) | all (AND)
+    audio_types: list[str] = field(default_factory=list)  # audio_type.py codes; a track needs one of them
     status: str | None = None         # pending | ok | error
     folder: str | None = None         # restrict to folder (recursive)
     order_by: str = "artist"
@@ -122,7 +128,8 @@ class Database:
                           ("album_artist", "TEXT"),       # NULL = not read yet (filled lazily from the file)
                           ("cue_count", "INTEGER"),       # NULL = not read yet (filled in the background)
                           ("sections", "TEXT"),           # NULL = not analysed yet
-                          ("sections_manual", "INTEGER DEFAULT 0")):   # edited by hand: analysis keeps them
+                          ("sections_manual", "INTEGER DEFAULT 0"),    # edited by hand: analysis keeps them
+                          ("audio_type", "TEXT"), ("audio_type_manual", "INTEGER DEFAULT 0")):
             if col not in cols:
                 c.execute(f"ALTER TABLE tracks ADD COLUMN {col} {decl}")
         # path_key: case-insensitive lookup key on Windows. Older libraries stored the path itself in lower
@@ -135,6 +142,15 @@ class Database:
             c.executemany("UPDATE tracks SET path_key=? WHERE id=?", [(path_key(r["path"]), r["id"]) for r in missing])
             c.execute("COMMIT")
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_tracks_path_key ON tracks(path_key)")
+        # audio type of tracks from before that column: detected once from title, path, album and genre
+        untyped = c.execute("SELECT id, title, path, album, genre FROM tracks WHERE audio_type IS NULL").fetchall()
+        if untyped:
+            from . import audio_type
+            c.execute("BEGIN")
+            c.executemany("UPDATE tracks SET audio_type=?, audio_type_manual=0 WHERE id=?",
+                          [(audio_type.encode(audio_type.detect(r["title"], r["path"], r["album"], r["genre"])), r["id"])
+                           for r in untyped])
+            c.execute("COMMIT")
 
     # -------------------------------------------------------------- connection
     def conn(self) -> sqlite3.Connection:
@@ -177,7 +193,18 @@ class Database:
     def upsert_file(self, path: str, size: int, mtime: float, meta: dict) -> int:
         p = norm_path(path)
         c = self.conn()
-        row = c.execute("SELECT id FROM tracks WHERE path_key=?", (path_key(p),)).fetchone()
+        row = c.execute("SELECT id, COALESCE(audio_type_manual, 0) AS atm FROM tracks WHERE path_key=?",
+                        (path_key(p),)).fetchone()
+        meta = dict(meta)
+        tag = meta.pop("audio_type_tag", "")
+        if not (row and row["atm"] == AT_MANUAL) and "audio_type" not in meta:      # set by hand: kept
+            from . import audio_type
+            from_tag = audio_type.from_tag(tag)
+            if from_tag:                                   # the AUDIO_TYPE tag wins over the detection
+                meta.update(audio_type=audio_type.encode(from_tag), audio_type_manual=AT_FROM_TAG)
+            else:
+                meta.update(audio_type=audio_type.encode(audio_type.detect(
+                    meta.get("title"), p, meta.get("album"), meta.get("genre"))), audio_type_manual=AT_DETECTED)
         vals = dict(
             path=p, path_key=path_key(p),            # path keeps the original casing (fixes old lower-case rows)
             folder=os.path.dirname(p), filename=os.path.basename(p), ext=os.path.splitext(p)[1].lower().lstrip("."),
@@ -226,6 +253,9 @@ class Database:
             upd.update(key=result.get("key"), key_confidence=result.get("key_confidence"), key_source="analysis")
         if result.get("duration") and not t["duration"]:
             upd["duration"] = result["duration"]
+        if not t.get("audio_type_manual"):                # detected again (title or folder may have changed)
+            from . import audio_type
+            upd["audio_type"] = audio_type.encode(audio_type.detect(t["title"], t["path"], t["album"], t["genre"]))
         if result.get("sections") is not None and not t.get("sections_manual"):   # edited by hand: kept
             import json
             upd["sections"] = json.dumps(result["sections"], separators=(",", ":"))
@@ -365,6 +395,12 @@ class Database:
                         f"AND k.keyword IN ({ph})) = ?"
                     )
                     p += kws + [len({k.lower() for k in kws})]
+        if q.audio_types:
+            from . import audio_type
+            codes = audio_type.order(q.audio_types)
+            if codes:
+                cl.append("(" + " OR ".join("(',' || COALESCE(t.audio_type, '') || ',') LIKE ?" for _ in codes) + ")")
+                p += [f"%,{c},%" for c in codes]
         if q.status:
             cl.append("t.status = ?"); p.append(q.status)
         if q.folder:

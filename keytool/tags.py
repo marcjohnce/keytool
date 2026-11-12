@@ -22,6 +22,7 @@ class Metadata:
     energy: int | None = None          # 1..10 (Mixed-In-Key style energy level)
     bitrate: int | None = None         # kbit/s
     duration: float | None = None
+    audio_type: str = ""               # AUDIO_TYPE tag as written ("Instrumental; Remix"), see audio_type.py
     extra: dict = field(default_factory=dict)
 
 
@@ -120,6 +121,8 @@ def read_metadata(path: str) -> Metadata:
                 for fr in tags.getall("TXXX"):
                     if fr.desc.lower() in ("energylevel", "energy", "energy level"):
                         md.energy = _energy(_first(fr))
+                    elif fr.desc.upper() == "AUDIO_TYPE":
+                        md.audio_type = "; ".join(str(x) for x in fr.text)
             elif cls in ("MP4Tags",):
                 md.title = _first(tags.get("\xa9nam"))
                 md.artist = _first(tags.get("\xa9ART")) or _first(tags.get("aART"))
@@ -132,6 +135,7 @@ def read_metadata(path: str) -> Metadata:
                 md.comment = _first(tags.get("\xa9cmt"))
                 md.energy = _energy(_first(tags.get("----:com.apple.iTunes:EnergyLevel"))
                                     or _first(tags.get("----:com.apple.iTunes:ENERGYLEVEL")))
+                md.audio_type = _first(tags.get("----:com.apple.iTunes:AUDIO_TYPE"))
             else:  # Vorbis comments (FLAC, OGG, Opus)
                 def g(*names):
                     for n in names:
@@ -152,6 +156,10 @@ def read_metadata(path: str) -> Metadata:
                 md.tag_key = g("initialkey", "key")
                 md.comment = g("comment", "description")
                 md.energy = _energy(g("energylevel", "energy"))
+                try:
+                    md.audio_type = "; ".join(str(x) for x in (tags.get("audio_type") or tags.get("AUDIO_TYPE") or []))
+                except Exception:
+                    md.audio_type = ""
         if md.energy is None and md.comment:   # Mixed In Key writes e.g. "8A - Energy 6" into the comment
             m = re.search(r"Energy\s*(\d{1,2})", md.comment, re.I)
             md.energy = _energy(m.group(1)) if m else None
@@ -201,10 +209,11 @@ def write_bpm_key(path: str, bpm: float | None, key_text: str | None) -> None:
 def write_metadata(path: str, title: str | None = None, artist: str | None = None, album: str | None = None,
                    genre: str | None = None, comment: str | None = None, energy: int | None | str = None,
                    bpm: float | None = None, key_text: str | None = None, year: int | None | str = None,
-                   album_artist: str | None = None) -> None:
+                   album_artist: str | None = None, audio_type: str | None = None) -> None:
     """Write the given fields into the file's native tags (ID3 / Vorbis comments / MP4 atoms).
 
     None = leave the field untouched, "" = remove it (energy / year: 0 or "" removes it).
+    audio_type is the text of the AUDIO_TYPE tag (audio_type.to_tag).
     """
     import mutagen
     from mutagen.id3 import ID3, COMM, TALB, TBPM, TCON, TDRC, TIT2, TKEY, TPE1, TPE2, TXXX, ID3NoHeaderError
@@ -239,6 +248,12 @@ def write_metadata(path: str, title: str | None = None, artist: str | None = Non
                     tags.delall(fr.HashKey)
             if energy_txt:
                 tags.add(TXXX(encoding=3, desc="EnergyLevel", text=energy_txt))
+        if audio_type is not None:
+            for fr in list(tags.getall("TXXX")):
+                if fr.desc.upper() == "AUDIO_TYPE":
+                    tags.delall(fr.HashKey)
+            if audio_type:
+                tags.add(TXXX(encoding=3, desc="AUDIO_TYPE", text=audio_type))
 
     if ext == ".mp3":
         try:
@@ -279,6 +294,7 @@ def write_metadata(path: str, title: str | None = None, artist: str | None = Non
         put("\xa9gen", genre); put("\xa9cmt", comment); put("\xa9day", year_txt)
         put("----:com.apple.iTunes:initialkey", key_text, free=True)
         put("----:com.apple.iTunes:EnergyLevel", energy_txt, free=True)
+        put("----:com.apple.iTunes:AUDIO_TYPE", audio_type, free=True)
         if bpm_txt:
             t["tmpo"] = [int(bpm_txt)]
         f.save()
@@ -298,7 +314,8 @@ def write_metadata(path: str, title: str | None = None, artist: str | None = Non
             del f.tags[k]
     for name, val in (("TITLE", title), ("ARTIST", artist), ("ALBUM", album), ("ALBUMARTIST", album_artist),
                       ("GENRE", genre), ("DATE", year_txt),
-                      ("COMMENT", comment), ("ENERGYLEVEL", energy_txt), ("BPM", bpm_txt), ("INITIALKEY", key_text)):
+                      ("COMMENT", comment), ("ENERGYLEVEL", energy_txt), ("BPM", bpm_txt), ("INITIALKEY", key_text),
+                      ("AUDIO_TYPE", audio_type)):
         if val is None:
             continue
         for k in [k for k in f.tags.keys() if k.upper() == name]:

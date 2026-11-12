@@ -24,7 +24,8 @@ from .player import PlayerPanel
 from .queue_panel import QueueBridge, QueuePanel
 from .settings_dialog import SettingsDialog
 from .theme import apply_theme, resolve_theme
-from .widgets import TrackDelegate, DetailPanel, ID_ROLE, KeyFilter, KeywordFilter, SORT_ROLE, TrackModel, Translatable
+from .widgets import (AudioTypePicker, DetailPanel, GROUP_BY, GROUP_ROLE, HEADER_ROLE, ID_ROLE, KeyFilter,
+                      KeywordFilter, SORT_ROLE, TrackDelegate, TrackModel, Translatable)
 
 
 # =========================================================================== worker
@@ -51,9 +52,38 @@ class Worker(QObject):
 
 
 class SortProxy(QSortFilterProxyModel):
+    """Sorting by the clicked column - inside the groups when the list is grouped (groups stay A-Z, the
+    header first); tracks of a collapsed group are filtered out."""
+
     def __init__(self):
         super().__init__()
         self.setSortRole(SORT_ROLE)
+
+    def lessThan(self, left, right):
+        m = self.sourceModel()
+        if getattr(m, "group_by", "none") != "none":
+            gl, gr = left.data(GROUP_ROLE), right.data(GROUP_ROLE)
+            asc = self.sortOrder() == Qt.AscendingOrder
+            if gl != gr:                                  # Qt swaps the result for descending order
+                return (gl < gr) if asc else (gl > gr)
+            hl, hr = left.data(HEADER_ROLE), right.data(HEADER_ROLE)
+            if hl or hr:
+                return bool(hl) if asc else bool(hr)
+        return super().lessThan(left, right)
+
+    def refilter(self):
+        """Apply a changed set of collapsed groups (Qt >= 6.10: begin/endFilterChange, before: invalidate)."""
+        if hasattr(self, "beginFilterChange"):
+            self.beginFilterChange()
+            self.endFilterChange(QSortFilterProxyModel.Direction.Rows)
+        else:
+            self.invalidateRowsFilter()
+
+    def filterAcceptsRow(self, row, parent):
+        m = self.sourceModel()
+        if getattr(m, "group_by", "none") == "none" or m.is_header(row):
+            return True
+        return m.group_of(m.rows[row])[0] not in m.collapsed
 
 
 # =========================================================================== main window
@@ -204,6 +234,9 @@ class MainWindow(QMainWindow, Translatable):
             w.setRange(0, 400); w.setDecimals(1); w.setSpecialValueText("–"); w.setValue(0)
         br = QHBoxLayout(); br.addWidget(self.f_bpm_from, 1); br.addWidget(QLabel("–")); br.addWidget(self.f_bpm_to, 1)
         lbl = QLabel(); self.t(lbl.setText, "bpm"); form.addRow(lbl, br)
+        self.f_types = AudioTypePicker("all_types")
+        self.f_types.changed.connect(self.schedule_refresh)
+        lbl = QLabel(); self.t(lbl.setText, "audio_type"); form.addRow(lbl, self.f_types)
         lv.addLayout(form)
         kl = QLabel(); kl.setObjectName("dim"); self.t(kl.setText, "key"); lv.addWidget(kl)
         self.f_keys = KeyFilter()
@@ -256,7 +289,7 @@ class MainWindow(QMainWindow, Translatable):
         hh.setSectionResizeMode(QHeaderView.Interactive)
         hh.setStretchLastSection(True)
         for col, w in zip(range(len(TrackModel.COLUMNS)),
-                          (44, 210, 140, 140, 62, 60, 78, 80, 56, 52, 52, 150, 100, 160, 56, 64, 90, 120, 300)):
+                          (44, 210, 140, 140, 150, 62, 60, 78, 80, 56, 52, 52, 150, 100, 160, 56, 64, 90, 120, 300)):
             self.table.setColumnWidth(col, w)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.table_menu)
@@ -270,8 +303,24 @@ class MainWindow(QMainWindow, Translatable):
         self.track_tip.tip.set_dark(resolve_theme(self.s.theme) == "dark")
         self.drop_hint = QLabel(); self.drop_hint.setObjectName("dropHint"); self.drop_hint.setAlignment(Qt.AlignCenter)
         self.t(self.drop_hint.setText, "drop_hint")
+        # group bar above the list: none / artist / album
+        self.group_combo = QComboBox(); self.group_combo.setObjectName("groupBy")
+        for mode in GROUP_BY:
+            self.group_combo.addItem("", mode)
+        gl = QLabel(); gl.setObjectName("dim"); self.t(gl.setText, "group_by")
+        list_page = QWidget(); lpv = QVBoxLayout(list_page); lpv.setContentsMargins(0, 0, 0, 0); lpv.setSpacing(0)
+        gbar = QWidget(); gbar.setObjectName("groupBar"); gbl = QHBoxLayout(gbar); gbl.setContentsMargins(10, 8, 10, 6)
+        gbl.addWidget(gl); gbl.addWidget(self.group_combo); gbl.addStretch(1)
+        lpv.addWidget(gbar); lpv.addWidget(self.table, 1)
+        mode = getattr(self.s, "group_by", "none")
+        self.group_combo.setCurrentIndex(max(0, GROUP_BY.index(mode) if mode in GROUP_BY else 0))
+        self.model.set_group_by(self.group_combo.currentData())
+        self.group_combo.currentIndexChanged.connect(self.set_group_by)
+        self.table.clicked.connect(self._header_clicked)
+        for sig in (self.proxy.layoutChanged, self.proxy.modelReset, self.proxy.rowsInserted, self.proxy.rowsRemoved):
+            sig.connect(self._update_spans)
         self.center = QStackedWidget()
-        self.center.addWidget(self.table)
+        self.center.addWidget(list_page)
         hint_wrap = QWidget(); hv = QVBoxLayout(hint_wrap); hv.addStretch(); hv.addWidget(self.drop_hint); hv.addStretch()
         self.center.addWidget(hint_wrap)
         self.player = PlayerPanel(self.s)
@@ -280,10 +329,10 @@ class MainWindow(QMainWindow, Translatable):
         self.player.sections_edited.connect(self._deck_sections_edited)
         self.player.cues_edited.connect(self._deck_cues_edited)
         self.player.redetect_sections.connect(self.redetect_sections)
-        self.table.doubleClicked.connect(lambda idx: self.load_into_deck(autoplay=True, track_id=idx.data(ID_ROLE)))
+        self.table.doubleClicked.connect(lambda idx: idx.data(HEADER_ROLE) or
+                                         self.load_into_deck(autoplay=True, track_id=idx.data(ID_ROLE)))
         for k in (Qt.Key_Return, Qt.Key_Enter):
-            QShortcut(QKeySequence(k), self.table, activated=lambda: self.load_into_deck(autoplay=True),
-                      context=Qt.WidgetShortcut)
+            QShortcut(QKeySequence(k), self.table, activated=self._enter_pressed, context=Qt.WidgetShortcut)
         self.player.prev_requested.connect(lambda playing: self.play_adjacent(-1, playing))
         self.player.next_requested.connect(lambda playing: self.play_adjacent(1, playing))
         for seq, slot in ((QKeySequence("Ctrl+Right"), lambda: self.play_adjacent(1, self.player.is_playing())),
@@ -386,12 +435,15 @@ class MainWindow(QMainWindow, Translatable):
         self.setWindowTitle(tr("app_title"))
         self.f_keys.set_notation(self.s.notation)
         self.f_keywords.retranslate()
+        self.f_types.retranslate()
         self.details.retranslate()
         self.player.retranslate()
         if hasattr(self, "queue_panel"):
             self.queue_panel.retranslate()
             self.queue_dock.setWindowTitle(tr("queue_title"))
             self.update_progress()
+        for i, mode in enumerate(GROUP_BY):
+            self.group_combo.setItemText(i, tr(f"group_{mode}"))
         self.model.refresh_all()
         self.update_count()
         # narrow columns are never narrower than their header in this language (e.g. "Tonalidad", "Energía");
@@ -409,7 +461,7 @@ class MainWindow(QMainWindow, Translatable):
             album=self.f_album.text().strip(),
             year_from=self.f_year_from.value() or None, year_to=self.f_year_to.value() or None,
             bpm_min=self.f_bpm_from.value() or None, bpm_max=self.f_bpm_to.value() or None,
-            keys=self.f_keys.selected(), keywords=self.f_keywords.selected(),
+            keys=self.f_keys.selected(), keywords=self.f_keywords.selected(), audio_types=self.f_types.selected(),
             keywords_mode=self.f_keywords.match_mode(),
         )
         return q
@@ -452,8 +504,50 @@ class MainWindow(QMainWindow, Translatable):
         self.f_keywords.set_keywords(kws)
         self.details.set_known_keywords([k for k, _ in kws])
 
+    # ------------------------------------------------------------------ grouping
+    def set_group_by(self, _=None):
+        mode = self.group_combo.currentData() or "none"
+        self.s.group_by = mode
+        self.model.set_group_by(mode)
+        self.proxy.invalidate()
+        self._update_spans()
+
+    def _update_spans(self, *_):
+        self.table.clearSpans()
+        if self.model.group_by == "none":
+            return
+        n = self.proxy.columnCount()
+        for r in range(self.proxy.rowCount()):
+            if self.proxy.index(r, 0).data(HEADER_ROLE):
+                self.table.setSpan(r, 0, 1, n)
+
+    def _enter_pressed(self):
+        cur = self.table.currentIndex()
+        if cur.isValid() and cur.data(HEADER_ROLE):            # Enter on a group header opens / closes it
+            self.toggle_group(cur.data(GROUP_ROLE))
+        else:
+            self.load_into_deck(autoplay=True)
+
+    def _header_clicked(self, idx):
+        if not idx.isValid() or not idx.data(HEADER_ROLE):
+            return
+        self.toggle_group(idx.data(GROUP_ROLE))
+
+    def toggle_group(self, key: str, collapse: bool | None = None):
+        c = self.model.collapsed
+        if collapse is None:
+            collapse = key not in c
+        (c.add if collapse else c.discard)(key)
+        self.proxy.refilter()
+        self._update_spans()
+
+    def set_all_groups(self, collapse: bool):
+        self.model.collapsed = set(self.model.group_keys()) if collapse else set()
+        self.proxy.refilter()
+        self._update_spans()
+
     def update_count(self):
-        self.count_lbl.setText(tr("tracks_count", shown=self.proxy.rowCount(), total=self.lib.db.count()))
+        self.count_lbl.setText(tr("tracks_count", shown=len(self.model.tracks), total=self.lib.db.count()))
 
     def reset_filters(self):
         self.harmonic_btn.setChecked(False)
@@ -463,13 +557,14 @@ class MainWindow(QMainWindow, Translatable):
             w.blockSignals(True); w.setValue(0); w.blockSignals(False)
         self.f_keys.blockSignals(True); self.f_keys.clear(); self.f_keys.blockSignals(False); self.f_keys.update()
         self.f_keywords.blockSignals(True); self.f_keywords.set_selected([]); self.f_keywords.blockSignals(False)
+        self.f_types.set_selected([])
         self.refresh()
 
     # ------------------------------------------------------------------ selection
     def selected_ids(self) -> list[int]:
         if not hasattr(self, "table"):
             return []
-        return [i.data(ID_ROLE) for i in self.table.selectionModel().selectedRows()]
+        return [i.data(ID_ROLE) for i in self.table.selectionModel().selectedRows() if i.data(ID_ROLE) is not None]
 
     def selected_rows(self) -> list[dict]:
         ids = set(self.selected_ids())
@@ -598,6 +693,8 @@ class MainWindow(QMainWindow, Translatable):
             cur = self.table.currentIndex()
             pos = cur.row() if cur.isValid() else -1
         target = pos + delta
+        while 0 <= target < n and self.proxy.index(target, 0).data(HEADER_ROLE):   # skip group headers
+            target += delta
         if target < 0 or target >= n:
             if delta > 0 and keep_playing:
                 self.player.stop()      # end of the list
@@ -874,9 +971,23 @@ class MainWindow(QMainWindow, Translatable):
 
     # ------------------------------------------------------------------ context menu
     def table_menu(self, pos):
+        idx = self.table.indexAt(pos)
+        if idx.isValid() and idx.data(HEADER_ROLE):            # group header: open / close groups
+            menu = self.build_group_menu(idx.data(GROUP_ROLE))
+            menu.exec(self.table.viewport().mapToGlobal(pos))
+            return
         menu = self.build_track_menu()
         if menu is not None:
             menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def build_group_menu(self, key: str) -> QMenu:
+        m = QMenu(self)
+        closed = key in self.model.collapsed
+        m.addAction(tr("expand") if closed else tr("collapse"), lambda: self.toggle_group(key))
+        m.addSeparator()
+        m.addAction(tr("expand_all"), lambda: self.set_all_groups(False))
+        m.addAction(tr("collapse_all"), lambda: self.set_all_groups(True))
+        return m
 
     def build_track_menu(self) -> QMenu | None:
         """Context menu of the track list:

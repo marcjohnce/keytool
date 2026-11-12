@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..i18n import fmt_datetime, fmt_number, tr
+from .. import audio_type
 from ..keys import Key, all_keys
 from .theme import camelot_color
 
@@ -21,6 +22,9 @@ SORT_ROLE = Qt.UserRole + 1
 ID_ROLE = Qt.UserRole + 2
 DECK_ROLE = Qt.UserRole + 3      # True for the row that is loaded in the deck
 FIT_ROLE = Qt.UserRole + 4       # 2 same key, 1 harmonic neighbour, 0 no match, None unknown
+GROUP_ROLE = Qt.UserRole + 5     # sort key of the row's group ("" when the list is not grouped)
+HEADER_ROLE = Qt.UserRole + 6    # True for a group header row
+GROUP_BY = ("none", "artist", "album")
 
 
 def harmonic_fit(code: str | None, deck_code: str | None) -> int | None:
@@ -76,7 +80,7 @@ class Translatable:
 
 # =========================================================================== table model
 class TrackModel(QAbstractTableModel):
-    COLUMNS = ["fit", "title", "artist", "album", "key", "bpm", "delta", "energy", "duration", "cues", "year", "keywords",
+    COLUMNS = ["fit", "title", "artist", "album", "audio_type", "key", "bpm", "delta", "energy", "duration", "cues", "year", "keywords",
                "genre", "comment", "ext", "bitrate", "status", "analyzed_ok_at", "path"]
     HEADER_KEYS = {"ext": "format", "delta": "delta_deck"}
 
@@ -90,6 +94,51 @@ class TrackModel(QAbstractTableModel):
         self.deck_bpm: float | None = None
         self.busy_ids: set[int] = set()       # tracks the analysis queue is working on (dots in "fit")
         self.busy_phase = 0.0                 # animation phase of those dots, 0..1
+        self.tracks: list[dict] = []          # the tracks; self.rows also holds the group header rows
+        self.group_by = "none"                # "none" | "artist" | "album"
+        self.collapsed: set[str] = set()      # group keys whose tracks are hidden
+
+    # -- grouping
+    def group_of(self, r: dict) -> tuple[str, str]:
+        """(sort key, label) of the group a track belongs to; ("", "") when not grouped."""
+        if self.group_by == "artist":
+            name = (r.get("artist") or "").strip()
+            return (name.lower() if name else "\uffff", name or tr("group_no_artist"))
+        if self.group_by == "album":
+            name = (r.get("album") or "").strip()
+            return (name.lower() if name else "\uffff", name or tr("group_no_album"))
+        return ("", "")
+
+    def _build_rows(self) -> list[dict]:
+        if self.group_by == "none":
+            return list(self.tracks)
+        groups: dict[str, dict] = {}
+        for t in self.tracks:
+            key, label = self.group_of(t)
+            g = groups.get(key)
+            if g is None:
+                g = groups[key] = {"id": None, "_header": True, "_group": key, "_label": label, "_count": 0,
+                                   "_artists": set()}
+            g["_count"] += 1
+            if t.get("artist"):
+                g["_artists"].add(t["artist"])
+        return list(self.tracks) + list(groups.values())
+
+    def set_group_by(self, mode: str):
+        mode = mode if mode in GROUP_BY else "none"
+        if mode == self.group_by:
+            return
+        self.beginResetModel()
+        self.group_by = mode
+        self.collapsed.clear()
+        self.rows = self._build_rows()
+        self.endResetModel()
+
+    def is_header(self, row: int) -> bool:
+        return bool(self.rows[row].get("_header"))
+
+    def group_keys(self) -> list[str]:
+        return [r["_group"] for r in self.rows if r.get("_header")]
 
     def set_deck(self, track_id: int | None, key_code: str | None, bpm: float | None):
         if (track_id, key_code, bpm) == (self.deck_id, self.deck_key, self.deck_bpm):
@@ -108,7 +157,8 @@ class TrackModel(QAbstractTableModel):
     # -- data
     def set_rows(self, rows: list[dict]):
         self.beginResetModel()
-        self.rows = rows
+        self.tracks = rows
+        self.rows = self._build_rows()
         self.endResetModel()
 
     def update_row(self, row: dict):
@@ -116,6 +166,9 @@ class TrackModel(QAbstractTableModel):
             if r["id"] == row["id"]:
                 row.setdefault("keywords", r.get("keywords", []))
                 self.rows[i] = row
+                for j, t in enumerate(self.tracks):
+                    if t["id"] == row["id"]:
+                        self.tracks[j] = row
                 self.dataChanged.emit(self.index(i, 0), self.index(i, len(self.COLUMNS) - 1))
                 return
 
@@ -133,6 +186,8 @@ class TrackModel(QAbstractTableModel):
 
     # -- drag & drop to other applications (browser upload, audio player, Explorer, DJ software)
     def flags(self, index):
+        if index.isValid() and self.is_header(index.row()):
+            return Qt.ItemIsEnabled                # group header: clickable, not selectable
         f = super().flags(index)
         return (f | Qt.ItemIsDragEnabled) if index.isValid() else f
 
@@ -144,7 +199,7 @@ class TrackModel(QAbstractTableModel):
 
     def mimeData(self, indexes):
         from PySide6.QtCore import QMimeData, QUrl
-        rows = sorted({i.row() for i in indexes if i.isValid()})
+        rows = sorted({i.row() for i in indexes if i.isValid() and not self.is_header(i.row())})
         paths = [self.rows[r]["path"] for r in rows if os.path.exists(self.rows[r]["path"])]
         md = QMimeData()
         md.setUrls([QUrl.fromLocalFile(p) for p in paths])     # file list (CF_HDROP on Windows)
@@ -162,6 +217,12 @@ class TrackModel(QAbstractTableModel):
             return None
         r = self.rows[index.row()]
         col = self.COLUMNS[index.column()]
+        if r.get("_header"):
+            return self._header_data(r, col, role)
+        if role == GROUP_ROLE:
+            return self.group_of(r)[0]
+        if role == HEADER_ROLE:
+            return False
         v = r.get(col)
         is_deck = self.deck_id is not None and r["id"] == self.deck_id
         if role == ID_ROLE:
@@ -203,6 +264,17 @@ class TrackModel(QAbstractTableModel):
             return None
         if col == "cues":
             v = r.get("cue_count")
+        if col == "audio_type":
+            types = audio_type.decode(v)
+            if role == Qt.DisplayRole:
+                return ", ".join(tr(f"at_{t}") for t in types)
+            if role == SORT_ROLE:
+                return "".join(str(audio_type.TYPES.index(t)) for t in types) or "9"
+            if role == Qt.ForegroundRole and types in ([], [audio_type.SONG]):
+                return QColor("#9CA2B3" if self.dark else "#535B6E")
+            if role == Qt.ToolTipRole:
+                return tr("audio_type_tip")
+            return None
         if role == Qt.DisplayRole:
             if col == "cues":
                 return "" if v is None else str(v)
@@ -268,6 +340,19 @@ class TrackModel(QAbstractTableModel):
                 return v
         return None
 
+    def _header_data(self, r: dict, col: str, role):
+        if role == HEADER_ROLE:
+            return True
+        if role == GROUP_ROLE:
+            return r["_group"]
+        if role == ID_ROLE or role == DECK_ROLE or role == FIT_ROLE:
+            return None
+        if role == Qt.DisplayRole and col == "fit":
+            return r["_label"]
+        if role == Qt.AccessibleTextRole:
+            return f"{r['_label']}, " + (tr("group_count_1") if r["_count"] == 1 else tr("group_count", n=r["_count"]))
+        return None
+
 
 # =========================================================================== busy indicator
 def paint_busy_dots(painter, center, phase: float, color, gap: float = 6.0, radius: float = 2.2):
@@ -297,6 +382,9 @@ class TrackDelegate(QStyledItemDelegate):
         from PySide6.QtCore import QRectF
         from PySide6.QtGui import QPen
         from .theme import CHIP_TEXT
+        if index.data(HEADER_ROLE):
+            self._paint_header(painter, option, index)
+            return
         col = self.m.COLUMNS[index.column()]
         if col not in ("fit", "key", "energy"):
             super().paint(painter, option, index)
@@ -360,6 +448,45 @@ class TrackDelegate(QStyledItemDelegate):
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor("#F0A53A" if self.m.dark else "#B4650A"))
             painter.drawRect(QRectF(r.left(), r.top(), 3, r.height()))
+        painter.restore()
+
+
+    def _paint_header(self, painter, option, index):
+        """Group header across the whole row: chevron, name, number of tracks (and the artist of an album)."""
+        from PySide6.QtCore import QPointF, QRectF
+        from PySide6.QtGui import QFont, QPen, QPolygonF
+        src = index.model().mapToSource(index) if hasattr(index.model(), "mapToSource") else index
+        g = self.m.rows[src.row()]
+        pal = option.palette
+        text_col = pal.color(QPalette.Text)
+        dim = QColor("#9CA2B3" if self.m.dark else "#535B6E")
+        r = QRectF(option.rect)
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.fillRect(r, pal.color(QPalette.AlternateBase))
+        painter.setPen(QPen(QColor("#34405A" if self.m.dark else "#CDD2DD"), 1))
+        painter.drawLine(QPointF(r.left(), r.top() + 0.5), QPointF(r.right(), r.top() + 0.5))
+        # chevron: right = collapsed, down = open
+        cx, cy = r.left() + 22, r.center().y()
+        open_ = g["_group"] not in self.m.collapsed
+        pts = ([QPointF(cx - 4.5, cy - 2.5), QPointF(cx + 4.5, cy - 2.5), QPointF(cx, cy + 3)] if open_ else
+               [QPointF(cx - 2.5, cy - 4.5), QPointF(cx - 2.5, cy + 4.5), QPointF(cx + 3, cy)])
+        painter.setPen(Qt.NoPen); painter.setBrush(dim)
+        painter.drawPolygon(QPolygonF(pts))
+        f = QFont(painter.font()); f.setWeight(QFont.Bold); painter.setFont(f)
+        x = r.left() + 44
+        label = g["_label"]
+        painter.setPen(text_col)
+        fm = painter.fontMetrics()
+        painter.drawText(QRectF(x, r.top(), r.width() - x, r.height()), Qt.AlignVCenter | Qt.AlignLeft, label)
+        x += fm.horizontalAdvance(label) + 12
+        f.setWeight(QFont.Normal); painter.setFont(f)
+        extra = tr("group_count_1") if g["_count"] == 1 else tr("group_count", n=g["_count"])
+        if self.m.group_by == "album" and g.get("_artists"):
+            arts = sorted(g["_artists"])
+            extra = (arts[0] if len(arts) == 1 else ", ".join(arts[:2]) + (" …" if len(arts) > 2 else "")) + "   ·   " + extra
+        painter.setPen(dim)
+        painter.drawText(QRectF(x, r.top(), max(0.0, r.right() - x), r.height()), Qt.AlignVCenter | Qt.AlignLeft, extra)
         painter.restore()
 
 
@@ -765,6 +892,9 @@ class DetailPanel(QWidget, Translatable):
         self.genre.lineEdit().textEdited.connect(lambda _: self._mark("genre"))
         self.genre.activated.connect(lambda _: self._mark("genre"))
         lbl = QLabel(); self.t(lbl.setText, "genre"); fm.addRow(lbl, self.genre)
+        self.types = AudioTypePicker("no_type")
+        self.types.changed.connect(lambda: self._mark("audio_type"))
+        lbl = QLabel(); self.t(lbl.setText, "audio_type"); fm.addRow(lbl, self.types)
         self.comment = QPlainTextEdit(); self.comment.setFixedHeight(58); self.comment.setTabChangesFocus(True)
         self.comment.textChanged.connect(lambda: self._mark("comment"))
         lbl = QLabel(); self.t(lbl.setText, "comment"); fm.addRow(lbl, self.comment)
@@ -891,6 +1021,7 @@ class DetailPanel(QWidget, Translatable):
     def retranslate(self):
         super().retranslate()
         self.kw_hint.setText(tr("kw_hint"))
+        self.types.retranslate()
         self.set_notation(self.notation)
 
     def set_notation(self, notation: str):
@@ -951,6 +1082,8 @@ class DetailPanel(QWidget, Translatable):
                 out[f] = round(self.bpm.value(), 2) if self.bpm.value() > 0 else None
             elif f == "key":
                 out[f] = self.key.currentData() or None
+            elif f == "audio_type":
+                out[f] = self.types.selected()
         return out
 
     def save(self):
@@ -1144,6 +1277,9 @@ class DetailPanel(QWidget, Translatable):
             self._set_text(e, _common(rows, f))
         y = _common(rows, "year")
         self._set_text(self.year, y if y is MIXED else (str(y) if y else ""))
+        at = _common(rows, "audio_type")
+        self.types.placeholder_key = "mixed_values" if at is MIXED else "no_type"
+        self.types.set_selected([] if at is MIXED else audio_type.decode(at))
         g = _common(rows, "genre")
         self.genre.setEditText("" if g is MIXED else (g or ""))
         self.genre.lineEdit().setPlaceholderText(tr("mixed_values") if g is MIXED else "")
@@ -1215,3 +1351,161 @@ class DetailPanel(QWidget, Translatable):
             it = QListWidgetItem("🏷  " + label)
             it.setData(Qt.UserRole, kw)
             self.kw_list.addItem(it)
+
+
+# =========================================================================== audio type chips
+def _flow_layout_class():
+    from PySide6.QtCore import QPoint, QRect, QSize
+    from PySide6.QtWidgets import QLayout
+
+    class _Flow(QLayout):
+        """Left-to-right layout that wraps into the next line (chips)."""
+
+        def __init__(self, parent=None, spacing=6):
+            super().__init__(parent)
+            self._items = []
+            self._sp = spacing
+            self.setContentsMargins(0, 0, 0, 0)
+
+        def addItem(self, item):
+            self._items.append(item)
+
+        def count(self):
+            return len(self._items)
+
+        def itemAt(self, i):
+            return self._items[i] if 0 <= i < len(self._items) else None
+
+        def takeAt(self, i):
+            return self._items.pop(i) if 0 <= i < len(self._items) else None
+
+        def hasHeightForWidth(self):
+            return True
+
+        def heightForWidth(self, w):
+            return self._do(QRect(0, 0, w, 0), True)
+
+        def setGeometry(self, rect):
+            super().setGeometry(rect)
+            self._do(rect, False)
+
+        def sizeHint(self):
+            return self.minimumSize()
+
+        def minimumSize(self):
+            s = QSize()
+            for it in self._items:
+                s = s.expandedTo(it.minimumSize())
+            return s
+
+        def _do(self, rect, test):
+            x, y, line = rect.x(), rect.y(), 0
+            for it in self._items:
+                hint = it.sizeHint()
+                if x + hint.width() > rect.right() + 1 and line > 0:
+                    x, y, line = rect.x(), y + line + self._sp, 0
+                if not test:
+                    it.setGeometry(QRect(QPoint(x, y), hint))
+                x += hint.width() + self._sp
+                line = max(line, hint.height())
+            return y + line - rect.y()
+
+    return _Flow
+
+
+class AudioTypePicker(QComboBox):
+    """Drop-down list with a check box per audio type (several can be on), sorted alphabetically in the GUI
+    language. The closed box shows the checked types, or `placeholder_key` when none is checked."""
+    changed = Signal()
+
+    def __init__(self, placeholder_key: str = "all_types", parent=None):
+        super().__init__(parent)
+        from PySide6.QtGui import QStandardItemModel
+        self.placeholder_key = placeholder_key
+        self._checked: set[str] = set()
+        self._keep_open = False
+        self.setModel(QStandardItemModel(self))
+        self.setItemDelegate(QStyledItemDelegate(self))     # real check boxes (styled like the keyword list)
+        self.view().setObjectName("typeList")
+        self.view().viewport().installEventFilter(self)
+        self.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.setMinimumContentsLength(8)
+        self.retranslate()
+
+    def retranslate(self):
+        """(Re)build the items: translated names, sorted the way the GUI language sorts."""
+        from PySide6.QtCore import QCollator, QLocale
+        from PySide6.QtGui import QStandardItem
+        coll = QCollator(QLocale(tr.lang)); coll.setCaseSensitivity(Qt.CaseInsensitive)
+        names = sorted(((tr(f"at_{t}"), t) for t in audio_type.TYPES), key=lambda n: coll.sortKey(n[0]))
+        m = self.model()
+        m.clear()
+        for name, code in names:
+            it = QStandardItem(name)
+            it.setData(code, Qt.UserRole)
+            it.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
+            it.setData(Qt.Checked if code in self._checked else Qt.Unchecked, Qt.CheckStateRole)
+            m.appendRow(it)
+        self._update_tip()
+        self.update()
+
+    def eventFilter(self, obj, ev):
+        from PySide6.QtCore import QEvent
+        if obj is self.view().viewport() and ev.type() == QEvent.MouseButtonRelease:
+            idx = self.view().indexAt(ev.position().toPoint())
+            if idx.isValid():
+                code = idx.data(Qt.UserRole)
+                (self._checked.discard if code in self._checked else self._checked.add)(code)
+                self.model().setData(idx, Qt.Checked if code in self._checked else Qt.Unchecked, Qt.CheckStateRole)
+                self._keep_open = True
+                self._update_tip(); self.update()
+                self.changed.emit()
+            return True                                    # the list stays open for the next check box
+        return super().eventFilter(obj, ev)
+
+    def keyPressEvent(self, ev):
+        if self.view().isVisible() and ev.key() == Qt.Key_Space:
+            idx = self.view().currentIndex()
+            if idx.isValid():
+                code = idx.data(Qt.UserRole)
+                self.set_selected(self._checked ^ {code}); self.changed.emit()
+                return
+        super().keyPressEvent(ev)
+
+    def hidePopup(self):
+        if self._keep_open:
+            self._keep_open = False
+            return
+        super().hidePopup()
+
+    def summary(self) -> str:
+        names = [self.model().item(r).text() for r in range(self.model().rowCount())
+                 if self.model().item(r).data(Qt.UserRole) in self._checked]
+        return ", ".join(names) if names else tr(self.placeholder_key)
+
+    def _update_tip(self):
+        self.setToolTip(self.summary() if self._checked else "")
+
+    def paintEvent(self, _):
+        from PySide6.QtWidgets import QStyleOptionComboBox, QStylePainter
+        p = QStylePainter(self)
+        opt = QStyleOptionComboBox(); self.initStyleOption(opt)
+        opt.currentText = self.summary()
+        if not self._checked:
+            opt.palette.setColor(QPalette.ButtonText, opt.palette.color(QPalette.PlaceholderText))
+        p.drawComplexControl(QStyle.CC_ComboBox, opt)
+        opt.currentText = self.fontMetrics().elidedText(
+            opt.currentText, Qt.ElideRight,
+            self.style().subControlRect(QStyle.CC_ComboBox, opt, QStyle.SC_ComboBoxEditField, self).width())
+        p.drawControl(QStyle.CE_ComboBoxLabel, opt)
+
+    def selected(self) -> list[str]:
+        return audio_type.order(self._checked)
+
+    def set_selected(self, types):
+        self._checked = set(audio_type.order(types))
+        m = self.model()
+        for r in range(m.rowCount()):
+            it = m.item(r)
+            it.setData(Qt.Checked if it.data(Qt.UserRole) in self._checked else Qt.Unchecked, Qt.CheckStateRole)
+        self._update_tip(); self.update()
