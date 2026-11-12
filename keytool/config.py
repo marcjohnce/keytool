@@ -62,6 +62,7 @@ class Settings:
     volume: float = 0.8             # player volume 0..1
     show_details: bool = True       # right sidebar (metadata, file info, keywords) visible
     group_by: str = "none"          # track list grouping: none | artist | album
+    column_order: list = field(default_factory=list)   # track list columns from left to right ([] = default)
     research_semitones: bool = True      # also search keys 1 semitone below/above (transposable on KV)
     research_bpm_tolerance: float = 3.0  # +-% around the selected track's BPM
     # Auto re-tag: regular expressions for file names, first match wins (see retag.match_patterns)

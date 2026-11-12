@@ -444,7 +444,10 @@ class TrackDelegate(QStyledItemDelegate):
                 for i in range(10):
                     painter.setBrush(text_col if i < int(e) else line_col)
                     painter.drawRoundedRect(QRectF(x0 + i * (bw + gap), y0, bw, bh), 1, 1)
-        if index.column() == 0 and index.data(DECK_ROLE):
+        view = option.widget                        # marker on the leftmost column (columns can be moved)
+        first = (view.horizontalHeader().logicalIndex(0) if view is not None and hasattr(view, "horizontalHeader")
+                 else 0)
+        if index.column() == first and index.data(DECK_ROLE):
             painter.setPen(Qt.NoPen)
             painter.setBrush(QColor("#F0A53A" if self.m.dark else "#B4650A"))
             painter.drawRect(QRectF(r.left(), r.top(), 3, r.height()))
@@ -460,10 +463,20 @@ class TrackDelegate(QStyledItemDelegate):
         pal = option.palette
         text_col = pal.color(QPalette.Text)
         dim = QColor("#9CA2B3" if self.m.dark else "#535B6E")
-        r = QRectF(option.rect)
+        cell = QRectF(option.rect)
+        # every cell of the header row paints its slice of one band across the whole row (the columns can be
+        # moved by the user, so the row starts at the leftmost visible column whatever its index)
+        view = option.widget
+        hh = view.horizontalHeader() if view is not None and hasattr(view, "horizontalHeader") else None
+        if hh is not None:
+            x0 = hh.sectionViewportPosition(hh.logicalIndex(0))
+            r = QRectF(x0, cell.top(), hh.length(), cell.height())
+        else:
+            r = cell
         painter.save()
+        painter.setClipRect(cell)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.fillRect(r, pal.color(QPalette.AlternateBase))
+        painter.fillRect(cell, pal.color(QPalette.AlternateBase))
         painter.setPen(QPen(QColor("#34405A" if self.m.dark else "#CDD2DD"), 1))
         painter.drawLine(QPointF(r.left(), r.top() + 0.5), QPointF(r.right(), r.top() + 0.5))
         # chevron: right = collapsed, down = open

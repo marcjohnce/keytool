@@ -291,6 +291,13 @@ class MainWindow(QMainWindow, Translatable):
         for col, w in zip(range(len(TrackModel.COLUMNS)),
                           (44, 210, 140, 140, 150, 62, 60, 78, 80, 56, 52, 52, 150, 100, 160, 56, 64, 90, 120, 300)):
             self.table.setColumnWidth(col, w)
+        # columns can be rearranged by dragging their header; the order is remembered
+        hh.setSectionsMovable(True)
+        hh.setFirstSectionMovable(True)
+        self.apply_column_order(getattr(self.s, "column_order", None) or [])
+        hh.sectionMoved.connect(self._column_moved)
+        hh.setContextMenuPolicy(Qt.CustomContextMenu)
+        hh.customContextMenuRequested.connect(self._header_menu)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self.table_menu)
         self.table.selectionModel().selectionChanged.connect(self.selection_changed)
@@ -513,13 +520,54 @@ class MainWindow(QMainWindow, Translatable):
         self._update_spans()
 
     def _update_spans(self, *_):
-        self.table.clearSpans()
-        if self.model.group_by == "none":
-            return
-        n = self.proxy.columnCount()
-        for r in range(self.proxy.rowCount()):
-            if self.proxy.index(r, 0).data(HEADER_ROLE):
-                self.table.setSpan(r, 0, 1, n)
+        """Group headers are painted across the row by every cell (TrackDelegate._paint_header) - no table spans,
+        which do not work with columns moved by the user. Only a repaint is needed."""
+        self.table.viewport().update()
+
+    # ------------------------------------------------------------------ column order
+    def column_order(self) -> list[str]:
+        """Column names from left to right as shown."""
+        hh = self.table.horizontalHeader()
+        return [TrackModel.COLUMNS[hh.logicalIndex(v)] for v in range(hh.count())]
+
+    def apply_column_order(self, order: list[str]):
+        """Arrange the columns like `order` (names); unknown names are ignored, columns missing there (e.g. new in
+        this version) keep their place next to the column they follow by default."""
+        cols = TrackModel.COLUMNS
+        known = [c for c in dict.fromkeys(order) if c in cols]
+        for c in cols:                         # insert missing columns after their default predecessor
+            if c not in known:
+                i = cols.index(c)
+                prev = next((cols[j] for j in range(i - 1, -1, -1) if cols[j] in known), None)
+                known.insert(known.index(prev) + 1 if prev else 0, c)
+        hh = self.table.horizontalHeader()
+        hh.blockSignals(True)
+        for target, name in enumerate(known):
+            hh.moveSection(hh.visualIndex(cols.index(name)), target)
+        hh.blockSignals(False)
+        self._update_spans()
+
+    def _column_moved(self, *_):
+        self.s.column_order = self.column_order()
+        self._update_spans()
+        try:
+            self.s.save()
+        except OSError:
+            pass
+
+    def reset_column_order(self):
+        self.apply_column_order(list(TrackModel.COLUMNS))
+        self.s.column_order = []
+        try:
+            self.s.save()
+        except OSError:
+            pass
+
+    def _header_menu(self, pos):
+        m = QMenu(self)
+        a = m.addAction(tr("reset_column_order"), self.reset_column_order)
+        a.setEnabled(self.column_order() != list(TrackModel.COLUMNS))
+        m.exec(self.table.horizontalHeader().viewport().mapToGlobal(pos))
 
     def _enter_pressed(self):
         cur = self.table.currentIndex()

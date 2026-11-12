@@ -197,3 +197,4 @@ def test_grouping_sorts_inside_groups_and_collapses():
     assert "Zed" in hdr.data(Qt.AccessibleTextRole)
     m.set_group_by("none"); p.invalidate()
     assert len(listing()) == 4 and all(isinstance(x, int) for x in listing())
+
