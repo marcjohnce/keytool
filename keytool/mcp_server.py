@@ -12,6 +12,7 @@ from typing import Any
 
 from mcp.server.mcpserver import MCPServer as _Server     # MCP Python SDK 2 (requirements: mcp>=2.0)
 
+from . import audio_type
 from .config import Settings
 from .db import Query
 from .keys import NOTATIONS, Key, all_keys
@@ -42,6 +43,7 @@ def _track_out(r: dict, notation: str = "camelot", full: bool = False) -> dict:
     out: dict[str, Any] = {
         "id": r["id"], "title": r["title"], "artist": r["artist"], "album": r["album"], "year": r["year"],
         "bpm": r["bpm"], "key": k.format(notation) if k else None,
+        "audio_type": audio_type.decode(r.get("audio_type")),
         "keywords": r.get("keywords", []), "path": r["path"],
     }
     if full:
@@ -53,6 +55,7 @@ def _track_out(r: dict, notation: str = "camelot", full: bool = False) -> dict:
             bpm_source=r.get("bpm_source") or None, key_source=r.get("key_source") or None,
             key_all_notations={n: k.format(n) for n in NOTATIONS} | {"name": k.long_name()} if k else None,
             tag_bpm=r["tag_bpm"], tag_key=r["tag_key"],
+            audio_type_source={0: "detected", 1: "manual", 2: "tags"}.get(r.get("audio_type_manual") or 0),
         )
     return out
 
@@ -65,6 +68,16 @@ def _parse_keys(keys: list[str] | None) -> list[str]:
             raise ValueError(f"Unknown key: {t!r}")
         codes.append(k.code)
     return codes
+
+
+def _parse_types(types) -> list[str]:
+    out = []
+    for t in ([types] if isinstance(types, str) else types or []):
+        codes = audio_type.parse(t)
+        if not codes:
+            raise ValueError(f"Unknown audio type: {t!r} (use one of {', '.join(audio_type.TYPES)})")
+        out += codes
+    return audio_type.order(out)
 
 
 def _check_notation(notation: str) -> str:
@@ -87,6 +100,7 @@ def search_tracks(
     keys: list[str] | None = None,
     keywords: list[str] | None = None,
     keywords_mode: str = "any",
+    audio_types: list[str] | None = None,
     status: str | None = None,
     folder: str | None = None,
     order_by: str = "artist",
@@ -100,6 +114,8 @@ def search_tracks(
     text: free text over title, artist, album, filename, genre, year and keywords.
     title/artist/album: substring match. keys: list of keys in any notation (matches any of them).
     keywords: user keywords; keywords_mode 'any' (default: at least one keyword, OR) or 'all' (every keyword, AND).
+    audio_types: tracks with at least one of these audio types (codes: song, instrumental, acapella, remix, stem,
+    soundtrack, audiobook, radioplay, podcast, interview, commercial, sfx, note).
     status: 'ok', 'pending' or 'error'. folder: only tracks below this folder.
     order_by: title|artist|album|year|bpm|key|duration|added_at|filename|genre.
     notation for the returned key: camelot|sharps|flats|openkey.
@@ -107,7 +123,8 @@ def search_tracks(
     _check_notation(notation)
     q = Query(text=text, title=title, artist=artist, album=album, year_from=year_from, year_to=year_to,
               bpm_min=bpm_min, bpm_max=bpm_max, keys=_parse_keys(keys), keywords=keywords or [],
-              keywords_mode=keywords_mode, status=status, folder=folder, order_by=order_by, descending=descending)
+              keywords_mode=keywords_mode, audio_types=_parse_types(audio_types), status=status, folder=folder,
+              order_by=order_by, descending=descending)
     L = lib()
     total = L.db.count(q)
     q.limit, q.offset = max(1, min(int(limit), 1000)), max(0, int(offset))
@@ -358,12 +375,17 @@ def set_key(track_id: int, key: str | None, write_tags: bool | None = None) -> d
 def update_metadata(track_ids: list[int], title: str | None = None, artist: str | None = None,
                     album: str | None = None, genre: str | None = None, comment: str | None = None,
                     energy: int | None = None, year: int | None = None, album_artist: str | None = None,
-                    write_tags: bool | None = None) -> dict:
-    """Edit title, artist, album, album_artist, year (0 clears), genre, comment and/or energy (1-10, 0 clears)
-    of one or more tracks.
+                    audio_type: list[str] | None = None, write_tags: bool | None = None) -> dict:
+    """Edit title, artist, album, album_artist, year (0 clears), genre, comment, energy (1-10, 0 clears) and/or
+    audio_type of one or more tracks.
+    audio_type: list of audio types (codes: song, instrumental, acapella, remix, stem, soundtrack, audiobook,
+    radioplay, podcast, interview, commercial, sfx, note); replaces the types, which then count as set by hand
+    (an analysis keeps them); [] goes back to the detected type. Written into the files as tag AUDIO_TYPE.
     Only the given fields are changed. write_tags: also write them into the files (default: app setting)."""
     changes = {k: v for k, v in dict(title=title, artist=artist, album=album, genre=genre, comment=comment,
                                      energy=energy, year=year, album_artist=album_artist).items() if v is not None}
+    if audio_type is not None:
+        changes["audio_type"] = _parse_types(audio_type)
     if not changes:
         raise ValueError("No field given")
     if "energy" in changes and not 0 <= int(changes["energy"]) <= 10:
@@ -372,9 +394,10 @@ def update_metadata(track_ids: list[int], title: str | None = None, artist: str 
     return {"updated": len(track_ids), "changes": changes, "errors": errors}
 
 
+
 @mcp.tool()
 def write_tags(track_ids: list[int]) -> dict:
-    """Write the stored BPM and key into the audio files' tags."""
+    """Write the stored BPM, key and audio type into the audio files' tags."""
     L = lib()
     errors = {}
     for tid in track_ids:

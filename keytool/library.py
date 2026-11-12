@@ -18,7 +18,9 @@ from .config import Settings, db_path
 from .db import Database, Query, norm_path
 from .keys import Key
 from .serato import count_cues
-from .tags import EDITABLE_FIELDS, is_audio_file, parse_tag_bpm, parse_tag_key, read_metadata, write_bpm_key, write_metadata
+from . import audio_type
+from .db import AT_DETECTED, AT_FROM_TAG, AT_MANUAL
+from .tags import EDITABLE_FIELDS, is_audio_file, parse_tag_bpm, parse_tag_key, read_metadata, write_metadata
 
 ProgressCB = Callable[[int, int, dict | None], None]   # (done, total, track_row)
 
@@ -145,7 +147,7 @@ class Library:
                 continue
             md = read_metadata(path)
             meta = dict(title=md.title, artist=md.artist, album=md.album, album_artist=md.album_artist,
-                        year=md.year, genre=md.genre,
+                        year=md.year, genre=md.genre, audio_type_tag=md.audio_type,
                         duration=md.duration, tag_bpm=md.tag_bpm, tag_key=md.tag_key, comment=md.comment,
                         energy=md.energy, bitrate=md.bitrate, cue_count=count_cues(path))
             tid = self.db.upsert_file(path, st.st_size, st.st_mtime, meta)
@@ -310,7 +312,7 @@ class Library:
             return msg
 
     def write_tags(self, track_id: int, only_new: bool = False) -> None:
-        """Write BPM/key into the file. only_new: skip values that were read from the tags anyway."""
+        """Write BPM, key and audio type into the file. only_new: skip values that were read from the tags anyway."""
         t = self.db.get_track(track_id)
         if not t:
             raise KeyError(track_id)
@@ -322,9 +324,11 @@ class Library:
                 bpm = None
             if t["key_source"] == "tags":
                 key_text = None
-        if not bpm and not key_text:
+        types = audio_type.decode(t.get("audio_type"))
+        at_text = audio_type.to_tag(types) if types and not (only_new and t.get("audio_type_manual") == AT_FROM_TAG) else None
+        if not bpm and not key_text and not at_text:
             return
-        write_bpm_key(t["path"], bpm, key_text)
+        write_metadata(t["path"], bpm=bpm, key_text=key_text, audio_type=at_text)
         st = os.stat(t["path"])
         self.db.update_track(track_id, size=st.st_size, mtime=st.st_mtime,
                              tag_bpm=str(int(round(bpm))) if bpm else t["tag_bpm"],
@@ -344,8 +348,10 @@ class Library:
             self._write_tags_safe(track_id)
 
     def update_metadata(self, track_ids: Iterable[int], changes: dict, write: bool | None = None) -> dict:
-        """Edit title/artist/album/year/genre/comment/energy for one or many tracks and (optionally) write them
-        into the files. Returns {track_id: error message} for files that could not be written."""
+        """Edit title/artist/album/year/genre/comment/energy/audio type for one or many tracks and (optionally)
+        write them into the files. Returns {track_id: error message} for files that could not be written.
+        audio_type: list of codes (or names, see audio_type.parse); set by hand, so an analysis keeps it."""
+        types = audio_type.parse(changes["audio_type"]) if "audio_type" in changes else None
         changes = {k: v for k, v in changes.items() if k in EDITABLE_FIELDS}
         if "energy" in changes:
             e = changes["energy"]
@@ -360,17 +366,33 @@ class Library:
         for k in ("title", "artist", "album", "album_artist", "genre", "comment"):
             if k in changes:
                 changes[k] = (changes[k] or "").strip()
-        if not changes:
+        if not changes and types is None:
             return {}
         errors: dict[int, str] = {}
         do_write = self.settings.write_edits if write is None else write
         for tid in track_ids:
-            self.db.update_track(tid, **changes)
+            upd = dict(changes)
+            if types is not None:
+                upd.update(audio_type=audio_type.encode(types), audio_type_manual=AT_MANUAL if types else AT_DETECTED)
+            elif changes.keys() & {"title", "album", "genre"}:   # detected types follow the new title / album
+                t = self.db.get_track(tid)
+                if t and not t.get("audio_type_manual"):
+                    upd["audio_type"] = audio_type.encode(audio_type.detect(
+                        changes.get("title", t["title"]), t["path"], changes.get("album", t["album"]),
+                        changes.get("genre", t["genre"])))
+            if types == []:                                    # all unticked: back to the detected type
+                t = self.db.get_track(tid)
+                upd["audio_type"] = audio_type.encode(audio_type.detect(
+                    changes.get("title", t["title"]), t["path"], changes.get("album", t["album"]),
+                    changes.get("genre", t["genre"])))
+            self.db.update_track(tid, **upd)
             if not do_write:
                 continue
             t = self.db.get_track(tid)
             try:
                 tag_vals = dict(changes)
+                if "audio_type" in upd:
+                    tag_vals["audio_type"] = audio_type.to_tag(audio_type.decode(upd["audio_type"]))
                 if "energy" in tag_vals:
                     tag_vals["energy"] = tag_vals["energy"] or ""
                 if "year" in tag_vals:

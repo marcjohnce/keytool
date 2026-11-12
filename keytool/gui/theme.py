@@ -212,9 +212,11 @@ def apply_theme(app: QApplication, name: str) -> dict:
         QHeaderView {{ background: {c['window']}; }}
         QHeaderView::section {{ background: {c['window']}; color: {c['dim']}; border: none; padding: 8px 6px;
             font-size: 9pt; font-weight: 600; }}
-        QListWidget::indicator, QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {c['dim']}; border-radius: 4px; background: {c['base']}; }}
-        QListWidget::indicator:checked, QCheckBox::indicator:checked {{ background: {c['accent']}; border-color: {c['accent']}; image: none; }}
+        QListWidget::indicator, QCheckBox::indicator, QComboBox QAbstractItemView::indicator {{ width: 16px; height: 16px; border: 1px solid {c['dim']}; border-radius: 4px; background: {c['base']}; }}
+        QListWidget::indicator:checked, QCheckBox::indicator:checked, QComboBox QAbstractItemView::indicator:checked {{ background: {c['accent']}; border-color: {c['accent']}; image: none; }}
         QListWidget::item {{ padding: 4px; }}
+        QListView#typeList::item {{ min-height: 28px; padding: 0 8px; }}
+        QListView#typeList::indicator {{ margin-right: 8px; }}
         QListWidget {{ background: {c['base']}; border: 1px solid {c['border']}; border-radius: 8px; }}
         QGroupBox {{ border: none; border-top: 1px solid {c['border']}; margin-top: 18px; padding-top: 10px; font-weight: 700; }}
         QGroupBox::title {{ subcontrol-origin: margin; left: 0px; padding: 0; color: {c['text']}; }}
