@@ -7,7 +7,8 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 datas, binaries, hidden = [], [], []
-for pkg in ("librosa", "av", "mcp", "soundfile", "lazy_loader", "pooch", "pedalboard"):
+for pkg in ("librosa", "av", "mcp", "mcp_types", "soundfile", "lazy_loader", "pooch", "pedalboard",
+            "keyring", "win32ctypes", "httpx"):           # keyring: AI chat API keys in the Windows Credential Manager
     try:
         d, b, h = collect_all(pkg)
         datas += d; binaries += b; hidden += h
