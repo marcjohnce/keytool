@@ -183,7 +183,7 @@ STRINGS: dict[str, str] = {
     "group_no_album": "Sans album",
     "group_count": "{n} titres",
     "group_count_1": "1 titre",
-    "reset_column_order": "Rétablir l'ordre des colonnes",
+    "reset_columns": "Réinitialiser les colonnes (ordre et largeur)",
     "expand": "Déplier",
     "collapse": "Replier",
     "expand_all": "Déplier tous les groupes",
