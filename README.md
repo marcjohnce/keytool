@@ -68,7 +68,8 @@ touch `docs/` or Markdown files start no run.
   decides between song, instrumental, acapella, remix and stem: "(Instrumental)", "(Instrumental Mix)", "Karaoke" →
   instrumental; "(Acapella)", "(Vocals)", "Vocals Only" → acapella; "(… Remix)", "Edit", "Bootleg", "VIP", "Dub",
   "Club Mix" → remix; "(… Remix Instrumental)" → remix and instrumental; "Drums Stem", "Vocal Stem" → stem.
-  "Original Mix", "Extended Mix", "Radio Edit", "Album Version" and "Remastered" are the song itself. Words for a kind
+  "Original Mix", "Extended Mix", "Radio Edit", "Album Version" and "Remastered" are the song itself; credits
+  ("feat. Little Mix", "ft. …", "featuring …", "with …", "prod. by …") and the track's own artist never count. Words for a kind
   of recording count in the whole title, the album, the genre and the folder names: "Hörbuch"/"Audiobook",
   "Hörspiel"/"Radio Play", "Podcast" (or "Episode 12" / "Folge 12"), "Interview", "Soundtrack"/"OST"/"Filmmusik",
   "Werbespot"/"Commercial"; sound effects ("SFX", "Geräusche", "Samples", "One Shots") and notes ("Sprachmemos",

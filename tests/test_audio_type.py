@@ -33,6 +33,16 @@ from keytool.tags import read_metadata, write_metadata  # noqa: E402
     ("Daylight (Radio Edit)", None, None, None, ["song"]),
     ("Daylight (Remastered 2011)", None, None, None, ["song"]),
     ("Daylight (feat. Kim)", None, None, None, ["song"]),
+    ("Bounce Back (feat. Little Mix)", None, None, None, ["song"]),
+    ("Daylight (ft. Dub FX)", None, None, None, ["song"]),
+    ("Daylight - feat. Mixmaster Flip", None, None, None, ["song"]),
+    ("Daylight (featuring DJ Edit)", None, None, None, ["song"]),
+    ("Daylight (with VIP Crew)", None, None, None, ["song"]),
+    ("Daylight (prod. by Dub Mix)", None, None, None, ["song"]),
+    ("Daylight (Club Remix feat. Kim)", None, None, None, ["remix"]),
+    ("Daylight (feat. Little Mix) [Kim Remix]", None, None, None, ["remix"]),
+    ("Daylight (feat. Kim) [Instrumental]", None, None, None, ["instrumental"]),
+    ("Daylight", "x/Kim feat. Little Mix - Daylight.mp3", None, None, ["song"]),
     ("Daylight [Drums Stem]", None, None, None, ["stem"]),
     ("Track 01", "C:/Musik/Hörbücher/Der Hobbit/01.mp3", None, None, ["audiobook"]),
     ("Folge 1", "D:/Hörspiele/Fall 1/01.mp3", None, None, ["radioplay"]),
@@ -50,6 +60,13 @@ from keytool.tags import read_metadata, write_metadata  # noqa: E402
 ])
 def test_detect(title, path, album, genre, expected):
     assert at.detect(title, path, album, genre) == expected
+
+
+def test_own_artist_is_no_marker():
+    assert at.detect("Daylight", "x/Daylight - Little Mix.mp3") == ["remix"]          # without the artist
+    assert at.detect("Daylight", "x/Daylight - Little Mix.mp3", artists=["Little Mix"]) == ["song"]
+    assert at.detect_track(dict(title="Shout (Little Mix Version)", artist="Little Mix", path="x/a.mp3")) == ["song"]
+    assert at.detect_track(dict(title="Daylight (Little Mix Remix)", artist="Little Mix", path="a")) == ["remix"]
 
 
 def test_file_name_counts_too():
@@ -148,6 +165,22 @@ def test_old_library_gets_types(tmp_path):
     c = sqlite3.connect(path); c.execute("UPDATE tracks SET audio_type=NULL"); c.commit(); c.close()
     db2 = Database(path)
     assert db2.search(Query())[0]["audio_type"] == "acapella"
+
+
+def test_improved_detection_runs_again_once(tmp_path):
+    import sqlite3
+    path = str(tmp_path / "lib.sqlite3")
+    db = Database(path)
+    a = db.upsert_file("/m/Bounce Back (feat. Little Mix).wav", 1, 1.0, dict(title="Bounce Back (feat. Little Mix)"))
+    b = db.upsert_file("/m/b.wav", 1, 1.0, dict(title="B"))
+    c = sqlite3.connect(path)
+    c.execute("UPDATE tracks SET audio_type='remix'")                       # as detected by version 1
+    c.execute("UPDATE tracks SET audio_type_manual=1 WHERE id=?", (b,))     # set by hand
+    c.execute("PRAGMA user_version = 1"); c.commit(); c.close()
+    db2 = Database(path)
+    assert db2.get_track(a)["audio_type"] == "song"
+    assert db2.get_track(b)["audio_type"] == "remix"
+    assert db2.conn().execute("PRAGMA user_version").fetchone()[0] == at.DETECT_VERSION
 
 
 def test_mcp_types():

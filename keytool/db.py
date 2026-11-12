@@ -142,15 +142,19 @@ class Database:
             c.executemany("UPDATE tracks SET path_key=? WHERE id=?", [(path_key(r["path"]), r["id"]) for r in missing])
             c.execute("COMMIT")
         c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_tracks_path_key ON tracks(path_key)")
-        # audio type of tracks from before that column: detected once from title, path, album and genre
-        untyped = c.execute("SELECT id, title, path, album, genre FROM tracks WHERE audio_type IS NULL").fetchall()
+        # audio type of tracks from before that column, and detected types after the detection was improved
+        # (PRAGMA user_version holds the audio_type.DETECT_VERSION they were detected with)
+        from . import audio_type
+        redetect = int(c.execute("PRAGMA user_version").fetchone()[0]) < audio_type.DETECT_VERSION
+        untyped = c.execute("SELECT id, title, path, album, genre, artist, album_artist FROM tracks WHERE audio_type "
+                            "IS NULL" + (" OR COALESCE(audio_type_manual, 0) = 0" if redetect else "")).fetchall()
         if untyped:
-            from . import audio_type
             c.execute("BEGIN")
             c.executemany("UPDATE tracks SET audio_type=?, audio_type_manual=0 WHERE id=?",
-                          [(audio_type.encode(audio_type.detect(r["title"], r["path"], r["album"], r["genre"])), r["id"])
-                           for r in untyped])
+                          [(audio_type.encode(audio_type.detect_track(dict(r))), r["id"]) for r in untyped])
             c.execute("COMMIT")
+        if redetect:
+            c.execute(f"PRAGMA user_version = {int(audio_type.DETECT_VERSION)}")
 
     # -------------------------------------------------------------- connection
     def conn(self) -> sqlite3.Connection:
@@ -203,8 +207,8 @@ class Database:
             if from_tag:                                   # the AUDIO_TYPE tag wins over the detection
                 meta.update(audio_type=audio_type.encode(from_tag), audio_type_manual=AT_FROM_TAG)
             else:
-                meta.update(audio_type=audio_type.encode(audio_type.detect(
-                    meta.get("title"), p, meta.get("album"), meta.get("genre"))), audio_type_manual=AT_DETECTED)
+                meta.update(audio_type=audio_type.encode(audio_type.detect_track(meta, path=p)),
+                            audio_type_manual=AT_DETECTED)
         vals = dict(
             path=p, path_key=path_key(p),            # path keeps the original casing (fixes old lower-case rows)
             folder=os.path.dirname(p), filename=os.path.basename(p), ext=os.path.splitext(p)[1].lower().lstrip("."),
@@ -255,7 +259,7 @@ class Database:
             upd["duration"] = result["duration"]
         if not t.get("audio_type_manual"):                # detected again (title or folder may have changed)
             from . import audio_type
-            upd["audio_type"] = audio_type.encode(audio_type.detect(t["title"], t["path"], t["album"], t["genre"]))
+            upd["audio_type"] = audio_type.encode(audio_type.detect_track(t))
         if result.get("sections") is not None and not t.get("sections_manual"):   # edited by hand: kept
             import json
             upd["sections"] = json.dumps(result["sections"], separators=(",", ":"))
