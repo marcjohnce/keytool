@@ -219,6 +219,51 @@ class SettingsDialog(QDialog):
         self._check_patterns()
         v.addStretch(1)
 
+        # ---------------- CSV export
+        from PySide6.QtWidgets import QAbstractItemView, QListWidget, QListWidgetItem
+        from ..export import COLUMNS, DEFAULT_COLUMNS, valid_columns
+        v = page("sp_export", "sp_export_intro")
+        crow = QWidget(); crow.setObjectName("settingsRow")
+        cv = QVBoxLayout(crow); cv.setContentsMargins(0, 14, 0, 14); cv.setSpacing(6)
+        ct = QLabel(tr("s_export_columns")); ct.setObjectName("rowTitle")
+        cd = QLabel(tr("sd_export_columns")); cd.setObjectName("dim"); cd.setWordWrap(True)
+        self.export_cols = QListWidget(); self.export_cols.setObjectName("exportColumns")
+        self.export_cols.setDragDropMode(QAbstractItemView.InternalMove)   # drag to change the order
+        self.export_cols.setMinimumHeight(260)
+
+        def fill_columns(chosen):
+            self.export_cols.clear()
+            for cid in chosen + [c for c in COLUMNS if c not in chosen]:
+                it = QListWidgetItem(tr(COLUMNS[cid][1]))
+                it.setData(Qt.UserRole, cid)
+                it.setFlags(it.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsDragEnabled)
+                it.setCheckState(Qt.Checked if cid in chosen else Qt.Unchecked)
+                self.export_cols.addItem(it)
+        fill_columns(valid_columns(settings.export_columns))
+        reset = QPushButton(tr("s_export_default")); reset.clicked.connect(lambda: fill_columns(list(DEFAULT_COLUMNS)))
+        rrow = QHBoxLayout(); rrow.addStretch(1); rrow.addWidget(reset)
+        for w_ in (ct, cd, self.export_cols):
+            cv.addWidget(w_)
+        cv.addLayout(rrow)
+        v.addWidget(crow)
+        self.export_delim = QComboBox()
+        for code, key in (("auto", "s_delim_auto"), ("semicolon", "s_delim_semicolon"), ("comma", "s_delim_comma"),
+                          ("tab", "s_delim_tab")):
+            self.export_delim.addItem(tr(key), code)
+        self.export_delim.setCurrentIndex(max(0, self.export_delim.findData(settings.export_delimiter)))
+        row(v, tr("s_export_delimiter"), tr("sd_export_delimiter"), self.export_delim)
+        self.export_ask = check(settings.export_ask)
+        row(v, tr("s_export_ask"), tr("sd_export_ask"), self.export_ask)
+        from PySide6.QtWidgets import QFileDialog, QLineEdit
+        self.export_folder = QLineEdit(settings.export_folder); self.export_folder.setPlaceholderText(tr("s_export_documents"))
+        pick = QPushButton(tr("s_export_choose"))
+        pick.clicked.connect(lambda: (lambda d: d and self.export_folder.setText(d))(
+            QFileDialog.getExistingDirectory(self, tr("s_export_folder"), self.export_folder.text())))
+        row(v, tr("s_export_folder"), tr("sd_export_folder"), [self.export_folder, pick])
+        self.export_name = QLineEdit(settings.export_filename); self.export_name.setPlaceholderText("KeyTool-{date}.csv")
+        row(v, tr("s_export_filename"), tr("sd_export_filename"), self.export_name)
+        v.addStretch(1)
+
         # ---------------- MCP
         v = page("s_mcp", "sp_mcp_intro")
         cp = QPushButton(tr("s_copy_config"))
@@ -265,6 +310,13 @@ class SettingsDialog(QDialog):
         from PySide6.QtGui import QDesktopServices
         QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(path)))
 
+    def export_columns(self) -> list[str]:
+        """Ticked columns in the order of the list (dragged into the file order)."""
+        from PySide6.QtCore import Qt
+        out = [self.export_cols.item(i).data(Qt.UserRole) for i in range(self.export_cols.count())
+               if self.export_cols.item(i).checkState() == Qt.Checked]
+        return out
+
     def pattern_lines(self) -> list[str]:
         return [ln for ln in self.patterns.toPlainText().splitlines() if ln.strip()]
 
@@ -298,4 +350,9 @@ class SettingsDialog(QDialog):
         s.reanalyze_existing = self.reanalyze.isChecked()
         s.detect_sections = self.detect_sections.isChecked()
         s.retag_patterns = self.pattern_lines()
+        s.export_columns = self.export_columns()
+        s.export_delimiter = self.export_delim.currentData()
+        s.export_ask = self.export_ask.isChecked()
+        s.export_folder = self.export_folder.text().strip()
+        s.export_filename = self.export_name.text().strip() or "KeyTool-{date}.csv"
         s.save()

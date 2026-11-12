@@ -276,6 +276,32 @@ def search_karaoke_version(keys: list[str] | None = None, bpm_min: float | None 
 
 # ============================================================================ keywords
 @mcp.tool()
+def export_csv(path: str, columns: list[str] | None = None, delimiter: str | None = None,
+               overwrite: bool = False) -> dict:
+    """Export the WHOLE library as a CSV file (UTF-8 with BOM, opens in Excel). columns: ids in file order
+    (default: the columns chosen in the KeyTool settings); see the "available_columns" of the result.
+    delimiter: auto | comma | semicolon | tab (default: the setting). An existing file is only replaced with
+    overwrite=true. (The GUI exports the tracks selected in its list instead.)"""
+    import os
+    from .export import COLUMNS, DELIMITERS, valid_columns
+    path = os.path.abspath(os.path.expanduser(path))
+    if not path.lower().endswith(".csv"):
+        raise ValueError("path must end with .csv")
+    unknown = [c for c in columns or [] if c not in COLUMNS]
+    if unknown:
+        raise ValueError(f"unknown columns {unknown}; available: {list(COLUMNS)}")
+    if delimiter is not None and delimiter not in DELIMITERS:
+        raise ValueError(f"delimiter must be one of {list(DELIMITERS)}")
+    if os.path.exists(path) and not overwrite:
+        return {"written": False, "path": path,
+                "reason": "file exists – ask the user, then call again with overwrite=true"}
+    L = lib()
+    n = L.export_csv(path, None, columns, delimiter)
+    return {"written": True, "path": path, "tracks": n,
+            "columns": valid_columns(columns or L.settings.export_columns), "available_columns": list(COLUMNS)}
+
+
+@mcp.tool()
 def list_keywords() -> list[dict]:
     """All user keywords with the number of tracks using each."""
     return [{"keyword": k, "count": n} for k, n in lib().db.all_keywords()]

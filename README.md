@@ -30,7 +30,8 @@ More annotated screenshots are in [Screenshots](#screenshots) below.
 | Waveform | Overview of the deck track, coloured by frequency band (bass blue, mids amber, highs white), click/drag to seek, bar ticks from the BPM |
 | Fits the deck | "Fits" column (● same key, ◐ harmonic neighbour ±1 or relative major/minor, ○ does not fit, transposition included) and "vs. deck" (tempo difference in %, dimmed beyond ±6 %); both sortable |
 | User interface | English, German, Spanish, French, Italian (in the settings; numbers, dates and key names such as "a-Moll" / "La menor" / "la mineur" follow the language), light and dark mode (or system), switch without restarting; Archivo typeface (SIL OFL, bundled), colour only for keys, amber for playback |
-| MCP server | Full access: search, details, keywords, set values, write tags, import & analyse folders |
+| CSV export | Selected tracks via right-click → "Export as CSV" or Ctrl+E; columns and their order, delimiter (automatic: semicolon and decimal comma where Excel expects them), target folder and file name pattern in the settings; asks before replacing a file. The whole library: MCP tool `export_csv` |
+| MCP server | Full access: search, details, keywords, set values, write tags, import & analyse folders, CSV export |
 
 ## Installation & start (Windows)
 
@@ -261,6 +262,7 @@ error messages there that would otherwise stay invisible.
 | `set_bpm`, `set_key`, `write_tags` | Manual correction and writing tags |
 | `analyze_paths`, `reanalyze_tracks`, `get_job_status`, `cancel_job` | Import and analyse files/folders (background job) |
 | `search_karaoke_version` | Search Karaoke-Version by key(s)/BPM, optionally with tempo/keys/duration per hit and ±1 semitone (`include_semitones`) |
+| `export_csv` | Export the whole library as CSV (columns, delimiter; an existing file only with `overwrite`) |
 | `remove_tracks`, `remove_missing_files` | Remove entries from the library (the files are kept) |
 
 Example requests to Claude: "Import `D:\Music\New`", "Which tracks in 8A between 120 and 126 BPM do I have?",
@@ -285,6 +287,7 @@ Environment variables: `KEYTOOL_DATA_DIR` (folder for settings + database), `KEY
 keytool/
   analysis.py       BPM and key detection (classic / fast)
   structure.py      Song sections: segmentation, grouping, labels
+  export.py         CSV export: columns, delimiter, file name pattern
   analysis_queue.py Analysis queue (order, "Analyse now", crash-safe)
   compare.py        Compare the key detection methods on your own tracks
   keys.py           Key model, notations, Camelot wheel
