@@ -87,8 +87,9 @@ class ControlServer:
     def stop(self):
         try:
             with open(control_file(), encoding="utf-8") as f:
-                if json.load(f).get("token") == self.token:   # only our own file (another window may own it)
-                    os.remove(control_file())
+                ours = json.load(f).get("token") == self.token   # only our own file (another window may own it)
+            if ours:                                             # closed first: Windows cannot delete open files
+                os.remove(control_file())
         except (OSError, ValueError):
             pass
         self.httpd.shutdown()

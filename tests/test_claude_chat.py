@@ -32,7 +32,8 @@ def test_control_roundtrip_and_security(data):
     seen = []
     srv = app_control.ControlServer(lambda cmd, args: seen.append((cmd, args)) or {"ok": cmd}).start()
     try:
-        info = json.load(open(app_control.control_file()))
+        with open(app_control.control_file()) as f:
+            info = json.load(f)
         assert info["port"] == srv.port and len(info["token"]) > 20
         assert app_control.call("state") == {"ok": "state"}
         assert app_control.call("set_filter", {"keys": ["8A"]}) == {"ok": "set_filter"}
@@ -174,7 +175,8 @@ def test_session_runs_claude_code_on_the_plan(fake_claude):
     blocked = a[a.index("--disallowedTools") + 1].split(",")
     assert {"Bash", "Write", "mcp__keytool__export_csv"} <= set(blocked)
     assert "--strict-mcp-config" in a and a[a.index("--model") + 1] == "sonnet" and "--resume" not in a
-    cfg = json.load(open(a[a.index("--mcp-config") + 1]))
+    with open(a[a.index("--mcp-config") + 1]) as f:
+        cfg = json.load(f)
     assert "keytool" in cfg["mcpServers"] and cfg["mcpServers"]["keytool"]["env"]["KEYTOOL_DB"]
     s.run("and now?", "SYSTEM", lambda *_: None)
     a2 = _log(log)[1]["args"]
