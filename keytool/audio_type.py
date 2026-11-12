@@ -22,6 +22,8 @@ SOUNDTRACK, COMMERCIAL, SOUND_EFFECT, NOTE = "soundtrack", "commercial", "sfx", 
 TYPES = (SONG, INSTRUMENTAL, ACAPELLA, REMIX, STEM, SOUNDTRACK, AUDIOBOOK, RADIOPLAY, PODCAST, INTERVIEW,
          COMMERCIAL, SOUND_EFFECT, NOTE)
 TAG_FIELD = "AUDIO_TYPE"
+# raise when the detection changes: detected (not manual, not from the tag) types are then detected again once
+DETECT_VERSION = 2
 TAG_NAMES = {SONG: "Song", INSTRUMENTAL: "Instrumental", ACAPELLA: "Acapella", REMIX: "Remix", STEM: "Stem",
              SOUNDTRACK: "Soundtrack", AUDIOBOOK: "Audio Book", RADIOPLAY: "Radio Play", PODCAST: "Podcast",
              INTERVIEW: "Interview", COMMERCIAL: "Commercial", SOUND_EFFECT: "Sound Effect", NOTE: "Note"}
@@ -76,25 +78,39 @@ _RECORDING = re.compile(r"^\s*(neue aufnahme|new recording|aufnahme|recording|sp
 _EPISODE = re.compile(_W + r"(folge|episode|ep\.?) ?#?\d+" + _E, re.I)
 
 _BRACKETS = re.compile(r"[\(\[\{]([^\)\]\}]*)[\)\]\}]")
+# credit of a featured artist: "feat. Little Mix", "ft. Dub FX", "featuring ...", "with ...", "mit ..." - up to the
+# end of the part. Artist names are no version markers ("Bounce Back (feat. Little Mix)" is no remix).
+_FEAT = re.compile(r"(?<![a-zäöüß])(feat\.?|ft\.?|featuring|with|w/|mit|prod\.?( by)?|produced by)(?![a-zäöüß])"
+                   r".*$", re.I)
 
 
-def _version_parts(text: str) -> list[str]:
+def _version_parts(text: str, artists=()) -> list[str]:
     parts = [m.group(1) for m in _BRACKETS.finditer(text)]
     rest = _BRACKETS.sub(" ", text)
     if " - " in rest:                          # "Title - Extended Mix" (only the last part is a version)
         parts.append(rest.rsplit(" - ", 1)[1])
-    return [p.strip() for p in parts if p.strip()]
+    out = []
+    for p in parts:
+        p = _FEAT.sub("", p)
+        for a in artists:                      # the track's own artist ("Daylight - Little Mix.mp3")
+            p = re.sub(r"(?<![a-zäöüß])" + re.escape(a) + r"(?![a-zäöüß])", " ", p, flags=re.I)
+        p = p.strip(" -&,")
+        if p:
+            out.append(p)
+    return out
 
 
 def detect(title: str | None, path: str | None = None, album: str | None = None,
-           genre: str | None = None) -> list[str]:
-    """Types found in title, file name, album, genre and folder names; [SONG] when nothing points elsewhere."""
+           genre: str | None = None, artists=()) -> list[str]:
+    """Types found in title, file name, album, genre and folder names; [SONG] when nothing points elsewhere.
+    artists: the track's artist / album artist - their names never count as a marker."""
+    artists = [a.strip() for a in artists if a and len(a.strip()) > 1]
     found: set[str] = set()
     episode = False
     names = [t for t in (title, os.path.splitext(os.path.basename(path))[0].replace("_", " ") if path else None)
              if t]
     for text in names:
-        for part in _version_parts(text):
+        for part in _version_parts(text, artists):
             if _NOT_REMIX.match(part):
                 continue
             for typ, pat in _VERSION:
@@ -120,6 +136,13 @@ def detect(title: str | None, path: str | None = None, album: str | None = None,
     if episode and not found & {AUDIOBOOK, RADIOPLAY}:      # "Folge 3" of a radio play is no podcast
         found.add(PODCAST)
     return order(found) or [SONG]
+
+
+def detect_track(t: dict, **changes) -> list[str]:
+    """detect() for a track row (title, path, album, genre, artist, album_artist); changes override fields."""
+    f = {**t, **changes}
+    return detect(f.get("title"), f.get("path"), f.get("album"), f.get("genre"),
+                  (f.get("artist") or "", f.get("album_artist") or ""))
 
 
 def order(types) -> list[str]:

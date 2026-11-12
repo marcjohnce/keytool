@@ -374,17 +374,12 @@ class Library:
             upd = dict(changes)
             if types is not None:
                 upd.update(audio_type=audio_type.encode(types), audio_type_manual=AT_MANUAL if types else AT_DETECTED)
-            elif changes.keys() & {"title", "album", "genre"}:   # detected types follow the new title / album
-                t = self.db.get_track(tid)
+            elif changes.keys() & {"title", "album", "genre", "artist", "album_artist"}:
+                t = self.db.get_track(tid)                     # detected types follow the new title / album
                 if t and not t.get("audio_type_manual"):
-                    upd["audio_type"] = audio_type.encode(audio_type.detect(
-                        changes.get("title", t["title"]), t["path"], changes.get("album", t["album"]),
-                        changes.get("genre", t["genre"])))
+                    upd["audio_type"] = audio_type.encode(audio_type.detect_track(t, **changes))
             if types == []:                                    # all unticked: back to the detected type
-                t = self.db.get_track(tid)
-                upd["audio_type"] = audio_type.encode(audio_type.detect(
-                    changes.get("title", t["title"]), t["path"], changes.get("album", t["album"]),
-                    changes.get("genre", t["genre"])))
+                upd["audio_type"] = audio_type.encode(audio_type.detect_track(self.db.get_track(tid), **changes))
             self.db.update_track(tid, **upd)
             if not do_write:
                 continue
