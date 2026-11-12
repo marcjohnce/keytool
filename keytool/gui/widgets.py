@@ -79,6 +79,43 @@ class Translatable:
             setter(tr(key))
 
 
+# =========================================================================== elided label
+class ElidedLabel(QLabel):
+    """A one-line label that ends with "…" when its text does not fit; the full text is in the tooltip."""
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(parent)
+        self._full = ""
+        sp = QSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)   # never widens its panel
+        self.setSizePolicy(sp)
+        self.setText(text)
+
+    def setText(self, text: str):
+        self._full = text or ""
+        super().setText(self._full)
+        self._elide()
+
+    def text(self) -> str:
+        return self._full
+
+    def resizeEvent(self, ev):
+        super().resizeEvent(ev)
+        self._elide()
+
+    def changeEvent(self, ev):
+        super().changeEvent(ev)
+        from PySide6.QtCore import QEvent
+        if ev.type() in (QEvent.FontChange, QEvent.StyleChange):
+            self._elide()
+
+    def _elide(self):
+        w = self.contentsRect().width()
+        shown = self.fontMetrics().elidedText(self._full, Qt.ElideRight, w) if w > 0 else self._full
+        if shown != super().text():
+            QLabel.setText(self, shown)
+        self.setToolTip(self._full if shown != self._full else "")
+
+
 # =========================================================================== table model
 class TrackModel(QAbstractTableModel):
     COLUMNS = ["fit", "title", "artist", "album", "audio_type", "key", "bpm", "delta", "energy", "duration", "cues", "year", "keywords",
@@ -889,7 +926,7 @@ class DetailPanel(QWidget, Translatable):
         lay.setContentsMargins(4, PANEL_TOP, 4, 4)     # title top-aligned with "Search & filter" and "Tracks"
         lay.setSpacing(8)
 
-        self.heading = QLabel(); self.heading.setObjectName("heading"); self.heading.setWordWrap(True)
+        self.heading = ElidedLabel(); self.heading.setObjectName("heading")     # one line, "…" when too long
         self.sub = QLabel(); self.sub.setObjectName("dim"); self.sub.setWordWrap(True)
         lay.addWidget(self.heading)
         lay.addWidget(self.sub)
