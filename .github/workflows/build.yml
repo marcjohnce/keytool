@@ -1,10 +1,10 @@
 # Builds KeyTool.exe (app) and KeyTool-MCP.exe (MCP server) on Windows.
 #
-#   pull request to main         -> tests only
-#   push to main                 -> tests, build, smoke test, zip as workflow artifact
-#   tag v*  (e.g. v1.1.0)        -> the same, plus a GitHub release with the zip attached
-#   manual run                   -> Actions tab -> "Build Windows executables" -> Run workflow (any branch:
-#                                   full build, e.g. to check packaging changes before merging)
+#   pull request / push to main  -> tests only
+#   tag v*  (e.g. v1.1.0)        -> tests, build, smoke test, zip, GitHub release with the zip attached
+#   manual run                   -> Actions tab -> "Build Windows executables" -> Run workflow (any branch):
+#                                   tests, build, smoke test, zip as workflow artifact (e.g. a test .exe or
+#                                   to check packaging changes before a release)
 #   Changes to docs/ or Markdown files only start no run (tags always build).
 name: Build Windows executables
 
@@ -60,7 +60,8 @@ jobs:
   build:
     name: Build executables
     needs: test
-    if: github.event_name != 'pull_request'     # pull requests: tests only; main, tags, manual runs: build
+    # the executables are built for release tags and manual runs only; pull requests and main: tests only
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     timeout-minutes: 45
     outputs:
