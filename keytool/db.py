@@ -223,6 +223,11 @@ class Database:
         cur = c.execute(f"INSERT INTO tracks ({cols}) VALUES ({','.join('?' * len(vals))})", tuple(vals.values()))
         return int(cur.lastrowid)
 
+    def ids_without_album_artist(self, limit: int = 200) -> list[tuple[int, str]]:
+        """(id, path) of tracks whose album artist was not read yet (NULL; libraries from before that column)."""
+        return [(r[0], r[1]) for r in self.conn().execute(
+            "SELECT id, path FROM tracks WHERE album_artist IS NULL LIMIT ?", (int(limit),))]
+
     def ids_without_cue_count(self, limit: int = 200) -> list[tuple[int, str]]:
         """(id, path) of tracks whose cue points were not counted yet."""
         return [(r[0], r[1]) for r in self.conn().execute(

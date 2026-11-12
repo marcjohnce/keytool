@@ -1255,25 +1255,33 @@ class MainWindow(QMainWindow, Translatable):
 
         class _Bridge(QObject):
             batch = Signal(object)          # [(track_id, count)]
+            album_artists = Signal(object)  # [(track_id, album artist)]
 
         self._cue_cancel = threading.Event()
         self._cue_bridge = _Bridge()
         self._cue_bridge.batch.connect(self._cue_counts_ready)
+        self._cue_bridge.album_artists.connect(self._album_artists_ready)
         cancel, bridge, lib = self._cue_cancel, self._cue_bridge, self.lib
 
-        def work():
+        def run(fill, signal, name):
             while not cancel.is_set():
                 try:
-                    done = lib.fill_cue_counts(batch=100, cancel=cancel)
+                    done = fill(batch=100, cancel=cancel)
                 except Exception as e:                  # never let this break the app
-                    write_log(f"cue count: {type(e).__name__}: {e}")
-                    return
+                    write_log(f"{name}: {type(e).__name__}: {e}")
+                    return True
                 if not done:
-                    return
+                    return True
                 try:
-                    bridge.batch.emit(done)
+                    signal.emit(done)
                 except RuntimeError:                    # window already gone
-                    return
+                    return False
+            return False
+
+        def work():
+            # cue counts first, then the album artists of libraries from before that column (grouping)
+            if run(lib.fill_cue_counts, bridge.batch, "cue count"):
+                run(lib.fill_album_artists, bridge.album_artists, "album artist")
         self._cue_thread = threading.Thread(target=work, daemon=True, name="cue-count")
         self._cue_thread.start()
 
@@ -1286,6 +1294,21 @@ class MainWindow(QMainWindow, Translatable):
                 r["cue_count"] = n
                 idx = self.model.index(i, col)
                 self.model.dataChanged.emit(idx, idx)
+
+    def _album_artists_ready(self, done):
+        values = dict(done)
+        changed = False
+        for r in self.model.tracks:
+            v = values.get(r["id"])
+            if v is not None and r.get("album_artist") != v:
+                r["album_artist"] = v
+                changed = True
+        if changed and self.model.group_by == "album_artist":
+            # groups may change: regroup at most every few seconds while the files are being read
+            if not hasattr(self, "_regroup_timer"):
+                self._regroup_timer = QTimer(self, singleShot=True, interval=3000, timeout=self.refresh)
+            if not self._regroup_timer.isActive():
+                self._regroup_timer.start()
 
     def _update_rows(self, track_id: int, **values):
         """Change a few values of one list row in place (no full refresh)."""

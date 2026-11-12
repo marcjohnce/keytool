@@ -179,6 +179,7 @@ STRINGS: dict[str, str] = {
     "group_by": "Grouper",
     "group_none": "Aucun",
     "group_artist": "Artiste",
+    "group_album_artist": "Artiste de l'album",
     "group_album": "Album",
     "group_no_artist": "Sans artiste",
     "group_no_album": "Sans album",

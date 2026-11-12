@@ -183,6 +183,22 @@ def test_improved_detection_runs_again_once(tmp_path):
     assert db2.conn().execute("PRAGMA user_version").fetchone()[0] == at.DETECT_VERSION
 
 
+def test_fill_album_artists(tmp_path):
+    from mutagen.id3 import TPE2
+    from mutagen.wave import WAVE
+    import sqlite3
+    a, b = str(tmp_path / "a.wav"), str(tmp_path / "b.wav")
+    _wav(a); _wav(b)
+    f = WAVE(a); f.add_tags(); f.tags.add(TPE2(encoding=3, text="Various Artists")); f.save()
+    lib = Library(Database(str(tmp_path / "lib.sqlite3")), Settings(write_tags=False))
+    lib.scan([a, b])
+    c = sqlite3.connect(str(tmp_path / "lib.sqlite3")); c.execute("UPDATE tracks SET album_artist=NULL"); c.commit()
+    c.close()
+    done = dict(lib.fill_album_artists(batch=10))
+    assert sorted(done.values()) == ["", "Various Artists"]
+    assert lib.fill_album_artists(batch=10) == []            # all read (empty string, not NULL)
+
+
 def test_mcp_types():
     pytest.importorskip("mcp")
     from keytool import mcp_server
@@ -228,6 +244,13 @@ def test_grouping_sorts_inside_groups_and_collapses():
     hdr = p.index(2, 0)
     assert not (hdr.flags() & Qt.ItemIsSelectable) and hdr.data(ID_ROLE) is None
     assert "Zed" in hdr.data(Qt.AccessibleTextRole)
+    # album artist: the track's artist where it has none
+    m.set_rows([dict(id=1, title="A", artist="Kim", album_artist="Various Artists", path="1"),
+                dict(id=2, title="B", artist="Lou", album_artist="Various Artists", path="2"),
+                dict(id=3, title="C", artist="Amy", album_artist=None, path="3"),
+                dict(id=4, title="D", artist="", album_artist="", path="4")])
+    m.collapsed.clear(); m.set_group_by("album_artist"); p.invalidate(); p.sort(title, Qt.AscendingOrder)
+    assert listing() == [("H", "amy"), 3, ("H", "various artists"), 1, 2, ("H", "\uffff"), 4]
     m.set_group_by("none"); p.invalidate()
     assert len(listing()) == 4 and all(isinstance(x, int) for x in listing())
 

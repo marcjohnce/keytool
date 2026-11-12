@@ -178,6 +178,7 @@ _T: dict[str, tuple[str, str]] = {
     "group_by": ("Gruppieren", "Group by"),
     "group_none": ("Keine", "None"),
     "group_artist": ("Interpret", "Artist"),
+    "group_album_artist": ("Albuminterpret", "Album artist"),
     "group_album": ("Album", "Album"),
     "group_no_artist": ("Ohne Interpret", "No artist"),
     "group_no_album": ("Ohne Album", "No album"),
