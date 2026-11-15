@@ -13,6 +13,8 @@
 <meta property="og:image" content="https://marcjohnce.github.io/keytool/assets/shots/01-main-window.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23161B2A'/%3E%3Ccircle cx='16' cy='16' r='10' fill='none' stroke='%23DC5FD9' stroke-width='5'/%3E%3Cpath d='M16 6a10 10 0 0 1 8.66 5' fill='none' stroke='%23F0A53A' stroke-width='5'/%3E%3C/svg%3E">
+<link rel="alternate" hreflang="en" href="https://marcjohnce.github.io/keytool/">
+<link rel="alternate" hreflang="de" href="https://marcjohnce.github.io/keytool/de/">
 <link rel="preload" href="assets/fonts/Archivo.woff2" as="font" type="font/woff2" crossorigin>
 <style>
 @font-face {
@@ -81,7 +83,8 @@ code, pre { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; fon
 .nav ul { display: flex; gap: 1.75rem; list-style: none; margin: 0 0 0 auto; padding: 0; font-size: var(--step--1); }
 .nav ul a { text-decoration: none; color: var(--dim); }
 .nav ul a:hover { color: var(--paper); }
-@media (max-width: 640px) { .nav ul li:not(:last-child) { display: none; } }
+@media (max-width: 640px) { .nav ul li:not(:nth-last-child(-n+2)) { display: none; } }
+.nav ul a.lang { color: var(--paper); }
 
 /* ---------------------------------------------------------------- buttons */
 .btn {
@@ -235,6 +238,7 @@ footer p { margin: 0; max-width: 48em; }
       <li><a href="#mcp">Claude &amp; MCP</a></li>
       <li><a href="#faq">FAQ</a></li>
       <li><a href="https://github.com/marcjohnce/keytool">GitHub</a></li>
+      <li><a class="lang" href="de/" hreflang="de" lang="de">Deutsch</a></li>
     </ul>
   </nav>
 </header>
@@ -463,7 +467,7 @@ footer p { margin: 0; max-width: 48em; }
 <script>
 (() => {
   // Camelot wheel ---------------------------------------------------------------
-  const MINOR = ["Ab minor","Eb minor","Bb minor","F minor","C minor","G minor","D minor","A minor","E minor","B minor","F# minor","Db minor"];
+  const MINOR = ["G# minor","Eb minor","Bb minor","F minor","C minor","G minor","D minor","A minor","E minor","B minor","F# minor","C# minor"];
   const MAJOR = ["B major","F# major","Db major","Ab major","Eb major","Bb major","F major","C major","G major","D major","A major","E major"];
   // same colours as the app: hue per Camelot number, major (B) lighter than minor (A)
   const hue = n => ((90 - (n - 3) * 30) % 360 + 360) % 360;

@@ -4,7 +4,7 @@ KeyTool analyses audio files (MP3, WAV, FLAC, OGG, M4A), detects **tempo (BPM)**
 a searchable library. You can search and filter by title, artist, album, year, BPM, key and your own **keywords**.
 Through the built-in **MCP server**, Claude Desktop and similar apps can work with the library directly.
 
-Project website: **https://marcjohnce.github.io/keytool/** (source in `docs/index.html`, served by GitHub Pages from `main` → `/docs`).
+Project website: **https://marcjohnce.github.io/keytool/**, German: **https://marcjohnce.github.io/keytool/de/** (source in `docs/index.html` and `docs/de/index.html`, served by GitHub Pages from `main` → `/docs`).
 
 ![KeyTool main window](docs/screenshots/01-main-window.png)
 
