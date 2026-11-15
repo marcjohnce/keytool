@@ -3,7 +3,9 @@
     python docs/make_screenshots.py            (needs the normal requirements; runs without a display)
 
 Everything shown is invented: titles, artists, albums and the abstract cover images are generated here.
-The app runs offscreen in English with the dark theme; numbered markers and a legend are drawn on top."""
+The app runs offscreen in English with the dark theme; numbered markers and a legend are drawn on top.
+The same screens without markers go to docs/assets/shots/ for the project website (docs/index.html);
+`python docs/make_screenshots.py --lang de` writes German ones to docs/assets/shots/de/ (docs/de/index.html)."""
 from __future__ import annotations
 
 import math
@@ -16,6 +18,11 @@ import wave
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT = os.path.join(ROOT, "docs", "screenshots")
+RAW = os.path.join(ROOT, "docs", "assets", "shots")      # same screens without markers, for the project website
+# `--lang de` renders the UI in another language and writes only the unmarked screens, to docs/assets/shots/<lang>/
+LANG = sys.argv[sys.argv.index("--lang") + 1] if "--lang" in sys.argv else "en"
+if LANG != "en":
+    RAW = os.path.join(RAW, LANG)
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 
@@ -200,7 +207,10 @@ def annotate(shot: QPixmap, marks: list, name: str, title: str):
         p.setPen(QColor("#ECE6D9")); p.setFont(_font(10.5, 450))
         p.drawText(QRectF(x + 28, y - 11, col_w - 40, 22), Qt.AlignVCenter | Qt.AlignLeft, label)
     p.end()
-    canvas.save(os.path.join(OUT, name))
+    if LANG == "en":
+        canvas.save(os.path.join(OUT, name))
+    os.makedirs(RAW, exist_ok=True)
+    shot.save(os.path.join(RAW, name))
     print("wrote", name, canvas.width(), "x", canvas.height())
 
 
@@ -225,9 +235,9 @@ def main():
     import keytool.gui.player as pl
     pl.HAVE_MULTIMEDIA = False                                # no audio device needed
     from keytool.i18n import set_language
-    set_language("en")
+    set_language(LANG)
     lib, paths = build_library(tmp)
-    lib.settings.language, lib.settings.theme, lib.settings.notation = "en", "dark", "camelot"
+    lib.settings.language, lib.settings.theme, lib.settings.notation = LANG, "dark", "camelot"
 
     from keytool.gui.main_window import MainWindow
     from keytool.gui.widgets import ID_ROLE, TrackModel
