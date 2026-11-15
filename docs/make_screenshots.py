@@ -3,7 +3,8 @@
     python docs/make_screenshots.py            (needs the normal requirements; runs without a display)
 
 Everything shown is invented: titles, artists, albums and the abstract cover images are generated here.
-The app runs offscreen in English with the dark theme; numbered markers and a legend are drawn on top."""
+The app runs offscreen in English with the dark theme; numbered markers and a legend are drawn on top.
+The same screens without markers go to docs/assets/shots/ for the project website (docs/index.html)."""
 from __future__ import annotations
 
 import math
@@ -16,6 +17,7 @@ import wave
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 OUT = os.path.join(ROOT, "docs", "screenshots")
+RAW = os.path.join(ROOT, "docs", "assets", "shots")      # same screens without markers, for the project website
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 
@@ -201,6 +203,8 @@ def annotate(shot: QPixmap, marks: list, name: str, title: str):
         p.drawText(QRectF(x + 28, y - 11, col_w - 40, 22), Qt.AlignVCenter | Qt.AlignLeft, label)
     p.end()
     canvas.save(os.path.join(OUT, name))
+    os.makedirs(RAW, exist_ok=True)
+    shot.save(os.path.join(RAW, name))
     print("wrote", name, canvas.width(), "x", canvas.height())
 
 
